@@ -6,12 +6,12 @@ use cfb_mode::{
     cipher::{AsyncStreamCipher, KeyIvInit},
     BufDecryptor, BufEncryptor, Decryptor, Encryptor,
 };
-use cipher::{BlockCipher, BlockDecrypt, BlockEncryptMut};
+use cipher::BlockCipherEncrypt;
 use des::TdesEde3;
 use idea::Idea;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use twofish::Twofish;
 use zeroize::Zeroizing;
 
@@ -24,7 +24,7 @@ pub use self::{decryptor::StreamDecryptor, encryptor::StreamEncryptor};
 
 fn decrypt<MODE>(key: &[u8], iv: &[u8], prefix: &mut [u8], data: &mut [u8]) -> Result<()>
 where
-    MODE: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    MODE: BlockCipherEncrypt,
     BufDecryptor<MODE>: KeyIvInit,
 {
     let mut mode = BufDecryptor::<MODE>::new_from_slices(key, iv)?;
@@ -44,7 +44,7 @@ where
 /// Legacy format using custom resync
 fn decrypt_resync<MODE>(key: &[u8], iv: &[u8], prefix: &mut [u8], data: &mut [u8]) -> Result<()>
 where
-    MODE: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    MODE: BlockCipherEncrypt,
     BufDecryptor<MODE>: KeyIvInit,
 {
     let mut mode = BufDecryptor::<MODE>::new_from_slices(key, iv)?;
@@ -65,7 +65,7 @@ where
 
 fn encrypt<MODE>(key: &[u8], iv: &[u8], prefix: &mut [u8], data: &mut [u8]) -> Result<()>
 where
-    MODE: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    MODE: BlockCipherEncrypt,
     BufEncryptor<MODE>: KeyIvInit,
 {
     let mut mode = BufEncryptor::<MODE>::new_from_slices(key, iv)?;
@@ -81,7 +81,7 @@ where
 /// <https://datatracker.ietf.org/doc/html/rfc4880.html#section-13.9>
 fn encrypt_resync<MODE>(key: &[u8], iv: &[u8], prefix: &mut [u8], data: &mut [u8]) -> Result<()>
 where
-    MODE: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    MODE: BlockCipherEncrypt,
     BufEncryptor<MODE>: KeyIvInit,
 {
     let mut mode = BufEncryptor::<MODE>::new_from_slices(key, iv)?;
@@ -412,9 +412,9 @@ impl SymmetricKeyAlgorithm {
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
-    pub fn encrypt<R: CryptoRng + Rng>(
+    pub fn encrypt<R: CryptoRng + RngCore + ?Sized>(
         self,
-        mut rng: R,
+        rng: &mut R,
         key: &[u8],
         plaintext: &[u8],
     ) -> Result<Vec<u8>> {
@@ -443,9 +443,9 @@ impl SymmetricKeyAlgorithm {
         Ok(ciphertext)
     }
 
-    pub fn encrypt_protected<R: CryptoRng + Rng>(
+    pub fn encrypt_protected<R: CryptoRng + RngCore + ?Sized>(
         self,
-        mut rng: R,
+        rng: &mut R,
         key: &[u8],
         plaintext: &[u8],
     ) -> Result<Vec<u8>> {
@@ -505,12 +505,12 @@ impl SymmetricKeyAlgorithm {
 
     pub fn stream_encryptor<R, I>(
         self,
-        rng: R,
+        rng: &mut R,
         key: &[u8],
         plaintext: I,
     ) -> Result<StreamEncryptor<I>>
     where
-        R: Rng + CryptoRng,
+        R: RngCore + CryptoRng + ?Sized,
         I: std::io::Read,
     {
         StreamEncryptor::new(rng, self, key, plaintext)
@@ -706,7 +706,10 @@ impl SymmetricKeyAlgorithm {
     }
 
     /// Generate a new session key.
-    pub fn new_session_key<R: Rng + CryptoRng>(self, mut rng: R) -> Zeroizing<Vec<u8>> {
+    pub fn new_session_key<R: RngCore + CryptoRng + ?Sized>(
+        self,
+        rng: &mut R,
+    ) -> Zeroizing<Vec<u8>> {
         let mut session_key = Zeroizing::new(vec![0u8; self.key_size()]);
         rng.fill_bytes(&mut session_key);
         session_key

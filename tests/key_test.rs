@@ -342,7 +342,7 @@ fn test_parse_details() {
     match pk.public_params() {
         PublicParams::RSA(public_params) => {
             assert_eq!(Mpi::from(public_params.key.n().clone()), primary_n);
-            assert_eq!(public_params.key.e().to_u64().unwrap(), 0x0001_0001);
+            assert_eq!(public_params.key.e(), &rsa::BoxedUint::from(0x0001_0001u64));
         }
         _ => panic!("wrong public params: {:?}", pk.public_params()),
     }

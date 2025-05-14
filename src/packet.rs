@@ -10,7 +10,7 @@
 //!
 //! ```rust
 //! # const DATA :&'static [u8] = b"Hello World";
-//! # use rand::thread_rng;
+//! # use rand::rng;
 //! # use pgp::composed::{self, KeyType, KeyDetails, SecretKey, SecretSubkey, SecretKeyParamsBuilder};
 //! # use pgp::errors::Result;
 //! # use pgp::packet::{self, KeyFlags, UserAttribute, SignatureVersionSpecific, UserId};
@@ -33,10 +33,11 @@
 //! #     .preferred_compression_algorithms(smallvec![
 //! #          CompressionAlgorithm::ZLIB,
 //! #     ]);
+//! # let mut rng = rng();
 //! # let secret_key_params = key_params.build().expect("Must be able to create secret key params");
-//! # let secret_key = secret_key_params.generate(thread_rng()).expect("Failed to generate a plain key.");
+//! # let secret_key = secret_key_params.generate(&mut rng).expect("Failed to generate a plain key.");
 //! # let passwd_fn = Password::empty();
-//! # let signed_secret_key = secret_key.sign(&mut thread_rng(), &passwd_fn).expect("Must be able to sign its own metadata");
+//! # let signed_secret_key = secret_key.sign(&mut rng, &passwd_fn).expect("Must be able to sign its own metadata");
 //! # let public_key = signed_secret_key.public_key();
 //! use pgp::packet::{Signature, SignatureConfig, PacketTrait};
 //!
