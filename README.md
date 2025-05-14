@@ -100,7 +100,7 @@ fn main() -> pgp::errors::Result<()> {
 
    // Set up a signature configuration to create a binary data signature
    let mut config = SignatureConfig::from_key(
-      rand::thread_rng(),
+      &mut rand::rng(),
       &signed_secret_key.primary_key,
       SignatureType::Binary,
    )?;
