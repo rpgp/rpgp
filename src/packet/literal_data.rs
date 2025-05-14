@@ -882,7 +882,7 @@ mod tests {
             // 10k tests on Vec<u8> of length 0-99
             let len = count % 100;
 
-            let bytes: Vec<u8> = (1..=len).map(|_| rng.gen::<u8>()).collect();
+            let bytes: Vec<u8> = (1..=len).map(|_| rng.random::<u8>()).collect();
 
             let cr = ChaosReader::new(&mut rng, bytes.clone());
             let mut r = Utf8CheckReader::new(cr);
@@ -947,7 +947,7 @@ mod tests {
             // normalize to either "just Cr" or "just Lf", then expect failure
             let norm = normalize_lines(
                 &string,
-                if rng.gen::<bool>() {
+                if rng.random::<bool>() {
                     LineBreak::Cr
                 } else {
                     LineBreak::Lf
