@@ -23,18 +23,21 @@ pub fn wrap(key: &[u8], data: &[u8]) -> Result<Vec<u8>, Error> {
     let mut buf = vec![0u8; data.len() + aes_kw::IV_LEN];
     let res = match aes_size {
         128 => {
-            let key = Array::<u8, U16>::from_slice(key);
-            let kek = aes_kw::KwAes128::new(key);
+            let key =
+                Array::<u8, U16>::try_from(key).expect("Invariant violation: key is 16 bytes long");
+            let kek = aes_kw::KwAes128::new(&key);
             kek.wrap_key(data, &mut buf).map(|b| b.to_vec())
         }
         192 => {
-            let key = Array::<u8, U24>::from_slice(key);
-            let kek = aes_kw::KwAes192::new(key);
+            let key =
+                Array::<u8, U24>::try_from(key).expect("Invariant violation: key is 24 bytes long");
+            let kek = aes_kw::KwAes192::new(&key);
             kek.wrap_key(data, &mut buf).map(|b| b.to_vec())
         }
         256 => {
-            let key = Array::<u8, U32>::from_slice(key);
-            let kek = aes_kw::KwAes256::new(key);
+            let key =
+                Array::<u8, U32>::try_from(key).expect("Invariant violation: key is 32 bytes long");
+            let kek = aes_kw::KwAes256::new(&key);
             kek.wrap_key(data, &mut buf).map(|b| b.to_vec())
         }
         _ => {
@@ -51,18 +54,21 @@ pub fn unwrap(key: &[u8], data: &[u8]) -> Result<Vec<u8>, Error> {
     let mut buf = vec![0u8; data.len()];
     let res = match aes_size {
         128 => {
-            let key = Array::<u8, U16>::from_slice(key);
-            let kek = aes_kw::KwAes128::new(key);
+            let key =
+                Array::<u8, U16>::try_from(key).expect("Invariant violation: key is 16 bytes long");
+            let kek = aes_kw::KwAes128::new(&key);
             kek.unwrap_key(data, &mut buf).map(|b| b.to_vec())
         }
         192 => {
-            let key = Array::<u8, U24>::from_slice(key);
-            let kek = aes_kw::KwAes192::new(key);
+            let key =
+                Array::<u8, U24>::try_from(key).expect("Invariant violation: key is 24 bytes long");
+            let kek = aes_kw::KwAes192::new(&key);
             kek.unwrap_key(data, &mut buf).map(|b| b.to_vec())
         }
         256 => {
-            let key = Array::<u8, U32>::from_slice(key);
-            let kek = aes_kw::KwAes256::new(key);
+            let key =
+                Array::<u8, U32>::try_from(key).expect("Invariant violation: key is 32 bytes long");
+            let kek = aes_kw::KwAes256::new(&key);
             kek.unwrap_key(data, &mut buf).map(|b| b.to_vec())
         }
         _ => {
