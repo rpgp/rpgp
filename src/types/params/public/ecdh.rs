@@ -398,6 +398,7 @@ impl EcdhPublicParams {
 
 #[cfg(test)]
 pub(super) mod tests {
+    use elliptic_curve::Generate;
     use proptest::prelude::*;
     use rand::{RngCore, SeedableRng};
 
@@ -417,21 +418,24 @@ pub(super) mod tests {
     proptest::prop_compose! {
         pub fn ecdh_p256_gen()(seed: u64) -> elliptic_curve::PublicKey<p256::NistP256> {
             let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
-            elliptic_curve::SecretKey::<p256::NistP256>::random(&mut rng).public_key()
+            let key = elliptic_curve::SecretKey::<p256::NistP256>::generate_from_rng(&mut rng);
+            key.public_key()
         }
     }
 
     proptest::prop_compose! {
         pub fn ecdh_p384_gen()(seed: u64) -> elliptic_curve::PublicKey<p384::NistP384> {
             let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
-            elliptic_curve::SecretKey::<p384::NistP384>::random(&mut rng).public_key()
+            let key = elliptic_curve::SecretKey::<p384::NistP384>::generate_from_rng(&mut rng);
+            key.public_key()
         }
     }
 
     proptest::prop_compose! {
         pub fn ecdh_p521_gen()(seed: u64) -> elliptic_curve::PublicKey<p521::NistP521> {
             let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
-            elliptic_curve::SecretKey::<p521::NistP521>::random(&mut rng).public_key()
+            let key = elliptic_curve::SecretKey::<p521::NistP521>::generate_from_rng(&mut rng);
+            key.public_key()
         }
     }
 
