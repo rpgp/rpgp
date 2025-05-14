@@ -697,7 +697,7 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
 mod tests {
     use std::io::Read;
 
-    use rand::SeedableRng;
+    use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha20Rng;
 
     use super::*;
