@@ -7,7 +7,7 @@ use pgp::{
     ser::Serialize,
     types::{KeyDetails, Password},
 };
-use rand::thread_rng;
+use rand::rng;
 
 /// Generate a private example key and the equivalent certificate (aka public key).
 /// Store these two artifacts in `example-key.priv` and `example-key.pub`, respectively.
@@ -90,15 +90,17 @@ fn keygen(
             authkey.build()?,
         ]);
 
+    let mut rng = rng();
+
     // Generate the components of the private key (in particular: the secret key packets)
     let secret_key_params = key_params.build().expect("Build secret_key_params");
     let secret_key = secret_key_params
-        .generate(thread_rng())
+        .generate(&mut rng)
         .expect("Generate plain key");
 
     // Produce binding self-signatures that link all the components together
     let signed = secret_key
-        .sign(&mut thread_rng(), &Password::from(""))
+        .sign(&mut rng, &Password::from(""))
         .expect("Sign SecretKey");
 
     Ok(signed)
