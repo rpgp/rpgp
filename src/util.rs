@@ -115,23 +115,23 @@ impl<A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'_, A, B> {
 #[cfg(test)]
 pub(crate) mod test {
     use bytes::{Buf, Bytes};
-    use rand::Rng;
+    use rand::{Rng, RngExt};
 
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                             abcdefghijklmnopqrstuvwxyz\
                             0123456789)(*&^%$#@!~\r\n .,-!?\t";
 
-    pub(crate) fn random_string(rng: &mut impl Rng, size: usize) -> String {
+    pub(crate) fn random_string<R: Rng + ?Sized>(rng: &mut R, size: usize) -> String {
         (0..size)
             .map(|_| {
-                let idx = rng.gen_range(0..CHARSET.len());
+                let idx = rng.random_range(0..CHARSET.len());
                 CHARSET[idx] as char
             })
             .collect()
     }
 
-    pub(crate) fn random_utf8_string(rng: &mut impl Rng, size: usize) -> String {
-        (0..size).map(|_| rng.r#gen::<char>()).collect()
+    pub(crate) fn random_utf8_string<R: Rng + ?Sized>(rng: &mut R, size: usize) -> String {
+        (0..size).map(|_| rng.random::<char>()).collect()
     }
 
     #[derive(Debug)]
@@ -155,7 +155,7 @@ pub(crate) mod test {
                 return Ok(0);
             }
             let max = buf.len().min(self.source.remaining());
-            let to_write: usize = self.rng.gen_range(1..=max);
+            let to_write: usize = self.rng.random_range(1..=max);
 
             self.source.copy_to_slice(&mut buf[..to_write]);
             Ok(to_write)

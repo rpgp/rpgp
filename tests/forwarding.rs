@@ -6,6 +6,7 @@
 
 use std::io::BufReader;
 
+use chacha20::ChaCha8Rng;
 use pgp::{
     armor::{BlockType, Dearmor},
     composed::{
@@ -22,7 +23,6 @@ use pgp::{
     },
 };
 use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 
 const RECIPIENT_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
 
