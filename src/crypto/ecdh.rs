@@ -185,8 +185,8 @@ impl SecretKey {
             EcdhPublicParams::P521 { .. } => {
                 const SIZE: usize = ECCCurve::P521.secret_key_length();
                 let raw = pad_key::<SIZE>(d.as_ref())?;
-                let arr = Array::<u8, cipher::typenum::U66>::from_slice(&raw[..]);
-                let secret = elliptic_curve::SecretKey::<p521::NistP521>::from_bytes(arr)?;
+                let arr = Array::<u8, cipher::typenum::U66>::from(raw);
+                let secret = elliptic_curve::SecretKey::<p521::NistP521>::from_bytes(&arr)?;
 
                 Ok(SecretKey::P521 { secret })
             }
