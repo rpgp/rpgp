@@ -5,7 +5,7 @@ use bytes::{Bytes, BytesMut};
 use log::debug;
 #[cfg(test)]
 use proptest::prelude::*;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use sha2::Sha256;
 use zeroize::Zeroizing;
 
@@ -315,8 +315,8 @@ impl SymKeyEncryptedSessionKey {
     /// Encrypt a session key to a password as a Version 6 Symmetric Key Encrypted Session Key Packet
     ///
     /// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-version-6-symmetric-key-enc>
-    pub fn encrypt_v6<R: CryptoRng + Rng>(
-        mut rng: R,
+    pub fn encrypt_v6<R: CryptoRng + RngCore + ?Sized>(
+        rng: &mut R,
         msg_pw: &Password,
         session_key: &RawSessionKey,
         s2k: StringToKey,
@@ -627,8 +627,8 @@ impl PacketTrait for SymKeyEncryptedSessionKey {
 
 #[cfg(test)]
 mod tests {
+    use chacha20::ChaCha8Rng;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::crypto::hash::HashAlgorithm;

@@ -1,4 +1,4 @@
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use zeroize::ZeroizeOnDrop;
 
 use crate::{
@@ -20,7 +20,7 @@ pub struct SecretKey {
     /// The secret point.
     #[debug("..")]
     #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
-    secret: cx448::SigningKey,
+    secret: ed448_goldilocks::SigningKey,
 }
 
 impl From<&SecretKey> for Ed448PublicParams {
@@ -33,14 +33,16 @@ impl From<&SecretKey> for Ed448PublicParams {
 
 impl SecretKey {
     /// Generate an Ed448 `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(rng: R) -> Self {
-        let secret = cx448::SigningKey::generate(rng);
+    pub fn generate<R: RngCore + CryptoRng + ?Sized>(rng: &mut R) -> Self {
+        let secret = ed448_goldilocks::SigningKey::generate(rng);
 
         SecretKey { secret }
     }
 
     pub fn try_from_bytes(raw: [u8; KEY_LEN]) -> Result<Self> {
-        let secret = cx448::SigningKey::from(cx448::SecretKey::from_slice(&raw));
+        let secret = ed448_goldilocks::SigningKey::from(
+            *ed448_goldilocks::EdwardsScalarBytes::from_slice(&raw),
+        );
         Ok(Self { secret })
     }
 
@@ -88,7 +90,7 @@ impl Serialize for SecretKey {
 
 /// Verify an EdDSA signature.
 pub fn verify(
-    key: &cx448::VerifyingKey,
+    key: &ed448_goldilocks::VerifyingKey,
     hash: HashAlgorithm,
     hashed: &[u8],
     sig_bytes: &[u8],
@@ -104,7 +106,7 @@ pub fn verify(
     let sig_bytes = sig_bytes
         .try_into()
         .map_err(|_| format_err!("invalid signature length"))?;
-    let sig = cx448::Signature::from_bytes(&sig_bytes)?;
+    let sig = ed448_goldilocks::Signature::from_bytes(&sig_bytes);
 
     Ok(key.verify_raw(&sig, hashed)?)
 }
@@ -114,8 +116,8 @@ mod tests {
     use proptest::prelude::*;
 
     prop_compose! {
-        pub fn key_gen()(bytes: [u8; 57]) -> cx448::SigningKey {
-            cx448::SigningKey::from(cx448::SecretKey::from_slice(&bytes))
+        pub fn key_gen()(bytes: [u8; 57]) -> ed448_goldilocks::SigningKey {
+            ed448_goldilocks::SigningKey::from(ed448_goldilocks::EdwardsScalarBytes::from_slice(&bytes))
         }
     }
 }
