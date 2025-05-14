@@ -2,9 +2,9 @@
 
 use std::io;
 
-use generic_array::{
+use cipher::{
+    array::{Array, ArraySize},
     typenum::{Sum, Unsigned, U2},
-    ArrayLength, GenericArray,
 };
 
 const CRLF: [u8; 2] = [b'\r', b'\n'];
@@ -38,9 +38,9 @@ impl AsRef<[u8]> for LineBreak {
 pub struct LineWriter<'a, W, N>
 where
     W: io::Write,
-    N: Unsigned + ArrayLength<u8>,
+    N: Unsigned + ArraySize,
     N: std::ops::Add<U2>,
-    Sum<N, U2>: ArrayLength<u8>,
+    Sum<N, U2>: ArraySize,
 {
     /// Which kind of line break to insert.
     line_break: LineBreak,
@@ -48,10 +48,10 @@ where
     w: &'a mut W,
     /// Holds a partial chunk, if any, after the last `write()`, so that we may then fill the chunk
     /// with the next `write()`, write it, then proceed with the rest of the input normally.
-    extra: GenericArray<u8, N>,
+    extra: Array<u8, N>,
     /// How much of `extra` is occupied, in `[0, N]`.
     extra_len: usize,
-    buffer: GenericArray<u8, Sum<N, U2>>,
+    buffer: Array<u8, Sum<N, U2>>,
     /// True iff partial last chunk has been written.
     finished: bool,
     /// panic safety: don't write again in destructor if writer panicked while we were writing to it
@@ -61,9 +61,9 @@ where
 impl<'a, W, N> LineWriter<'a, W, N>
 where
     W: 'a + io::Write,
-    N: Unsigned + ArrayLength<u8>,
+    N: Unsigned + ArraySize,
     N: std::ops::Add<U2>,
-    Sum<N, U2>: ArrayLength<u8>,
+    Sum<N, U2>: ArraySize,
 {
     /// Creates a new encoder around an existing writer.
     pub fn new(w: &'a mut W, line_break: LineBreak) -> Self {
@@ -108,9 +108,9 @@ where
 impl<'a, W, N> io::Write for LineWriter<'a, W, N>
 where
     W: 'a + io::Write,
-    N: Unsigned + ArrayLength<u8>,
+    N: Unsigned + ArraySize,
     N: std::ops::Add<U2>,
-    Sum<N, U2>: ArrayLength<u8>,
+    Sum<N, U2>: ArraySize,
 {
     fn write(&mut self, input: &[u8]) -> io::Result<usize> {
         if self.finished {
@@ -193,9 +193,9 @@ where
 impl<'a, W, N> Drop for LineWriter<'a, W, N>
 where
     W: 'a + io::Write,
-    N: Unsigned + ArrayLength<u8>,
+    N: Unsigned + ArraySize,
     N: std::ops::Add<U2>,
-    Sum<N, U2>: ArrayLength<u8>,
+    Sum<N, U2>: ArraySize,
 {
     fn drop(&mut self) {
         if !self.panicked {
@@ -212,7 +212,7 @@ mod tests {
     use std::io::Write;
 
     use base64::engine::general_purpose;
-    use generic_array::typenum::{self, U10};
+    use cipher::array::typenum::{self, U10};
 
     use super::*;
 

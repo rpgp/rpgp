@@ -1,9 +1,9 @@
 use std::{io, ops::Deref};
 
 use chrono::{DateTime, Utc};
-use generic_array::GenericArray;
+use hybrid_array::Array;
 use log::{debug, warn};
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 
 use crate::{
     armor,
@@ -167,9 +167,9 @@ impl SignedSecretKey {
         Ok(res)
     }
 
-    pub fn encrypt<R: Rng + CryptoRng>(
+    pub fn encrypt<R: RngCore + CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
@@ -258,7 +258,7 @@ impl Deref for SignedSecretKey {
 }
 
 impl Imprint for SignedSecretKey {
-    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+    fn imprint<D: KnownDigest>(&self) -> Result<Array<u8, D::OutputSize>> {
         self.primary_key.imprint::<D>()
     }
 }
@@ -302,9 +302,9 @@ impl SignedSecretSubKey {
         Ok(())
     }
 
-    pub fn encrypt<R: Rng + CryptoRng>(
+    pub fn encrypt<R: RngCore + CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
@@ -375,7 +375,7 @@ impl Serialize for SignedSecretSubKey {
 }
 
 impl Imprint for SignedSecretSubKey {
-    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+    fn imprint<D: KnownDigest>(&self) -> Result<Array<u8, D::OutputSize>> {
         self.key.imprint::<D>()
     }
 }
