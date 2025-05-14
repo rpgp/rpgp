@@ -64,8 +64,9 @@ impl SecretKey {
         ed448: [u8; ED448_KEY_LEN],
         ml_dsa: [u8; ML_DSA87_KEY_LEN],
     ) -> Result<Self> {
-        let ed448 =
-            ed448_goldilocks::SigningKey::from(ed448_goldilocks::SecretKey::from_slice(&ed448));
+        let ed448 = ed448_goldilocks::SigningKey::from(
+            ed448_goldilocks::SecretKey::try_from(&ed448[..]).expect("invariant violation"),
+        );
         // use the seed format
         let keypair = MlDsa87::from_seed(&ml_dsa.into());
 
