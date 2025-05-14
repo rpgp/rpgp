@@ -127,7 +127,7 @@ fn copy_err(err: &io::Error) -> io::Error {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use rand::{Rng, SeedableRng};
+    use rand::{RngExt, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
     use super::*;
