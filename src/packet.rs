@@ -35,9 +35,9 @@
 //!     },
 //!     types::{KeyDetails, KeyVersion, Password, Timestamp},
 //! };
-//! use rand::thread_rng;
+//! use rand::rng;
 //!
-//! let mut rng = thread_rng();
+//! let mut rng = rng();
 //!
 //! let now = Timestamp::now();
 //!

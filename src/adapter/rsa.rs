@@ -1,10 +1,7 @@
 use std::marker::PhantomData;
 
 use digest::{typenum::Unsigned, OutputSizeUser};
-use rsa::{
-    pkcs1v15::{self, Signature},
-    RsaPublicKey,
-};
+use rsa::pkcs1v15::{self, Signature};
 use sha2::Digest;
 use signature::{hazmat::PrehashSigner, Keypair, SignatureEncoding};
 
@@ -22,7 +19,7 @@ use crate::{
     },
 };
 
-impl HPublicKey for RsaPublicKey {
+impl HPublicKey for rsa::PublicKey {
     const PGP_ALGORITHM: PublicKeyAlgorithm = PublicKeyAlgorithm::RSA;
 
     fn pgp_parameters(&self) -> PublicParams {
@@ -49,7 +46,7 @@ where
     pub fn new(inner: T, version: KeyVersion, created_at: Timestamp) -> Result<Self> {
         let public_key = PubKeyInner::new(
             version,
-            RsaPublicKey::PGP_ALGORITHM,
+            rsa::PublicKey::PGP_ALGORITHM,
             created_at,
             None,
             inner.verifying_key().as_ref().pgp_parameters(),

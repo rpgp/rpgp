@@ -1,5 +1,6 @@
 use std::fs::File;
 
+use chacha20::ChaCha8Rng;
 use pgp::{
     composed::{
         CleartextSignedMessage, EncryptionCaps, KeyType, Message, MessageBuilder,
@@ -13,7 +14,6 @@ use pgp::{
     types::{KeyDetails, KeyVersion},
 };
 use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 
 const MSG: &str = "hello world\n";
 
