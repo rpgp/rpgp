@@ -1,8 +1,8 @@
 use std::{hash::Hasher, io::Write};
 
 use base64::engine::{general_purpose, Engine as _};
+use cipher::typenum::U64;
 use crc24::Crc24Hasher;
-use generic_array::typenum::U64;
 
 use super::Headers;
 use crate::{
@@ -153,8 +153,8 @@ mod tests {
 
     use std::io;
 
+    use chacha20::ChaCha8Rng;
     use rand::{Rng, SeedableRng};
-    use rand_chacha::ChaCha8Rng;
     use rand_xorshift::XorShiftRng;
 
     use super::*;
@@ -240,7 +240,7 @@ mod tests {
             // Generate data
             let mut buf = vec![0u8; size];
             rng.fill(&mut buf[..]);
-            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+            let mut reader = ChaosReader::new(rng.fork(), buf.clone());
 
             let mut out = Vec::new();
             {

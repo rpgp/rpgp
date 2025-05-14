@@ -1,7 +1,7 @@
 use std::cmp::PartialEq;
 
 use derive_builder::Builder;
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 use smallvec::SmallVec;
 
 #[cfg(feature = "draft-pqc")]
@@ -272,12 +272,12 @@ impl SecretKeyParamsBuilder {
 }
 
 impl SecretKeyParams {
-    pub fn generate<R: Rng + CryptoRng>(self, mut rng: R) -> Result<SignedSecretKey> {
+    pub fn generate<R: CryptoRng + ?Sized>(self, rng: &mut R) -> Result<SignedSecretKey> {
         let passphrase = self.passphrase;
         let s2k = self
             .s2k
-            .unwrap_or_else(|| S2kParams::new_default(&mut rng, self.version));
-        let (public_params, secret_params) = self.key_type.generate(&mut rng)?;
+            .unwrap_or_else(|| S2kParams::new_default(rng, self.version));
+        let (public_params, secret_params) = self.key_type.generate(rng)?;
         let pub_key = PubKeyInner::new(
             self.version,
             self.key_type.to_alg(),
@@ -338,8 +338,8 @@ impl SecretKeyParams {
                     let passphrase = subkey.passphrase;
                     let s2k = subkey
                         .s2k
-                        .unwrap_or_else(|| S2kParams::new_default(&mut rng, subkey.version));
-                    let (public_params, secret_params) = subkey.key_type.generate(&mut rng)?;
+                        .unwrap_or_else(|| S2kParams::new_default(rng, subkey.version));
+                    let (public_params, secret_params) = subkey.key_type.generate(rng)?;
                     let mut keyflags = KeyFlags::default();
                     keyflags.set_encrypt_comms(subkey.can_encrypt.is_communication());
                     keyflags.set_encrypt_storage(subkey.can_encrypt.is_storage());
@@ -359,7 +359,7 @@ impl SecretKeyParams {
                     // Produce embedded back signature for signing-capable subkeys
                     let embedded = if subkey.can_sign {
                         let backsig =
-                            sub.sign_primary_key_binding(&mut rng, &primary_pub_key, &"".into())?;
+                            sub.sign_primary_key_binding(rng, &primary_pub_key, &"".into())?;
 
                         Some(backsig)
                     } else {
@@ -520,9 +520,9 @@ impl KeyType {
         }
     }
 
-    pub fn generate<R: Rng + CryptoRng>(
+    pub fn generate<R: CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
     ) -> Result<(PublicParams, types::SecretParams)> {
         let (pub_params, plain) = match self {
             KeyType::Rsa(bit_size) => {
@@ -640,8 +640,8 @@ impl KeyType {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use chacha20::ChaCha8Rng;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
     use smallvec::smallvec;
 
     use super::*;
@@ -675,7 +675,7 @@ mod tests {
         }
     }
 
-    fn gen_rsa_2048<R: Rng + CryptoRng>(mut rng: R, version: KeyVersion) {
+    fn gen_rsa_2048<R: CryptoRng + ?Sized>(rng: &mut R, version: KeyVersion) {
         let mut key_params = SecretKeyParamsBuilder::default();
         key_params
             .version(version)
@@ -715,7 +715,7 @@ mod tests {
             .build()
             .unwrap();
         let signed_key_enc = key_params_enc
-            .generate(&mut rng)
+            .generate(rng)
             .expect("failed to generate secret key, encrypted");
 
         let key_params_plain = key_params
@@ -731,7 +731,7 @@ mod tests {
             .build()
             .unwrap();
         let signed_key_plain = key_params_plain
-            .generate(&mut rng)
+            .generate(rng)
             .expect("failed to generate secret key");
 
         let armor_enc = signed_key_enc
@@ -801,7 +801,7 @@ mod tests {
         }
     }
 
-    fn gen_25519_legacy<R: Rng + CryptoRng>(mut rng: R) {
+    fn gen_25519_legacy<R: CryptoRng + ?Sized>(rng: &mut R) {
         // The v4-only key format variants based on Curve 25519 (EdDSALegacy/ECDH over 25519)
 
         let _ = pretty_env_logger::try_init();
@@ -839,7 +839,7 @@ mod tests {
             .unwrap();
 
         let signed_key = key_params
-            .generate(&mut rng)
+            .generate(rng)
             .expect("failed to generate secret key");
 
         let armor = signed_key
@@ -898,7 +898,7 @@ mod tests {
         }
     }
 
-    fn gen_25519_rfc9580<R: Rng + CryptoRng>(mut rng: R, version: KeyVersion) {
+    fn gen_25519_rfc9580<R: CryptoRng + ?Sized>(rng: &mut R, version: KeyVersion) {
         // The RFC 9580 key format variants based on Curve 25519 (X25519/Ed25519)
 
         let _ = pretty_env_logger::try_init();
@@ -938,7 +938,7 @@ mod tests {
             .unwrap();
 
         let signed_key = key_params
-            .generate(&mut rng)
+            .generate(rng)
             .expect("failed to generate secret key");
 
         let armor = signed_key
@@ -969,8 +969,8 @@ mod tests {
         signed_key2.verify_bindings().expect("invalid public key");
     }
 
-    fn gen_ecdsa_ecdh<R: Rng + CryptoRng>(
-        mut rng: R,
+    fn gen_ecdsa_ecdh<R: CryptoRng + ?Sized>(
+        rng: &mut R,
         ecdsa: ECCCurve,
         ecdh: ECCCurve,
         version: KeyVersion,
@@ -1012,7 +1012,7 @@ mod tests {
             .unwrap();
 
         let signed_key = key_params
-            .generate(&mut rng)
+            .generate(rng)
             .expect("failed to generate secret key");
 
         let armor = signed_key
@@ -1120,7 +1120,7 @@ mod tests {
         }
     }
 
-    fn gen_dsa<R: Rng + CryptoRng>(mut rng: R, key_size: DsaKeySize) {
+    fn gen_dsa<R: CryptoRng + ?Sized>(rng: &mut R, key_size: DsaKeySize) {
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
@@ -1156,7 +1156,7 @@ mod tests {
             .unwrap();
 
         let signed_key = key_params
-            .generate(&mut rng)
+            .generate(rng)
             .expect("failed to generate secret key");
 
         let armor = signed_key
@@ -1246,7 +1246,7 @@ mod tests {
         }
     }
 
-    fn gen_448_rfc9580<R: Rng + CryptoRng>(mut rng: R, version: KeyVersion) {
+    fn gen_448_rfc9580<R: CryptoRng + ?Sized>(rng: &mut R, version: KeyVersion) {
         // The RFC 9580 key format variants based on Curve 448 (X448/Ed448)
 
         let _ = pretty_env_logger::try_init();
@@ -1281,7 +1281,7 @@ mod tests {
             .unwrap();
 
         let signed_key = key_params
-            .generate(&mut rng)
+            .generate(rng)
             .expect("failed to generate secret key");
 
         let armor = signed_key
@@ -1626,7 +1626,7 @@ mod tests {
         }
     }
     #[cfg(feature = "draft-pqc")]
-    fn gen_ed25519_ml_kem_x25519<R: Rng + CryptoRng>(mut rng: R, version: KeyVersion) {
+    fn gen_ed25519_ml_kem_x25519<R: CryptoRng + ?Sized>(rng: &mut R, version: KeyVersion) {
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
@@ -1659,7 +1659,7 @@ mod tests {
             .unwrap();
 
         let signed_key = key_params
-            .generate(&mut rng)
+            .generate(rng)
             .expect("failed to generate secret key");
 
         let armor = signed_key
@@ -1705,7 +1705,7 @@ mod tests {
         }
     }
     #[cfg(feature = "draft-pqc")]
-    fn gen_ed448_ml_kem_x448<R: Rng + CryptoRng>(mut rng: R, version: KeyVersion) {
+    fn gen_ed448_ml_kem_x448<R: CryptoRng + ?Sized>(rng: &mut R, version: KeyVersion) {
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
@@ -1738,7 +1738,7 @@ mod tests {
             .unwrap();
 
         let signed_key = key_params
-            .generate(&mut rng)
+            .generate(rng)
             .expect("failed to generate secret key");
 
         let armor = signed_key
@@ -1846,8 +1846,8 @@ mod tests {
     }
 
     #[cfg(feature = "draft-pqc")]
-    fn gen_key<R: Rng + CryptoRng>(
-        mut rng: R,
+    fn gen_key<R: CryptoRng + ?Sized>(
+        rng: &mut R,
         version: KeyVersion,
         sign: KeyType,
         sign_hash: HashAlgorithm,
@@ -1881,7 +1881,7 @@ mod tests {
             .unwrap();
 
         let signed_key = key_params
-            .generate(&mut rng)
+            .generate(rng)
             .expect("failed to generate secret key");
 
         let armor = signed_key

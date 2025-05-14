@@ -4,7 +4,7 @@ use std::{
 };
 
 use bytes::Bytes;
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 
 use crate::{
     errors::{ensure, Result},
@@ -101,13 +101,13 @@ impl UserId {
     /// Create a self-signature.
     pub fn sign<R, S, K>(
         &self,
-        rng: R,
+        rng: &mut R,
         signer_sec_key: &S,
         signer_pub_key: &K,
         key_pw: &Password,
     ) -> Result<SignedUser>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + ?Sized,
         S: SigningKey,
         K: KeyDetails + Serialize,
     {
@@ -125,14 +125,14 @@ impl UserId {
     /// Create a third-party signature.
     pub fn sign_third_party<R, S, K>(
         &self,
-        mut rng: R,
+        rng: &mut R,
         signer: &S,
         signer_pw: &Password,
         signee: &K,
         typ: SignatureType,
     ) -> Result<SignedUser>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + ?Sized,
         S: SigningKey,
         K: KeyDetails + Serialize,
     {
@@ -146,7 +146,7 @@ impl UserId {
             Subpacket::regular(SubpacketData::IssuerFingerprint(signer.fingerprint()))?,
         ];
 
-        let mut config = SignatureConfig::from_key(&mut rng, signer, typ)?;
+        let mut config = SignatureConfig::from_key(rng, signer, typ)?;
 
         config.hashed_subpackets = hashed_subpackets;
         if signer.version() <= KeyVersion::V4 {
@@ -186,9 +186,9 @@ impl PacketTrait for UserId {
 
 #[cfg(test)]
 mod tests {
+    use chacha20::ChaCha8Rng;
     use proptest::prelude::*;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::{

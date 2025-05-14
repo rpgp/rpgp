@@ -63,9 +63,14 @@ where {
     }
 
     /// Sign the given text.
-    pub fn sign<R>(rng: R, text: &str, key: &impl SigningKey, key_pw: &Password) -> Result<Self>
+    pub fn sign<R>(
+        rng: &mut R,
+        text: &str,
+        key: &impl SigningKey,
+        key_pw: &Password,
+    ) -> Result<Self>
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: rand::RngCore + rand::CryptoRng + ?Sized,
     {
         let hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
@@ -411,8 +416,8 @@ fn read_cleartext_body<B: BufRead>(b: &mut B) -> Result<(String, String)> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use chacha20::ChaCha8Rng;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::composed::{Any, Deserializable, SignedPublicKey, SignedSecretKey};

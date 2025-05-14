@@ -1,14 +1,14 @@
 use aes::{Aes128, Aes192, Aes256};
 use aes_gcm::{
-    aead::{consts::U12, AeadInPlace, KeyInit},
+    aead::{consts::U12, AeadInOut, KeyInit},
     Aes128Gcm, Aes256Gcm, AesGcm, Key as GcmKey, Nonce as GcmNonce,
 };
 use bytes::BytesMut;
-use eax::{Eax, Key as EaxKey, Nonce as EaxNonce};
-use generic_array::{
+use cipher::{
+    array::Array,
     typenum::{U15, U16},
-    GenericArray,
 };
+use eax::{Eax, Key as EaxKey, Nonce as EaxNonce};
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 use ocb3::{Nonce as Ocb3Nonce, Ocb3};
 use sha2::Sha256;
@@ -152,19 +152,19 @@ impl AeadAlgorithm {
                 cipher.decrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..16]);
+                let key = Array::from_slice(&key[..16]);
                 let nonce = Ocb3Nonce::from_slice(nonce);
                 let cipher = Aes128Ocb3::new(key);
                 cipher.decrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..24]);
+                let key = Array::from_slice(&key[..24]);
                 let nonce = Ocb3Nonce::from_slice(nonce);
                 let cipher = Aes192Ocb3::new(key);
                 cipher.decrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..32]);
+                let key = Array::from_slice(&key[..32]);
                 let nonce = Ocb3Nonce::from_slice(nonce);
                 let cipher = Aes256Ocb3::new(key);
                 cipher.decrypt_in_place(nonce, associated_data, buffer)
@@ -223,19 +223,19 @@ impl AeadAlgorithm {
                 cipher.encrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..16]);
+                let key = Array::from_slice(&key[..16]);
                 let nonce = Ocb3Nonce::from_slice(nonce);
                 let cipher = Aes128Ocb3::new(key);
                 cipher.encrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..24]);
+                let key = Array::from_slice(&key[..24]);
                 let nonce = Ocb3Nonce::from_slice(nonce);
                 let cipher = Aes192Ocb3::new(key);
                 cipher.encrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..32]);
+                let key = Array::from_slice(&key[..32]);
                 let nonce = Ocb3Nonce::from_slice(nonce);
                 let cipher = Aes256Ocb3::new(key);
                 cipher.encrypt_in_place(nonce, associated_data, buffer)
@@ -322,9 +322,9 @@ impl ChunkSize {
 mod tests {
     use std::io::Read;
 
+    use chacha20::ChaCha8Rng;
     use log::info;
     use rand::{Rng, SeedableRng};
-    use rand_chacha::ChaCha8Rng;
 
     use super::*;
 
