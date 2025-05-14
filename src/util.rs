@@ -100,7 +100,7 @@ pub(crate) mod test {
     pub(crate) fn random_string(rng: &mut impl Rng, size: usize) -> String {
         (0..size)
             .map(|_| {
-                let idx = rng.gen_range(0..CHARSET.len());
+                let idx = rng.random_range(0..CHARSET.len());
                 CHARSET[idx] as char
             })
             .collect()
@@ -127,7 +127,7 @@ pub(crate) mod test {
                 return Ok(0);
             }
             let max = buf.len().min(self.source.remaining());
-            let to_write: usize = self.rng.gen_range(1..=max);
+            let to_write: usize = self.rng.random_range(1..=max);
 
             self.source.copy_to_slice(&mut buf[..to_write]);
             Ok(to_write)

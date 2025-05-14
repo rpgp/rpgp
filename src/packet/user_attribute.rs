@@ -5,7 +5,7 @@ use bytes::Bytes;
 use chrono::{SubsecRound, Utc};
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 
 use crate::{
     errors::{ensure, ensure_eq, Result},
@@ -222,13 +222,13 @@ impl UserAttribute {
     /// Create a self-signature
     pub fn sign<R, P, K>(
         &self,
-        rng: R,
+        rng: &mut R,
         signer_sec_key: &P,
         signer_pub_key: &K,
         key_pw: &Password,
     ) -> Result<SignedUserAttribute>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + RngCore + ?Sized,
         P: SecretKeyTrait,
         K: PublicKeyTrait + Serialize,
     {
@@ -238,13 +238,13 @@ impl UserAttribute {
     /// Create a third-party signature
     pub fn sign_third_party<R, P, K>(
         &self,
-        mut rng: R,
+        rng: &mut R,
         signer: &P,
         signer_pw: &Password,
         signee: &K,
     ) -> Result<SignedUserAttribute>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + RngCore + ?Sized,
         P: SecretKeyTrait,
         K: PublicKeyTrait + Serialize,
     {
@@ -252,7 +252,7 @@ impl UserAttribute {
             Utc::now().trunc_subsecs(0),
         ))?];
 
-        let mut config = SignatureConfig::from_key(&mut rng, signer, SignatureType::CertGeneric)?;
+        let mut config = SignatureConfig::from_key(rng, signer, SignatureType::CertGeneric)?;
 
         config.hashed_subpackets = hashed_subpackets;
         if signer.version() <= KeyVersion::V4 {

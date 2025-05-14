@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 
 use crate::{
     composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey},
@@ -48,22 +48,22 @@ impl PublicKey {
 
     pub fn sign<R, K, P>(
         self,
-        mut rng: R,
+        rng: &mut R,
         sec_key: &K,
         pub_key: &P,
         key_pw: &Password,
     ) -> Result<SignedPublicKey>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + RngCore + ?Sized,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
         let primary_key = self.primary_key;
-        let details = self.details.sign(&mut rng, sec_key, pub_key, key_pw)?;
+        let details = self.details.sign(rng, sec_key, pub_key, key_pw)?;
         let public_subkeys = self
             .public_subkeys
             .into_iter()
-            .map(|k| k.sign(&mut rng, sec_key, pub_key, key_pw))
+            .map(|k| k.sign(rng, sec_key, pub_key, key_pw))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedPublicKey {
@@ -73,9 +73,9 @@ impl PublicKey {
         })
     }
 
-    pub fn encrypt<R: Rng + CryptoRng>(
+    pub fn encrypt<R: CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
@@ -103,20 +103,20 @@ impl PublicSubkey {
     /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
     pub fn sign<R, K, P>(
         self,
-        mut rng: R,
+        rng: &mut R,
         primary_sec_key: &K,
         primary_pub_key: &P,
         key_pw: &Password,
     ) -> Result<SignedPublicSubKey>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + RngCore + ?Sized,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
         let key = self.key;
 
         let signatures = vec![key.sign(
-            &mut rng,
+            rng,
             primary_sec_key,
             primary_pub_key,
             key_pw,
@@ -127,9 +127,9 @@ impl PublicSubkey {
         Ok(SignedPublicSubKey { key, signatures })
     }
 
-    pub fn encrypt<R: Rng + CryptoRng>(
+    pub fn encrypt<R: RngCore + CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {

@@ -526,7 +526,7 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
 
 #[cfg(test)]
 mod tests {
-    use rand::SeedableRng;
+    use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha20Rng;
 
     use super::*;

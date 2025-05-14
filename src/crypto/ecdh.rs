@@ -1,5 +1,6 @@
+use cipher::array::Array;
 use log::debug;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
@@ -39,7 +40,7 @@ impl PartialEq for Curve25519 {
 impl Eq for Curve25519 {}
 
 impl Curve25519 {
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
+    pub fn generate<R: CryptoRng + ?Sized>(rng: &mut R) -> Self {
         let mut secret_key_bytes = Zeroizing::new([0u8; ECCCurve::Curve25519.secret_key_length()]);
         rng.fill_bytes(&mut *secret_key_bytes);
 
@@ -136,22 +137,25 @@ impl From<&SecretKey> for EcdhPublicParams {
 
 impl SecretKey {
     /// Generate an ECDH KeyPair.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R, curve: &ECCCurve) -> Result<Self> {
+    pub fn generate<R: RngCore + CryptoRng + ?Sized>(
+        rng: &mut R,
+        curve: &ECCCurve,
+    ) -> Result<Self> {
         match curve {
             ECCCurve::Curve25519 => {
                 let key = Curve25519::generate(rng);
                 Ok(Self::Curve25519(key))
             }
             ECCCurve::P256 => {
-                let secret = p256::SecretKey::random(&mut rng);
+                let secret = p256::SecretKey::random(rng);
                 Ok(SecretKey::P256 { secret })
             }
             ECCCurve::P384 => {
-                let secret = p384::SecretKey::random(&mut rng);
+                let secret = p384::SecretKey::random(rng);
                 Ok(SecretKey::P384 { secret })
             }
             ECCCurve::P521 => {
-                let secret = p521::SecretKey::random(&mut rng);
+                let secret = p521::SecretKey::random(rng);
                 Ok(SecretKey::P521 { secret })
             }
             _ => unsupported_err!("curve {:?} for ECDH", curve),
@@ -181,10 +185,7 @@ impl SecretKey {
             EcdhPublicParams::P521 { .. } => {
                 const SIZE: usize = ECCCurve::P521.secret_key_length();
                 let raw = pad_key::<SIZE>(d.as_ref())?;
-                let arr =
-                    generic_array::GenericArray::<u8, generic_array::typenum::U66>::from_slice(
-                        &raw[..],
-                    );
+                let arr = Array::<u8, cipher::typenum::U66>::from_slice(&raw[..]);
                 let secret = elliptic_curve::SecretKey::<p521::NistP521>::from_bytes(arr)?;
 
                 Ok(SecretKey::P521 { secret })
@@ -483,8 +484,8 @@ fn pad(plain: &[u8]) -> Vec<u8> {
 }
 
 /// ECDH encryption.
-pub fn encrypt<R: CryptoRng + Rng>(
-    mut rng: R,
+pub fn encrypt<R: CryptoRng + RngCore + ?Sized>(
+    rng: &mut R,
     params: &EcdhPublicParams,
     fingerprint: &[u8],
     plain: &[u8],
@@ -569,8 +570,8 @@ pub fn encrypt<R: CryptoRng + Rng>(
 
 /// Derive a shared secret in encryption, for a Rust Crypto curve.
 /// Returns a pair of `(our_public key, shared_secret)`.
-fn derive_shared_secret_encryption<C, R: CryptoRng + Rng>(
-    mut rng: R,
+fn derive_shared_secret_encryption<C, R: CryptoRng + RngCore + ?Sized>(
+    rng: &mut R,
     their_public: &elliptic_curve::PublicKey<C>,
 ) -> Result<(Vec<u8>, Vec<u8>)>
 where
@@ -579,7 +580,7 @@ where
     elliptic_curve::AffinePoint<C>:
         elliptic_curve::sec1::FromEncodedPoint<C> + elliptic_curve::sec1::ToEncodedPoint<C>,
 {
-    let our_secret = elliptic_curve::ecdh::EphemeralSecret::<C>::random(&mut rng);
+    let our_secret = elliptic_curve::ecdh::EphemeralSecret::<C>::random(rng);
 
     // derive shared secret
     let shared_secret = our_secret.diffie_hellman(their_public);
