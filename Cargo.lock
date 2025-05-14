@@ -22,7 +22,7 @@ dependencies = [
 [[package]]
 name = "aead-stream"
 version = "0.6.0-rc.0"
-source = "git+https://github.com/RustCrypto/AEADs.git#d8299837a5d4a5198e48cc3ca1f26e70cbd2e3a4"
+source = "git+https://github.com/RustCrypto/AEADs.git#543c7a0b7a14e85cd53edc9c4b6e7788eb734bcd"
 dependencies = [
  "aead",
 ]
@@ -198,7 +198,7 @@ dependencies = [
 [[package]]
 name = "block-padding"
 version = "0.4.0-rc.3"
-source = "git+https://github.com/RustCrypto/utils.git#716d766e19e9b59780091b2804311a62dfb11e1c"
+source = "git+https://github.com/RustCrypto/utils.git#a5b54bb6477ef96fd693beae9c232e9c6ba0e0a5"
 dependencies = [
  "hybrid-array",
 ]
@@ -621,9 +621,9 @@ dependencies = [
 
 [[package]]
 name = "der"
-version = "0.8.0-rc.3"
+version = "0.8.0-rc.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b00a9651bf9c00a38b7c383073cb22fb42f20a5f978c9f97ad5c7128cbd3c1bd"
+checksum = "0c2e6107818886eff6b71fba7a2da3dd11025ebb80f0c9b94ff961168ef629f2"
 dependencies = [
  "const-oid",
  "pem-rfc7468",
@@ -728,7 +728,7 @@ dependencies = [
 [[package]]
 name = "eax"
 version = "0.6.0-pre"
-source = "git+https://github.com/RustCrypto/AEADs.git#d8299837a5d4a5198e48cc3ca1f26e70cbd2e3a4"
+source = "git+https://github.com/RustCrypto/AEADs.git#543c7a0b7a14e85cd53edc9c4b6e7788eb734bcd"
 dependencies = [
  "aead",
  "cipher",
@@ -739,9 +739,9 @@ dependencies = [
 
 [[package]]
 name = "ecdsa"
-version = "0.17.0-rc.0"
+version = "0.17.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abbc927a7e946a78fbff19c283bc5d4f8960d9000049a7e2b0d84cb2730613c4"
+checksum = "6ca18d8009d96ffc2a8b771c7432338233ffcfa05e4ca410ed77900a2a335a0b"
 dependencies = [
  "der",
  "digest",
@@ -755,7 +755,7 @@ dependencies = [
 [[package]]
 name = "ed25519"
 version = "3.0.0-pre.0"
-source = "git+https://github.com/RustCrypto/signatures.git#1fb2f882212d845b08dc2184f4f61f2ab507dbc6"
+source = "git+https://github.com/RustCrypto/signatures.git#ade6fdbb10428e3d5b3fad120a04f7302f6bcf97"
 dependencies = [
  "pkcs8",
  "signature",
@@ -1006,9 +1006,9 @@ checksum = "9b112acc8b3adf4b107a8ec20977da0273a8c386765a3ec0229bd500a1443f9f"
 
 [[package]]
 name = "hybrid-array"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dab50e193aebe510fe0e40230145820e02f48dae0cf339ea4204e6e708ff7bd"
+checksum = "891d15931895091dea5c47afa5b3c9a01ba634b311919fd4d41388fa0e3d76af"
 dependencies = [
  "typenum",
  "zeroize",
@@ -1133,7 +1133,7 @@ dependencies = [
 [[package]]
 name = "kem"
 version = "0.3.0-pre.0"
-source = "git+https://github.com/RustCrypto/traits.git#faf3f65bd129e6ec881f841cfb47c6a852232561"
+source = "git+https://github.com/RustCrypto/traits.git#81757de8a15d5ae628a15cbaad6e33b12cdb7893"
 dependencies = [
  "rand_core 0.9.3",
  "zeroize",
@@ -1218,7 +1218,7 @@ dependencies = [
 [[package]]
 name = "ml-dsa"
 version = "0.1.0-pre.2"
-source = "git+https://github.com/RustCrypto/signatures.git#1fb2f882212d845b08dc2184f4f61f2ab507dbc6"
+source = "git+https://github.com/RustCrypto/signatures.git#ade6fdbb10428e3d5b3fad120a04f7302f6bcf97"
 dependencies = [
  "const-oid",
  "hybrid-array",
@@ -1285,7 +1285,7 @@ dependencies = [
 [[package]]
 name = "ocb3"
 version = "0.2.0-pre"
-source = "git+https://github.com/RustCrypto/AEADs.git#d8299837a5d4a5198e48cc3ca1f26e70cbd2e3a4"
+source = "git+https://github.com/RustCrypto/AEADs.git#543c7a0b7a14e85cd53edc9c4b6e7788eb734bcd"
 dependencies = [
  "aead",
  "aead-stream",
@@ -1437,7 +1437,7 @@ dependencies = [
  "rsa",
  "serde",
  "serde_json",
- "sha1 0.11.0-rc.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sha1",
  "sha1-asm",
  "sha1-checked",
  "sha2",
@@ -1875,9 +1875,9 @@ dependencies = [
 
 [[package]]
 name = "sec1"
-version = "0.8.0-rc.4"
+version = "0.8.0-rc.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a017a4aa8f0bd51e9d0184d98042dfe9285218fec098493f47d9a8aa0f1a3f27"
+checksum = "e4855dd9b15e8e469fad23529698f7f7b7a6b250a81c88b1f9d7efe1abca7717"
 dependencies = [
  "base16ct",
  "der",
@@ -1947,16 +1947,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sha1"
-version = "0.11.0-rc.0"
-source = "git+https://github.com/RustCrypto/hashes.git#2bcfb5a0a849503ed73b190538787a00c58baada"
-dependencies = [
- "cfg-if",
- "cpufeatures",
- "digest",
-]
-
-[[package]]
 name = "sha1-asm"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1968,10 +1958,10 @@ dependencies = [
 [[package]]
 name = "sha1-checked"
 version = "0.11.0-pre"
-source = "git+https://github.com/RustCrypto/hashes.git#2bcfb5a0a849503ed73b190538787a00c58baada"
+source = "git+https://github.com/RustCrypto/hashes.git#6e88e37bac987506bd977dcea07dfaad40ae25dd"
 dependencies = [
  "digest",
- "sha1 0.11.0-rc.0 (git+https://github.com/RustCrypto/hashes.git)",
+ "sha1",
  "zeroize",
 ]
 
@@ -2015,7 +2005,7 @@ dependencies = [
 [[package]]
 name = "slh-dsa"
 version = "0.2.0-pre"
-source = "git+https://github.com/RustCrypto/signatures.git#1fb2f882212d845b08dc2184f4f61f2ab507dbc6"
+source = "git+https://github.com/RustCrypto/signatures.git#ade6fdbb10428e3d5b3fad120a04f7302f6bcf97"
 dependencies = [
  "const-oid",
  "digest",

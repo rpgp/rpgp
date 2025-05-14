@@ -9,7 +9,6 @@ use std::{fs::File, io::Read, path::Path};
 
 use buffer_redux::BufReader;
 use chrono::{DateTime, Utc};
-use num_traits::ToPrimitive;
 use pgp::{
     armor,
     composed::{Deserializable, PublicOrSecret, SignedPublicKey, SignedSecretKey},
