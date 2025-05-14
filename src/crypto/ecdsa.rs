@@ -1,4 +1,5 @@
 use ecdsa::SigningKey;
+use elliptic_curve::Generate;
 use p521::NistP521;
 use rand::{CryptoRng, RngCore};
 use signature::hazmat::{PrehashSigner, PrehashVerifier};
@@ -76,19 +77,19 @@ impl SecretKey {
     ) -> Result<Self> {
         match curve {
             ECCCurve::P256 => {
-                let secret = p256::SecretKey::random(rng);
+                let secret = p256::SecretKey::generate_from_rng(rng);
                 Ok(SecretKey::P256(secret))
             }
             ECCCurve::P384 => {
-                let secret = p384::SecretKey::random(rng);
+                let secret = p384::SecretKey::generate_from_rng(rng);
                 Ok(SecretKey::P384(secret))
             }
             ECCCurve::P521 => {
-                let secret = p521::SecretKey::random(rng);
+                let secret = p521::SecretKey::generate_from_rng(rng);
                 Ok(SecretKey::P521(secret))
             }
             ECCCurve::Secp256k1 => {
-                let secret = k256::SecretKey::random(rng);
+                let secret = k256::SecretKey::generate_from_rng(rng);
                 Ok(SecretKey::Secp256k1(secret))
             }
             _ => unsupported_err!("curve {:?} for ECDSA", curve),
@@ -363,34 +364,39 @@ pub fn verify(
 
 #[cfg(test)]
 mod tests {
+    use elliptic_curve::Generate;
     use proptest::prelude::*;
     use rand::SeedableRng;
 
     prop_compose! {
         pub fn key_p256_gen()(seed: u64) -> p256::SecretKey {
             let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
-             p256::SecretKey::random(&mut rng)
+            let key = p256::SecretKey::generate_from_rng(&mut rng);
+            key
         }
     }
 
     prop_compose! {
         pub fn key_p384_gen()(seed: u64) -> p384::SecretKey {
             let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
-            p384::SecretKey::random(&mut rng)
+            let key = p384::SecretKey::generate_from_rng(&mut rng);
+            key
         }
     }
 
     prop_compose! {
         pub fn key_p521_gen()(seed: u64) -> p521::SecretKey {
             let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
-            p521::SecretKey::random(&mut rng)
+            let key = p521::SecretKey::generate_from_rng(&mut rng);
+            key
         }
     }
 
     prop_compose! {
         pub fn key_k256_gen()(seed: u64) -> k256::SecretKey {
             let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
-            k256::SecretKey::random(&mut rng)
+            let key = k256::SecretKey::generate_from_rng(&mut rng);
+            key
         }
     }
 }
