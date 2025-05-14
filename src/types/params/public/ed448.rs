@@ -39,8 +39,8 @@ mod tests {
     use super::*;
 
     proptest::prop_compose! {
-        pub fn ed448_pub_gen()(bytes: [u8; 57]) -> ed448_goldilocks::VerifyingKey {
-            let secret = ed448_goldilocks::SigningKey::from(ed448_goldilocks::ScalarBytes::clone_from_slice(&bytes));
+         pub fn ed448_pub_gen()(bytes: [u8; 57]) -> ed448_goldilocks::VerifyingKey {
+            let secret = ed448_goldilocks::SigningKey::from(ed448_goldilocks::ScalarBytes::try_from(&bytes[..]).expect("invariant violation"));
             secret.verifying_key()
         }
     }
