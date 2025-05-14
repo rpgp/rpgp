@@ -2,10 +2,10 @@ use std::cmp::PartialEq;
 
 use hkdf::Hkdf;
 use log::debug;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::{
     crypto::{aes_kw, Decryptor},
@@ -17,7 +17,7 @@ use crate::{
 pub const KEY_LEN: usize = 32;
 
 /// Secret key for X25519
-#[derive(Clone, derive_more::Debug, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, derive_more::Debug, ZeroizeOnDrop)]
 pub struct SecretKey {
     #[debug("..")]
     secret: StaticSecret,
@@ -41,7 +41,7 @@ impl Eq for SecretKey {}
 
 impl SecretKey {
     /// Generate an X25519 `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
+    pub fn generate<R: RngCore + CryptoRng + ?Sized>(rng: &mut R) -> Self {
         let mut secret_key_bytes = Zeroizing::new([0u8; 32]);
         rng.fill_bytes(&mut *secret_key_bytes);
 
@@ -160,8 +160,8 @@ pub fn hkdf(
 /// X25519 encryption.
 ///
 /// Returns (ephemeral, encrypted session key)
-pub fn encrypt<R: CryptoRng + Rng>(
-    mut rng: R,
+pub fn encrypt<R: CryptoRng + RngCore + ?Sized>(
+    rng: &mut R,
     recipient_public: &x25519_dalek::PublicKey,
     plain: &[u8],
 ) -> Result<([u8; 32], Vec<u8>)> {

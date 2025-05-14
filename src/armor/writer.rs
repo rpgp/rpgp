@@ -1,8 +1,8 @@
 use std::{hash::Hasher, io::Write};
 
 use base64::engine::{general_purpose, Engine as _};
+use cipher::typenum::U64;
 use crc24::Crc24Hasher;
-use generic_array::typenum::U64;
 
 use super::Headers;
 use crate::{

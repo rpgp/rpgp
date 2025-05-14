@@ -2,7 +2,7 @@ use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngCore};
 use zeroize::Zeroizing;
 
 use crate::{
@@ -90,7 +90,10 @@ impl S2kParams {
     /// - AES256
     /// - CFB
     /// - Iterated and Salted with 224 rounds
-    pub fn new_default<R: Rng + CryptoRng>(mut rng: R, key_version: KeyVersion) -> Self {
+    pub fn new_default<R: RngCore + CryptoRng + ?Sized>(
+        rng: &mut R,
+        key_version: KeyVersion,
+    ) -> Self {
         match key_version {
             KeyVersion::V6 => {
                 let sym_alg = SymmetricKeyAlgorithm::AES256;
@@ -196,12 +199,12 @@ pub enum StringToKey {
 }
 
 impl StringToKey {
-    pub fn new_default<R: CryptoRng + Rng>(rng: R) -> Self {
+    pub fn new_default<R: CryptoRng + RngCore + ?Sized>(rng: &mut R) -> Self {
         StringToKey::new_iterated(rng, HashAlgorithm::default(), DEFAULT_ITER_SALTED_COUNT)
     }
 
-    pub fn new_iterated<R: CryptoRng + Rng>(
-        mut rng: R,
+    pub fn new_iterated<R: CryptoRng + RngCore + ?Sized>(
+        rng: &mut R,
         hash_alg: HashAlgorithm,
         count: u8,
     ) -> Self {
@@ -215,7 +218,12 @@ impl StringToKey {
         }
     }
 
-    pub fn new_argon2<R: CryptoRng + Rng>(mut rng: R, t: u8, p: u8, m_enc: u8) -> Self {
+    pub fn new_argon2<R: CryptoRng + RngCore + ?Sized>(
+        rng: &mut R,
+        t: u8,
+        p: u8,
+        m_enc: u8,
+    ) -> Self {
         let mut salt = [0u8; 16];
         rng.fill(&mut salt[..]);
 
@@ -546,7 +554,7 @@ impl Serialize for StringToKey {
 mod tests {
     use proptest::prelude::*;
     use rand::{
-        distributions::{Alphanumeric, DistString},
+        distr::{Alphanumeric, SampleString},
         SeedableRng,
     };
     use rand_chacha::ChaCha8Rng;
