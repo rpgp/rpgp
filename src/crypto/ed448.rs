@@ -41,7 +41,7 @@ impl SecretKey {
 
     pub fn try_from_bytes(raw: [u8; KEY_LEN]) -> Result<Self> {
         let secret = ed448_goldilocks::SigningKey::from(
-            ed448_goldilocks::EdwardsScalarBytes::from_slice(&raw).clone(),
+            ed448_goldilocks::EdwardsScalarBytes::try_from(&raw[..]).expect("invariant violated"),
         );
         Ok(Self { secret })
     }
@@ -116,8 +116,8 @@ mod tests {
     use proptest::prelude::*;
 
     prop_compose! {
-        pub fn key_gen()(bytes: [u8; 57]) -> ed448_goldilocks::SigningKey {
-            ed448_goldilocks::SigningKey::from(ed448_goldilocks::EdwardsScalarBytes::from_slice(&bytes))
+         pub fn key_gen()(bytes: [u8; 57]) -> ed448_goldilocks::SigningKey {
+            ed448_goldilocks::SigningKey::from(ed448_goldilocks::EdwardsScalarBytes::try_from(&bytes[..]).expect("invariant violation"))
         }
     }
 }

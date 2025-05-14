@@ -128,7 +128,7 @@ pub(crate) mod test {
     }
 
     pub(crate) fn random_utf8_string(rng: &mut impl Rng, size: usize) -> String {
-        (0..size).map(|_| rng.gen::<char>()).collect()
+        (0..size).map(|_| rng.random::<char>()).collect()
     }
 
     #[derive(Debug)]
