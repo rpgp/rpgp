@@ -20,8 +20,8 @@ pub use self::{
 mod tests {
     use std::io::{BufReader, Read};
 
+    use chacha20::ChaCha8Rng;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
     use testresult::TestResult;
 
     use crate::{
@@ -49,7 +49,7 @@ mod tests {
                     MessageBuilder::from_bytes("test.txt", buf.clone()).to_vec(&mut rng)?
                 };
 
-                let reader = ChaosReader::new(rng.clone(), message.clone());
+                let reader = ChaosReader::new(rng.fork(), message.clone());
                 let mut reader = BufReader::new(reader);
                 let mut msg = Message::from_bytes(&mut reader).unwrap();
 
@@ -91,7 +91,7 @@ mod tests {
                             builder.compression(CompressionAlgorithm::ZIP);
                             builder.to_armored_string(&mut rng, Default::default())?
                         };
-                        let reader = ChaosReader::new(rng.clone(), message.clone());
+                        let reader = ChaosReader::new(rng.fork(), message.clone());
                         let mut reader = BufReader::new(reader);
                         let (message, _) = Message::from_armor(&mut reader)?;
 
@@ -112,7 +112,7 @@ mod tests {
                         }
                         let message = builder.to_vec(&mut rng)?;
 
-                        let reader = ChaosReader::new(rng.clone(), message.clone());
+                        let reader = ChaosReader::new(rng.fork(), message.clone());
                         let mut reader = BufReader::new(reader);
                         let message = Message::from_bytes(&mut reader)?;
 
