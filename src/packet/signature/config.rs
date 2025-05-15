@@ -308,6 +308,42 @@ impl SignatureConfig {
         P: PublicKeyTrait + Serialize,
         L: PublicKeyTrait + Serialize,
     {
+        self.sign_key_binding_internal(signing_key, signing_pub_key, key_pw, key, false)
+    }
+
+    /// Sign a primary key binding, or "back signature"
+    /// (with this signature, the subkey signals that it wants to be associated with the primary).
+    ///
+    /// Produces a "Primary Key Binding Signature (type ID 0x19)"
+    pub fn sign_backwards_key_binding<K, P, L>(
+        self,
+        signing_key: &K,
+        signing_pub_key: &P,
+        key_pw: &Password,
+        key: &L,
+    ) -> Result<Signature>
+    where
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
+        L: PublicKeyTrait + Serialize,
+    {
+        self.sign_key_binding_internal(signing_key, signing_pub_key, key_pw, key, true)
+    }
+
+    /// Sign a key binding.
+    fn sign_key_binding_internal<K, P, L>(
+        self,
+        signing_key: &K,
+        signing_pub_key: &P,
+        key_pw: &Password,
+        key: &L,
+        backsig: bool,
+    ) -> Result<Signature>
+    where
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
+        L: PublicKeyTrait + Serialize,
+    {
         ensure!(
             (self.version() == SignatureVersion::V4 && signing_key.version() == KeyVersion::V4)
                 || (self.version() == SignatureVersion::V6
@@ -327,11 +363,26 @@ impl SignatureConfig {
             hasher.update(salt.as_ref())
         }
 
-        // Signing Key
-        serialize_for_hashing(signing_pub_key, &mut hasher)?;
+        // Hash the two keys:
+        // - for a regular binding signature, first the signer (primary), then the signee (subkey)
+        // - for a "backward signature" (Primary Key Binding Signature), the order of hashing is signee (primary), signer (subkey)
 
-        // Key being bound
-        serialize_for_hashing(key, &mut hasher)?;
+        // First key to hash
+        {
+            if !backsig {
+                serialize_for_hashing(signing_pub_key, &mut hasher)?; // primary
+            } else {
+                serialize_for_hashing(key, &mut hasher)?; // primary
+            }
+        }
+        // Second key to hash
+        {
+            if !backsig {
+                serialize_for_hashing(key, &mut hasher)?; // subkey
+            } else {
+                serialize_for_hashing(signing_pub_key, &mut hasher)?; // subkey
+            }
+        }
 
         let len = self.hash_signature_data(&mut hasher)?;
         hasher.update(&self.trailer(len)?);
