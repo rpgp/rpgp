@@ -4,7 +4,7 @@ use rand::Rng;
 
 use crate::{
     composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey},
-    errors::{unsupported_err, Result},
+    errors::{ensure, unsupported_err, Result},
     packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     ser::Serialize,
     types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
@@ -25,6 +25,11 @@ pub struct SecretKey {
 pub struct SecretSubkey {
     key: packet::SecretSubkey,
     keyflags: KeyFlags,
+
+    /// Embedded signature, required for signing-capable subkeys.
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#sigtype-primary-binding>
+    pub embedded: Option<SubpacketData>,
 }
 
 impl SecretKey {
@@ -71,8 +76,16 @@ impl SecretKey {
 }
 
 impl SecretSubkey {
-    pub fn new(key: packet::SecretSubkey, keyflags: KeyFlags) -> Self {
-        SecretSubkey { key, keyflags }
+    pub fn new(
+        key: packet::SecretSubkey,
+        keyflags: KeyFlags,
+        embedded: Option<SubpacketData>,
+    ) -> Self {
+        SecretSubkey {
+            key,
+            keyflags,
+            embedded,
+        }
     }
 
     pub fn sign<R, K, P>(
@@ -111,6 +124,14 @@ impl SecretSubkey {
             Subpacket::regular(SubpacketData::KeyFlags(self.keyflags))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint()))?,
         ];
+
+        if let Some(embedded) = self.embedded {
+            ensure!(
+                matches!(embedded, SubpacketData::EmbeddedSignature(_)),
+                format!("Unexpected data {:?} in embedded_sig", embedded)
+            );
+            config.hashed_subpackets.push(Subpacket::regular(embedded)?)
+        }
 
         // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
         // the signature.

@@ -6,7 +6,7 @@ use rand::{CryptoRng, Rng};
 use crate::{
     composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey},
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::{unsupported_err, Result},
+    errors::{ensure, unsupported_err, Result},
     packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     ser::Serialize,
     types::{
@@ -27,6 +27,11 @@ pub struct PublicKey {
 pub struct PublicSubkey {
     pub key: packet::PublicSubkey,
     pub keyflags: KeyFlags,
+
+    /// Embedded signature, required for signing-capable subkeys.
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#sigtype-primary-binding>
+    pub embedded: Option<SubpacketData>,
 }
 
 impl PublicKey {
@@ -88,8 +93,16 @@ impl Deref for PublicKey {
 }
 
 impl PublicSubkey {
-    pub fn new(key: packet::PublicSubkey, keyflags: KeyFlags) -> Self {
-        PublicSubkey { key, keyflags }
+    pub fn new(
+        key: packet::PublicSubkey,
+        keyflags: KeyFlags,
+        embedded: Option<SubpacketData>,
+    ) -> Self {
+        PublicSubkey {
+            key,
+            keyflags,
+            embedded,
+        }
     }
 
     pub fn sign<R, K, P>(
@@ -105,13 +118,6 @@ impl PublicSubkey {
         P: PublicKeyTrait + Serialize,
     {
         let key = self.key;
-        let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))?,
-            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags))?,
-            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint()))?,
-        ];
 
         let mut config = match sec_key.version() {
             KeyVersion::V4 => SignatureConfig::v4(
@@ -128,7 +134,21 @@ impl PublicSubkey {
             v => unsupported_err!("unsupported key version: {:?}", v),
         };
 
-        config.hashed_subpackets = hashed_subpackets;
+        config.hashed_subpackets = vec![
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                chrono::Utc::now().trunc_subsecs(0),
+            ))?,
+            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags))?,
+            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint()))?,
+        ];
+
+        if let Some(embedded) = self.embedded {
+            ensure!(
+                matches!(embedded, SubpacketData::EmbeddedSignature(_)),
+                format!("Unexpected data {:?} in embedded_sig", embedded)
+            );
+            config.hashed_subpackets.push(Subpacket::regular(embedded)?)
+        }
 
         // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
         // the signature.
