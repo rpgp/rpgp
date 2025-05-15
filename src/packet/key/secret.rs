@@ -1,16 +1,12 @@
 use std::io::BufRead;
 
 use log::debug;
-use rand::{CryptoRng, Rng};
 
 use super::public::{encrypt, PubKeyInner};
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::{bail, ensure_eq, unsupported_err, Result},
-    packet::{
-        PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
-        SubpacketData,
-    },
+    packet::{PacketHeader, PacketTrait},
     ser::Serialize,
     types::{
         EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Password,
@@ -84,20 +80,6 @@ impl SecretKey {
         self.secret_params.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, K, P>(
-        &self,
-        rng: R,
-        key: &K,
-        pub_key: &P,
-        key_pw: &Password,
-    ) -> Result<Signature>
-    where
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
-    {
-        sign(rng, key, key_pw, SignatureType::KeyBinding, pub_key)
-    }
-
     pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
@@ -161,20 +143,6 @@ impl SecretSubkey {
     /// Checks if we should expect a SHA1 checksum in the encrypted part.
     pub fn has_sha1_checksum(&self) -> bool {
         self.secret_params.has_sha1_checksum()
-    }
-
-    pub fn sign<R: CryptoRng + Rng, K, P>(
-        &self,
-        rng: R,
-        key: &K,
-        pub_key: &P,
-        key_pw: &Password,
-    ) -> Result<Signature>
-    where
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
-    {
-        sign(rng, key, key_pw, SignatureType::SubkeyBinding, pub_key)
     }
 
     pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
@@ -568,34 +536,6 @@ fn create_signature(
     }
 }
 
-fn sign<R: CryptoRng + Rng, K, P>(
-    mut rng: R,
-    key: &K,
-    key_pw: &Password,
-    sig_typ: SignatureType,
-    pub_key: &P,
-) -> Result<Signature>
-where
-    K: SecretKeyTrait,
-    P: PublicKeyTrait + Serialize,
-{
-    use chrono::SubsecRound;
-
-    let mut config = match key.version() {
-        KeyVersion::V4 => SignatureConfig::v4(sig_typ, key.algorithm(), key.hash_alg()),
-        KeyVersion::V6 => SignatureConfig::v6(&mut rng, sig_typ, key.algorithm(), key.hash_alg())?,
-        v => unsupported_err!("unsupported key version: {:?}", v),
-    };
-
-    config.hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
-        chrono::Utc::now().trunc_subsecs(0),
-    ))?];
-    if key.version() <= KeyVersion::V4 {
-        config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
-    }
-
-    config.sign_key(key, key_pw, pub_key)
-}
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {

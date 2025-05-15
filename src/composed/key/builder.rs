@@ -17,9 +17,15 @@ use crate::{
         hash::HashAlgorithm, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm,
         x25519, x448,
     },
-    errors::Result,
-    packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
-    types::{self, CompressionAlgorithm, PlainSecretParams, PublicParams, S2kParams},
+    errors::{unsupported_err, Result},
+    packet::{
+        self, KeyFlags, PubKeyInner, SignatureConfig, SignatureType, Subpacket, SubpacketData,
+        UserAttribute, UserId,
+    },
+    types::{
+        self, CompressionAlgorithm, KeyVersion, PlainSecretParams, PublicParams, S2kParams,
+        SecretKeyTrait,
+    },
 };
 
 #[derive(Debug, PartialEq, Eq, Builder)]
@@ -259,8 +265,8 @@ impl SecretKeyParams {
             self.expiration.map(|v| v.as_secs() as u16),
             public_params,
         )?;
-        let pub_key = crate::packet::PublicKey::from_inner(pub_key)?;
-        let mut primary_key = packet::SecretKey::new(pub_key, secret_params)?;
+        let primary_pub_key = crate::packet::PublicKey::from_inner(pub_key)?;
+        let mut primary_key = packet::SecretKey::new(primary_pub_key.clone(), secret_params)?;
         if let Some(passphrase) = passphrase {
             primary_key.set_password_with_s2k(&passphrase.into(), s2k)?;
         }
@@ -326,11 +332,61 @@ impl SecretKeyParams {
                     let pub_key = packet::PublicSubkey::from_inner(pub_key)?;
                     let mut sub = packet::SecretSubkey::new(pub_key, secret_params)?;
 
+                    // Produce embedded back signature for signing-capable subkeys
+                    let embedded = if subkey.can_sign {
+                        // Signing capable subkeys need to show that they are willing to be
+                        // associated with the primary
+
+                        use crate::types::KeyDetails;
+
+                        let mut config = match sub.version() {
+                            KeyVersion::V4 => SignatureConfig::v4(
+                                SignatureType::KeyBinding,
+                                sub.algorithm(),
+                                sub.hash_alg(),
+                            ),
+                            KeyVersion::V6 => SignatureConfig::v6(
+                                &mut rng,
+                                SignatureType::KeyBinding,
+                                sub.algorithm(),
+                                sub.hash_alg(),
+                            )?,
+                            v => unsupported_err!("unsupported key version: {:?}", v),
+                        };
+
+                        config.hashed_subpackets = vec![
+                            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                                chrono::Utc::now().trunc_subsecs(0),
+                            ))?,
+                            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                                sub.fingerprint(),
+                            ))?,
+                        ];
+
+                        // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
+                        // the signature.
+                        if sub.version() <= KeyVersion::V4 {
+                            config.unhashed_subpackets =
+                                vec![Subpacket::regular(SubpacketData::Issuer(sub.key_id()))?];
+                        }
+
+                        let backsig = config.sign_backwards_key_binding(
+                            &sub,
+                            &sub.public_key(),
+                            &"".into(),
+                            &primary_pub_key,
+                        )?;
+
+                        Some(SubpacketData::EmbeddedSignature(Box::new(backsig)))
+                    } else {
+                        None
+                    };
+
                     if let Some(passphrase) = passphrase {
                         sub.set_password_with_s2k(&passphrase.as_str().into(), s2k)?;
                     }
 
-                    Ok(SecretSubkey::new(sub, keyflags))
+                    Ok(SecretSubkey::new(sub, keyflags, embedded))
                 })
                 .collect::<Result<Vec<_>>>()?,
         ))
@@ -1326,6 +1382,80 @@ mod tests {
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
         signed_key2.verify().expect("invalid public key");
+    }
+
+    #[test]
+    fn signing_capable_subkey() {
+        let _ = pretty_env_logger::try_init();
+
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        let key_params = SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V6)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V6)
+                    .key_type(KeyType::Ed25519)
+                    .can_sign(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let secret_key = key_params
+            .generate(&mut rng)
+            .expect("failed to generate secret key");
+
+        let signed_secret_key = secret_key
+            .sign(&mut rng, &"".into())
+            .expect("failed to sign key");
+
+        // The signing capable subkey should have an embedded signature
+        let subkey = signed_secret_key
+            .secret_subkeys
+            .first()
+            .expect("signing subkey");
+        let embedded = subkey
+            .signatures
+            .first()
+            .expect("binding signature")
+            .embedded_signature();
+        assert!(embedded.is_some());
+
+        embedded
+            .unwrap()
+            .verify_backwards_key_binding(
+                &subkey.key.public_key(),
+                &signed_secret_key.primary_key.public_key(),
+            )
+            .expect("verify ok");
+
+        let public_key = signed_secret_key.public_key();
+
+        let signed_public_key = public_key
+            .sign(
+                &mut rng,
+                &*signed_secret_key,
+                &*signed_secret_key.public_key(),
+                &"".into(),
+            )
+            .expect("failed to sign public key");
+
+        signed_public_key.verify().expect("invalid public key");
+
+        // The signing capable subkey should have an embedded signature
+        assert!(signed_public_key
+            .public_subkeys
+            .first()
+            .expect("signing subkey")
+            .signatures
+            .first()
+            .expect("binding signature")
+            .embedded_signature()
+            .is_some());
     }
 
     #[test]
