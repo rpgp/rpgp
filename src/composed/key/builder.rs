@@ -17,9 +17,15 @@ use crate::{
         hash::HashAlgorithm, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm,
         x25519, x448,
     },
-    errors::Result,
-    packet::{self, KeyFlags, PubKeyInner, SubpacketData, UserAttribute, UserId},
-    types::{self, CompressionAlgorithm, PlainSecretParams, PublicParams, S2kParams},
+    errors::{unsupported_err, Result},
+    packet::{
+        self, KeyFlags, PubKeyInner, SignatureConfig, SignatureType, Subpacket, SubpacketData,
+        UserAttribute, UserId,
+    },
+    types::{
+        self, CompressionAlgorithm, KeyVersion, PlainSecretParams, PublicParams, S2kParams,
+        SecretKeyTrait,
+    },
 };
 
 #[derive(Debug, PartialEq, Eq, Builder)]
@@ -330,7 +336,46 @@ impl SecretKeyParams {
                     let embedded = if subkey.can_sign {
                         // Signing capable subkeys need to show that they are willing to be
                         // associated with the primary
-                        let backsig = primary_pub_key.sign(&mut rng, &sub, &"".into())?;
+
+                        use crate::types::KeyDetails;
+
+                        let mut config = match sub.version() {
+                            KeyVersion::V4 => SignatureConfig::v4(
+                                SignatureType::KeyBinding,
+                                sub.algorithm(),
+                                sub.hash_alg(),
+                            ),
+                            KeyVersion::V6 => SignatureConfig::v6(
+                                &mut rng,
+                                SignatureType::KeyBinding,
+                                sub.algorithm(),
+                                sub.hash_alg(),
+                            )?,
+                            v => unsupported_err!("unsupported key version: {:?}", v),
+                        };
+
+                        config.hashed_subpackets = vec![
+                            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                                chrono::Utc::now().trunc_subsecs(0),
+                            ))?,
+                            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                                sub.fingerprint(),
+                            ))?,
+                        ];
+
+                        // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
+                        // the signature.
+                        if sub.version() <= KeyVersion::V4 {
+                            config.unhashed_subpackets =
+                                vec![Subpacket::regular(SubpacketData::Issuer(sub.key_id()))?];
+                        }
+
+                        let backsig = config.sign_backwards_key_binding(
+                            &sub,
+                            &sub.public_key(),
+                            &"".into(),
+                            &primary_pub_key,
+                        )?;
 
                         Some(SubpacketData::EmbeddedSignature(Box::new(backsig)))
                     } else {
