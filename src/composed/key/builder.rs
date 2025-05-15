@@ -1414,15 +1414,24 @@ mod tests {
             .expect("failed to sign key");
 
         // The signing capable subkey should have an embedded signature
-        assert!(signed_secret_key
+        let subkey = signed_secret_key
             .secret_subkeys
             .first()
-            .expect("signing subkey")
+            .expect("signing subkey");
+        let embedded = subkey
             .signatures
             .first()
             .expect("binding signature")
-            .embedded_signature()
-            .is_some());
+            .embedded_signature();
+        assert!(embedded.is_some());
+
+        embedded
+            .unwrap()
+            .verify_backwards_key_binding(
+                &subkey.key.public_key(),
+                &signed_secret_key.primary_key.public_key(),
+            )
+            .expect("verify ok");
 
         let public_key = signed_secret_key.public_key();
 
