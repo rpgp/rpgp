@@ -326,11 +326,16 @@ impl SecretKeyParams {
                     let pub_key = packet::PublicSubkey::from_inner(pub_key)?;
                     let mut sub = packet::SecretSubkey::new(pub_key, secret_params)?;
 
+                    let embedded = match subkey.can_sign {
+                        true => unimplemented!("FIXME"),
+                        false => None,
+                    };
+
                     if let Some(passphrase) = passphrase {
                         sub.set_password_with_s2k(&passphrase.as_str().into(), s2k)?;
                     }
 
-                    Ok(SecretSubkey::new(sub, keyflags))
+                    Ok(SecretSubkey::new(sub, keyflags, embedded))
                 })
                 .collect::<Result<Vec<_>>>()?,
         ))
