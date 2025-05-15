@@ -84,20 +84,6 @@ impl SecretKey {
         self.secret_params.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, K, P>(
-        &self,
-        rng: R,
-        key: &K,
-        pub_key: &P,
-        key_pw: &Password,
-    ) -> Result<Signature>
-    where
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
-    {
-        sign(rng, key, key_pw, SignatureType::KeyBinding, pub_key)
-    }
-
     pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
@@ -161,20 +147,6 @@ impl SecretSubkey {
     /// Checks if we should expect a SHA1 checksum in the encrypted part.
     pub fn has_sha1_checksum(&self) -> bool {
         self.secret_params.has_sha1_checksum()
-    }
-
-    pub fn sign<R: CryptoRng + Rng, K, P>(
-        &self,
-        rng: R,
-        key: &K,
-        pub_key: &P,
-        key_pw: &Password,
-    ) -> Result<Signature>
-    where
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
-    {
-        sign(rng, key, key_pw, SignatureType::SubkeyBinding, pub_key)
     }
 
     pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
