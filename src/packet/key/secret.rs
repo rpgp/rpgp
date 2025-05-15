@@ -1,16 +1,12 @@
 use std::io::BufRead;
 
 use log::debug;
-use rand::{CryptoRng, Rng};
 
 use super::public::{encrypt, PubKeyInner};
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::{bail, ensure_eq, unsupported_err, Result},
-    packet::{
-        PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
-        SubpacketData,
-    },
+    packet::{PacketHeader, PacketTrait},
     ser::Serialize,
     types::{
         EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Password,
@@ -540,34 +536,6 @@ fn create_signature(
     }
 }
 
-fn sign<R: CryptoRng + Rng, K, P>(
-    mut rng: R,
-    key: &K,
-    key_pw: &Password,
-    sig_typ: SignatureType,
-    pub_key: &P,
-) -> Result<Signature>
-where
-    K: SecretKeyTrait,
-    P: PublicKeyTrait + Serialize,
-{
-    use chrono::SubsecRound;
-
-    let mut config = match key.version() {
-        KeyVersion::V4 => SignatureConfig::v4(sig_typ, key.algorithm(), key.hash_alg()),
-        KeyVersion::V6 => SignatureConfig::v6(&mut rng, sig_typ, key.algorithm(), key.hash_alg())?,
-        v => unsupported_err!("unsupported key version: {:?}", v),
-    };
-
-    config.hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
-        chrono::Utc::now().trunc_subsecs(0),
-    ))?];
-    if key.version() <= KeyVersion::V4 {
-        config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
-    }
-
-    config.sign_key(key, key_pw, pub_key)
-}
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
