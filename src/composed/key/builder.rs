@@ -1334,6 +1334,71 @@ mod tests {
     }
 
     #[test]
+    fn signing_capable_subkey() {
+        let _ = pretty_env_logger::try_init();
+
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        let key_params = SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V6)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V6)
+                    .key_type(KeyType::Ed25519)
+                    .can_sign(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let secret_key = key_params
+            .generate(&mut rng)
+            .expect("failed to generate secret key");
+
+        let signed_secret_key = secret_key
+            .sign(&mut rng, &"".into())
+            .expect("failed to sign key");
+
+        // The signing capable subkey should have an embedded signature
+        assert!(signed_secret_key
+            .secret_subkeys
+            .first()
+            .expect("signing subkey")
+            .signatures
+            .first()
+            .expect("binding signature")
+            .embedded_signature()
+            .is_some());
+
+        let public_key = signed_secret_key.public_key();
+
+        let signed_public_key = public_key
+            .sign(
+                &mut rng,
+                &*signed_secret_key,
+                &*signed_secret_key.public_key(),
+                &"".into(),
+            )
+            .expect("failed to sign public key");
+
+        signed_public_key.verify().expect("invalid public key");
+
+        // The signing capable subkey should have an embedded signature
+        assert!(signed_public_key
+            .public_subkeys
+            .first()
+            .expect("signing subkey")
+            .signatures
+            .first()
+            .expect("binding signature")
+            .embedded_signature()
+            .is_some());
+    }
+
+    #[test]
     fn test_cert_metadata_gen_v4_v4() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
