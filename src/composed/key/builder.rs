@@ -18,7 +18,7 @@ use crate::{
         x25519, x448,
     },
     errors::Result,
-    packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
+    packet::{self, KeyFlags, PubKeyInner, SubpacketData, UserAttribute, UserId},
     types::{self, CompressionAlgorithm, PlainSecretParams, PublicParams, S2kParams},
 };
 
@@ -259,8 +259,8 @@ impl SecretKeyParams {
             self.expiration.map(|v| v.as_secs() as u16),
             public_params,
         )?;
-        let pub_key = crate::packet::PublicKey::from_inner(pub_key)?;
-        let mut primary_key = packet::SecretKey::new(pub_key, secret_params)?;
+        let primary_pub_key = crate::packet::PublicKey::from_inner(pub_key)?;
+        let mut primary_key = packet::SecretKey::new(primary_pub_key.clone(), secret_params)?;
         if let Some(passphrase) = passphrase {
             primary_key.set_password_with_s2k(&passphrase.into(), s2k)?;
         }
@@ -326,9 +326,15 @@ impl SecretKeyParams {
                     let pub_key = packet::PublicSubkey::from_inner(pub_key)?;
                     let mut sub = packet::SecretSubkey::new(pub_key, secret_params)?;
 
-                    let embedded = match subkey.can_sign {
-                        true => unimplemented!("FIXME"),
-                        false => None,
+                    // Produce embedded back signature for signing-capable subkeys
+                    let embedded = if subkey.can_sign {
+                        // Signing capable subkeys need to show that they are willing to be
+                        // associated with the primary
+                        let backsig = primary_pub_key.sign(&mut rng, &sub, &"".into())?;
+
+                        Some(SubpacketData::EmbeddedSignature(Box::new(backsig)))
+                    } else {
+                        None
                     };
 
                     if let Some(passphrase) = passphrase {
