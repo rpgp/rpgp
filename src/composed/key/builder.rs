@@ -1371,7 +1371,7 @@ mod tests {
 
         embedded
             .unwrap()
-            .verify_backwards_key_binding(
+            .verify_primary_key_binding(
                 &subkey.key.public_key(),
                 &signed_secret_key.primary_key.public_key(),
             )

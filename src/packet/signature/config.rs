@@ -295,13 +295,17 @@ impl SignatureConfig {
         Signature::from_config(self, signed_hash_value, signature)
     }
 
-    /// Sign a key binding.
-    pub fn sign_key_binding<K, P, L>(
+    /// Sign a subkey binding that associates a subkey with a primary key.
+    ///
+    /// The primary key is expected as `signer`, the subkey as `signee`.
+    ///
+    /// Produces a "Subkey Binding Signature (type ID 0x18)"
+    pub fn sign_subkey_binding<K, P, L>(
         self,
-        signing_key: &K,
-        signing_pub_key: &P,
-        key_pw: &Password,
-        key: &L,
+        signer: &K,
+        signer_pub: &P,
+        signer_pw: &Password,
+        signee: &L,
     ) -> Result<Signature>
     where
         K: SecretKeyTrait,
@@ -309,16 +313,15 @@ impl SignatureConfig {
         L: PublicKeyTrait + Serialize,
     {
         ensure!(
-            (self.version() == SignatureVersion::V4 && signing_key.version() == KeyVersion::V4)
-                || (self.version() == SignatureVersion::V6
-                    && signing_key.version() == KeyVersion::V6),
+            (self.version() == SignatureVersion::V4 && signer.version() == KeyVersion::V4)
+                || (self.version() == SignatureVersion::V6 && signer.version() == KeyVersion::V6),
             "signature version {:?} not allowed for signer key version {:?}",
             self.version(),
-            signing_key.version()
+            signer.version()
         );
         debug!(
-            "signing key binding: {:#?} - {:#?} - {:#?}",
-            self, signing_key, key
+            "signing subkey binding: {:#?} - {:#?} - {:#?}",
+            self, signer, signee
         );
 
         let mut hasher = self.hash_alg.new_hasher()?;
@@ -327,18 +330,64 @@ impl SignatureConfig {
             hasher.update(salt.as_ref())
         }
 
-        // Signing Key
-        serialize_for_hashing(signing_pub_key, &mut hasher)?;
-
-        // Key being bound
-        serialize_for_hashing(key, &mut hasher)?;
+        serialize_for_hashing(signer_pub, &mut hasher)?; // primary
+        serialize_for_hashing(signee, &mut hasher)?; // subkey
 
         let len = self.hash_signature_data(&mut hasher)?;
         hasher.update(&self.trailer(len)?);
 
         let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signing_key.create_signature(key_pw, self.hash_alg, hash)?;
+        let signature = signer.create_signature(signer_pw, self.hash_alg, hash)?;
+
+        Signature::from_config(self, signed_hash_value, signature)
+    }
+
+    /// Sign a primary key binding, or "back signature"
+    /// (with this signature, the subkey signals that it wants to be associated with the primary).
+    ///
+    /// The subkey is expected as `signer`, the primary key as `signee`.
+    ///
+    /// Produces a "Primary Key Binding Signature (type ID 0x19)"
+    pub fn sign_primary_key_binding<K, P, L>(
+        self,
+        signer: &K,
+        signer_pub: &P,
+        signer_pw: &Password,
+        signee: &L,
+    ) -> Result<Signature>
+    where
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
+        L: PublicKeyTrait + Serialize,
+    {
+        ensure!(
+            (self.version() == SignatureVersion::V4 && signer.version() == KeyVersion::V4)
+                || (self.version() == SignatureVersion::V6 && signer.version() == KeyVersion::V6),
+            "signature version {:?} not allowed for signer key version {:?}",
+            self.version(),
+            signer.version()
+        );
+        debug!(
+            "signing primary key binding: {:#?} - {:#?} - {:#?}",
+            self, signer, signee
+        );
+
+        let mut hasher = self.hash_alg.new_hasher()?;
+
+        if let SignatureVersionSpecific::V6 { salt } = &self.version_specific {
+            hasher.update(salt.as_ref())
+        }
+
+        serialize_for_hashing(signee, &mut hasher)?; // primary
+        serialize_for_hashing(signer_pub, &mut hasher)?; // subkey
+
+        let len = self.hash_signature_data(&mut hasher)?;
+        hasher.update(&self.trailer(len)?);
+
+        let hash = &hasher.finalize()[..];
+        let signed_hash_value = [hash[0], hash[1]];
+        let signature = signer.create_signature(signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }

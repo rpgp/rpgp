@@ -296,7 +296,7 @@ impl SignedSecretSubKey {
         ensure!(!self.signatures.is_empty(), "missing subkey bindings");
 
         for sig in &self.signatures {
-            sig.verify_key_binding(key, self.key.public_key())?;
+            sig.verify_subkey_binding(key, self.key.public_key())?;
         }
 
         Ok(())

@@ -1,5 +1,6 @@
 use std::io::BufRead;
 
+use chrono::SubsecRound;
 use generic_array::GenericArray;
 use log::debug;
 use rand::{CryptoRng, Rng};
@@ -179,6 +180,49 @@ impl SecretSubkey {
         P: PublicKeyTrait + Serialize,
     {
         sign(rng, key, key_pw, SignatureType::SubkeyBinding, pub_key)
+    }
+
+    /// Produce a Primary Key Binding Signature over the primary `pub_key`.
+    ///
+    /// This signature is used in an embedded signature subpacket to show that the subkey is
+    /// willing to be associated with the primary.
+    pub fn sign_primary_key_binding<R: CryptoRng + Rng, P>(
+        &self,
+        mut rng: R,
+        pub_key: &P,
+        key_pw: &Password,
+    ) -> Result<Signature>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
+        let mut config = match self.version() {
+            KeyVersion::V4 => {
+                SignatureConfig::v4(SignatureType::KeyBinding, self.algorithm(), self.hash_alg())
+            }
+            KeyVersion::V6 => SignatureConfig::v6(
+                &mut rng,
+                SignatureType::KeyBinding,
+                self.algorithm(),
+                self.hash_alg(),
+            )?,
+            v => unsupported_err!("unsupported key version: {:?}", v),
+        };
+
+        config.hashed_subpackets = vec![
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                chrono::Utc::now().trunc_subsecs(0),
+            ))?,
+            Subpacket::regular(SubpacketData::IssuerFingerprint(self.fingerprint()))?,
+        ];
+
+        // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
+        // the signature.
+        if self.version() <= KeyVersion::V4 {
+            config.unhashed_subpackets =
+                vec![Subpacket::regular(SubpacketData::Issuer(self.key_id()))?];
+        }
+
+        config.sign_primary_key_binding(self, &self.public_key(), key_pw, &pub_key)
     }
 
     pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>

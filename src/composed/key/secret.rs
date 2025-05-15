@@ -75,11 +75,12 @@ impl SecretSubkey {
         SecretSubkey { key, keyflags }
     }
 
+    /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
     pub fn sign<R, K, P>(
         self,
         mut rng: R,
-        sec_key: &K,
-        pub_key: &P,
+        primary_sec_key: &K,
+        primary_pub_key: &P,
         key_pw: &Password,
     ) -> Result<SignedSecretSubKey>
     where
@@ -89,17 +90,17 @@ impl SecretSubkey {
     {
         let key = self.key;
 
-        let mut config = match sec_key.version() {
+        let mut config = match primary_sec_key.version() {
             KeyVersion::V4 => SignatureConfig::v4(
                 SignatureType::SubkeyBinding,
-                sec_key.algorithm(),
-                sec_key.hash_alg(),
+                primary_sec_key.algorithm(),
+                primary_sec_key.hash_alg(),
             ),
             KeyVersion::V6 => SignatureConfig::v6(
                 &mut rng,
                 SignatureType::SubkeyBinding,
-                sec_key.algorithm(),
-                sec_key.hash_alg(),
+                primary_sec_key.algorithm(),
+                primary_sec_key.hash_alg(),
             )?,
             v => unsupported_err!("unsupported key version: {:?}", v),
         };
@@ -109,18 +110,25 @@ impl SecretSubkey {
                 chrono::Utc::now().trunc_subsecs(0),
             ))?,
             Subpacket::regular(SubpacketData::KeyFlags(self.keyflags))?,
-            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint()))?,
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                primary_sec_key.fingerprint(),
+            ))?,
         ];
 
         // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
         // the signature.
-        if sec_key.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets =
-                vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
+        if primary_sec_key.version() <= KeyVersion::V4 {
+            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+                primary_sec_key.key_id(),
+            ))?];
         }
 
-        let signatures =
-            vec![config.sign_key_binding(sec_key, pub_key, key_pw, key.public_key())?];
+        let signatures = vec![config.sign_subkey_binding(
+            primary_sec_key,
+            primary_pub_key,
+            key_pw,
+            key.public_key(),
+        )?];
 
         Ok(SignedSecretSubKey { key, signatures })
     }

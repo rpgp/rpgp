@@ -282,14 +282,14 @@ impl SignedPublicSubKey {
 
         // TODO: It's sufficient if the latest binding signature is valid
         for sig in &self.signatures {
-            sig.verify_key_binding(key, &self.key)?;
+            sig.verify_subkey_binding(key, &self.key)?;
 
             // If the subkey is signing capable, check the embedded backward signature
             if sig.key_flags().sign() {
                 let Some(backsig) = sig.embedded_signature() else {
                     bail!("missing embedded signature for signing capable subkey");
                 };
-                backsig.verify_backwards_key_binding(&self.key, key)?;
+                backsig.verify_primary_key_binding(&self.key, key)?;
             }
         }
 
