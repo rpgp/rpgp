@@ -12,11 +12,14 @@ use crate::{
         signed_key::{SignedKeyDetails, SignedPublicSubKey},
         ArmorOptions, PlainSessionKey, SignedPublicKey,
     },
-    crypto::hash::KnownDigest,
+    crypto::{hash::KnownDigest, public_key::PublicKeyAlgorithm},
     errors::{ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
-    types::{EskType, Imprint, Password, PkeskBytes, PublicKeyTrait, Tag},
+    types::{
+        EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Password, PkeskBytes,
+        PublicKeyTrait, Tag,
+    },
 };
 
 /// Represents a secret signed PGP key.
@@ -260,6 +263,21 @@ impl Deref for SignedSecretKey {
 impl Imprint for SignedSecretKey {
     fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
         self.primary_key.imprint::<D>()
+    }
+}
+
+impl KeyDetails for SignedSecretKey {
+    fn version(&self) -> KeyVersion {
+        self.primary_key.public_key().version()
+    }
+    fn fingerprint(&self) -> Fingerprint {
+        self.primary_key.public_key().fingerprint()
+    }
+    fn key_id(&self) -> KeyId {
+        self.primary_key.public_key().key_id()
+    }
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.primary_key.public_key().algorithm()
     }
 }
 
