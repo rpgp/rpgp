@@ -111,7 +111,7 @@ impl Packet {
                 if source.kind() == std::io::ErrorKind::UnexpectedEof =>
             {
                 Err(Error::PacketIncomplete {
-                    source: crate::parsing::Error::UnexpectedEof { source, backtrace },
+                    source: Box::new(crate::parsing::Error::UnexpectedEof { source, backtrace }),
                 })
             }
             Err(err) => {
