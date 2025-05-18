@@ -15,7 +15,7 @@ use crate::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{ensure, Result},
+    errors::{bail, ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{
@@ -279,8 +279,18 @@ impl SignedPublicSubKey {
         P: PublicKeyTrait + Serialize,
     {
         ensure!(!self.signatures.is_empty(), "missing subkey bindings");
+
+        // TODO: It's sufficient if the latest binding signature is valid
         for sig in &self.signatures {
             sig.verify_key_binding(key, &self.key)?;
+
+            // If the subkey is signing capable, check the embedded backward signature
+            if sig.key_flags().sign() {
+                let Some(backsig) = sig.embedded_signature() else {
+                    bail!("missing embedded signature for signing capable subkey");
+                };
+                backsig.verify_backwards_key_binding(&self.key, key)?;
+            }
         }
 
         Ok(())
