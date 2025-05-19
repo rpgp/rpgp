@@ -6,7 +6,7 @@ use crate::{
     composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey},
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
-    packet::{self, KeyFlags, SubpacketData},
+    packet::{self, KeyFlags, Signature},
     ser::Serialize,
     types::{
         EskType, Fingerprint, KeyId, Password, PkeskBytes, PublicKeyTrait, PublicParams,
@@ -30,7 +30,7 @@ pub struct PublicSubkey {
     /// Embedded signature, required for signing-capable subkeys.
     ///
     /// See <https://www.rfc-editor.org/rfc/rfc9580.html#sigtype-primary-binding>
-    pub embedded: Option<SubpacketData>,
+    pub embedded: Option<Signature>,
 }
 
 impl PublicKey {
@@ -92,11 +92,7 @@ impl Deref for PublicKey {
 }
 
 impl PublicSubkey {
-    pub fn new(
-        key: packet::PublicSubkey,
-        keyflags: KeyFlags,
-        embedded: Option<SubpacketData>,
-    ) -> Self {
+    pub fn new(key: packet::PublicSubkey, keyflags: KeyFlags, embedded: Option<Signature>) -> Self {
         PublicSubkey {
             key,
             keyflags,

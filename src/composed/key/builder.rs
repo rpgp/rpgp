@@ -18,7 +18,7 @@ use crate::{
         x25519, x448,
     },
     errors::Result,
-    packet::{self, KeyFlags, PubKeyInner, SubpacketData, UserAttribute, UserId},
+    packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
     types::{self, CompressionAlgorithm, PlainSecretParams, PublicParams, S2kParams},
 };
 
@@ -331,7 +331,7 @@ impl SecretKeyParams {
                         let backsig =
                             sub.sign_primary_key_binding(&mut rng, &primary_pub_key, &"".into())?;
 
-                        Some(SubpacketData::EmbeddedSignature(Box::new(backsig)))
+                        Some(backsig)
                     } else {
                         None
                     };

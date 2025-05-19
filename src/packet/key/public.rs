@@ -166,7 +166,7 @@ impl PublicSubkey {
         primary_pub_key: &P,
         key_pw: &Password,
         keyflags: KeyFlags,
-        embedded: Option<SubpacketData>,
+        embedded: Option<Signature>,
     ) -> Result<Signature>
     where
         K: SecretKeyTrait,
@@ -198,11 +198,11 @@ impl PublicSubkey {
         ];
 
         if let Some(embedded) = embedded {
-            ensure!(
-                matches!(embedded, SubpacketData::EmbeddedSignature(_)),
-                format!("Unexpected data {:?} in embedded_sig", embedded)
-            );
-            config.hashed_subpackets.push(Subpacket::regular(embedded)?)
+            config
+                .hashed_subpackets
+                .push(Subpacket::regular(SubpacketData::EmbeddedSignature(
+                    Box::new(embedded),
+                ))?)
         }
 
         // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in

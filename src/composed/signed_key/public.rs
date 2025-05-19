@@ -301,7 +301,7 @@ impl SignedPublicSubKey {
 
         let embedded = sig.config().and_then(|c| {
             c.hashed_subpackets().find_map(|p| match &p.data {
-                SubpacketData::EmbeddedSignature(_) => Some(p.data.clone()),
+                SubpacketData::EmbeddedSignature(backsig) => Some(*backsig.clone()),
                 _ => None,
             })
         });

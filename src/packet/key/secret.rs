@@ -483,7 +483,7 @@ impl SecretSubkey {
         primary_pub_key: &P,
         key_pw: &Password,
         keyflags: KeyFlags,
-        embedded: Option<SubpacketData>,
+        embedded: Option<Signature>,
     ) -> Result<Signature>
     where
         K: SecretKeyTrait,
