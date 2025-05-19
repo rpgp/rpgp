@@ -91,18 +91,6 @@ impl PublicKey {
         })
     }
 
-    pub fn sign<R: CryptoRng + Rng, K>(
-        &self,
-        rng: R,
-        key: &K,
-        key_pw: &Password,
-    ) -> Result<Signature>
-    where
-        K: SecretKeyTrait + Serialize,
-    {
-        self.inner.sign(rng, key, key_pw, SignatureType::KeyBinding)
-    }
-
     pub fn encrypt<R: rand::CryptoRng + rand::Rng>(
         &self,
         rng: R,
