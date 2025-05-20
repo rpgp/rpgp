@@ -80,6 +80,11 @@ where
             _signature: PhantomData,
         })
     }
+
+    /// Return the public key used by the signer
+    pub fn public_key(&self) -> &PublicKey {
+        &self.public_key
+    }
 }
 
 impl<C, T> Keypair for EcdsaSigner<T, C>
