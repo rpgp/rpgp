@@ -32,7 +32,7 @@ pub struct KeyDetails {
 
 impl KeyDetails {
     #[allow(clippy::too_many_arguments)] // FIXME
-    pub(crate) fn new(
+    pub fn new(
         primary_user_id: Option<UserId>,
         user_ids: Vec<UserId>,
         user_attributes: Vec<UserAttribute>,
