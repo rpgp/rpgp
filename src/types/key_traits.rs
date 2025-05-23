@@ -15,15 +15,19 @@ pub trait KeyDetails {
 }
 
 pub trait Imprint {
-    /// An imprint of a public key packet is a generalisation of a fingerprint.
+    /// An imprint is a shorthand identifier for a key.
     ///
-    /// It is calculated in the same way as the fingerprint, except that it MAY use a
-    /// digest algorithm other than the one specified for the fingerprint.
+    /// The imprint is a generalisation of the
+    /// [OpenPGP fingerprint](https://www.rfc-editor.org/rfc/rfc9580.html#key-ids-fingerprints).
+    /// It is calculated over the public key parameters and other non-secret inputs (depending on
+    /// the key version), in the same way as the fingerprint.
+    /// However, the imprint may use a digest algorithm other than the one specified for the
+    /// fingerprint of the given key version.
     ///
     /// See <https://www.ietf.org/archive/id/draft-ietf-openpgp-replacementkey-03.html#name-key-imprints>
     ///
-    /// NOTE: Imprints are intended as a special purpose tool. For most use cases, the OpenPGP
-    /// fingerprint is the most appropriate identifier for a certificate or a component key.
+    /// NOTE: Imprints are a special purpose tool! For most use cases, the OpenPGP fingerprint is
+    /// the most appropriate identifier for a certificate or a component key.
     fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>>;
 }
 
