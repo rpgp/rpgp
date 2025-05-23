@@ -18,8 +18,8 @@ use crate::{
     packet::{PacketHeader, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     ser::Serialize,
     types::{
-        EcdhPublicParams, EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId,
-        KeyVersion, Mpi, Password, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait,
+        EcdhPublicParams, EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails,
+        KeyId, KeyVersion, Mpi, Password, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait,
         SignatureBytes, Tag,
     },
 };
@@ -111,10 +111,6 @@ impl PublicKey {
     ) -> Result<PkeskBytes> {
         encrypt(&self.inner, rng, plain, typ)
     }
-
-    pub fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
-        self.inner.imprint::<D>()
-    }
 }
 
 impl PublicSubkey {
@@ -191,10 +187,6 @@ impl PublicSubkey {
         typ: EskType,
     ) -> Result<PkeskBytes> {
         encrypt(&self.inner, rng, plain, typ)
-    }
-
-    pub fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
-        self.inner.imprint::<D>()
     }
 }
 
@@ -630,18 +622,6 @@ impl crate::packet::PacketTrait for PublicSubkey {
 }
 
 impl PubKeyInner {
-    /// An imprint of a public key packet is a generalisation of a fingerprint.
-    ///
-    /// It is calculated in the same way as the fingerprint, except that it MAY use a
-    /// digest algorithm other than the one specified for the fingerprint.
-    ///
-    /// See https://www.ietf.org/archive/id/draft-ietf-openpgp-replacementkey-03.html#name-key-imprints
-    ///
-    /// Note that imprints are intended as a special purpose tool. For most use cases, the OpenPGP
-    /// fingerprint is the most appropriate identifier for a certificate or a component key.
-    ///
-    /// For [HashAlgorithm::Sha1], rPGP uses [sha1_checked](https://crates.io/crates/sha1-checked)
-    /// with collision detection.
     fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
         let mut hasher = D::new();
 
@@ -940,6 +920,13 @@ impl KeyDetails for PublicKey {
         self.inner.algorithm()
     }
 }
+
+impl Imprint for PublicKey {
+    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+        self.inner.imprint::<D>()
+    }
+}
+
 impl PublicKeyTrait for PublicKey {
     fn verify_signature(
         &self,
@@ -978,6 +965,12 @@ impl KeyDetails for PublicSubkey {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.inner.algorithm()
+    }
+}
+
+impl Imprint for PublicSubkey {
+    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+        self.inner.imprint::<D>()
     }
 }
 

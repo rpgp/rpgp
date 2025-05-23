@@ -24,9 +24,9 @@ use pgp::{
     },
     ser::Serialize,
     types::{
-        CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, PacketHeaderVersion,
-        PacketLength, PlainSecretParams, PublicKeyTrait, PublicParams, S2kParams, SecretParams,
-        SignedUser, StringToKey, Tag,
+        CompressionAlgorithm, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Mpi,
+        PacketHeaderVersion, PacketLength, PlainSecretParams, PublicKeyTrait, PublicParams,
+        S2kParams, SecretParams, SignedUser, StringToKey, Tag,
     },
 };
 use rand::{thread_rng, SeedableRng};

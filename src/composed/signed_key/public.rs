@@ -19,7 +19,7 @@ use crate::{
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{
-        EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes,
+        EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes,
         PublicKeyTrait, PublicParams, SignatureBytes, Tag,
     },
 };
@@ -33,14 +33,6 @@ pub struct SignedPublicKey {
     pub primary_key: packet::PublicKey,
     pub details: SignedKeyDetails,
     pub public_subkeys: Vec<SignedPublicSubKey>,
-}
-
-impl SignedPublicKey {
-    pub fn imprint<D: KnownDigest>(
-        &self,
-    ) -> Result<generic_array::GenericArray<u8, D::OutputSize>> {
-        self.primary_key.imprint::<D>()
-    }
 }
 
 /// Parse transferable public keys from the given packets.
@@ -206,6 +198,12 @@ impl KeyDetails for SignedPublicKey {
     }
 }
 
+impl Imprint for SignedPublicKey {
+    fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>> {
+        self.primary_key.imprint::<D>()
+    }
+}
+
 impl PublicKeyTrait for SignedPublicKey {
     fn verify_signature(
         &self,
@@ -306,10 +304,10 @@ impl SignedPublicSubKey {
     ) -> Result<PkeskBytes> {
         self.key.encrypt(rng, plain, typ)
     }
+}
 
-    pub fn imprint<D: KnownDigest>(
-        &self,
-    ) -> Result<generic_array::GenericArray<u8, D::OutputSize>> {
+impl Imprint for SignedPublicSubKey {
+    fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>> {
         self.key.imprint::<D>()
     }
 }

@@ -1,5 +1,8 @@
 use crate::{
-    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    crypto::{
+        hash::{HashAlgorithm, KnownDigest},
+        public_key::PublicKeyAlgorithm,
+    },
     errors::Result,
     types::{Fingerprint, KeyId, KeyVersion, Password, PublicParams, SignatureBytes},
 };
@@ -9,6 +12,22 @@ pub trait KeyDetails {
     fn fingerprint(&self) -> Fingerprint;
     fn key_id(&self) -> KeyId;
     fn algorithm(&self) -> PublicKeyAlgorithm;
+}
+
+pub trait Imprint {
+    /// An imprint of a public key packet is a generalisation of a fingerprint.
+    ///
+    /// It is calculated in the same way as the fingerprint, except that it MAY use a
+    /// digest algorithm other than the one specified for the fingerprint.
+    ///
+    /// See https://www.ietf.org/archive/id/draft-ietf-openpgp-replacementkey-03.html#name-key-imprints
+    ///
+    /// Note that imprints are intended as a special purpose tool. For most use cases, the OpenPGP
+    /// fingerprint is the most appropriate identifier for a certificate or a component key.
+    ///
+    /// For [HashAlgorithm::Sha1], rPGP uses [sha1_checked](https://crates.io/crates/sha1-checked)
+    /// with collision detection.
+    fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>>;
 }
 
 pub trait PublicKeyTrait: KeyDetails + std::fmt::Debug {
