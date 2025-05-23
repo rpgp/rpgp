@@ -17,7 +17,7 @@ pub trait KeyDetails {
 pub trait Imprint {
     /// An imprint is a shorthand identifier for a key.
     ///
-    /// The imprint is a generalisation of the
+    /// The imprint is a generalization of the
     /// [OpenPGP fingerprint](https://www.rfc-editor.org/rfc/rfc9580.html#key-ids-fingerprints).
     /// It is calculated over the public key parameters and other non-secret inputs (depending on
     /// the key version), in the same way as the fingerprint.
