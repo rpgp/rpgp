@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// This specifies associated user id and attribute components, plus some metadata for producing
-/// a [SignedSecretKey].
+/// a [crate::composed::SignedSecretKey].
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct KeyDetails {
     primary_user_id: Option<UserId>,
@@ -32,7 +32,7 @@ pub struct KeyDetails {
 
 impl KeyDetails {
     #[allow(clippy::too_many_arguments)] // FIXME
-    pub(crate) fn new(
+    pub fn new(
         primary_user_id: Option<UserId>,
         user_ids: Vec<UserId>,
         user_attributes: Vec<UserAttribute>,
