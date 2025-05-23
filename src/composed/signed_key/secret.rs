@@ -14,7 +14,7 @@ use crate::{
     },
     crypto::hash::KnownDigest,
     errors::{ensure, Result},
-    packet::{self, Packet, PacketTrait, SignatureType},
+    packet::{self, Packet, PacketTrait, SignatureType, SubpacketData},
     ser::Serialize,
     types::{EskType, Imprint, Password, PkeskBytes, PublicKeyTrait, Tag},
 };
@@ -318,13 +318,18 @@ impl SignedSecretSubKey {
     }
 
     pub fn public_key(&self) -> PublicSubkey {
-        let keyflags = self
-            .signatures
-            .first()
-            .expect("invalid signed subkey")
-            .key_flags();
+        let sig = self.signatures.first().expect("invalid signed subkey");
 
-        PublicSubkey::new(self.key.public_key().clone(), keyflags)
+        let keyflags = sig.key_flags();
+
+        let embedded = sig.config().and_then(|c| {
+            c.hashed_subpackets().find_map(|p| match &p.data {
+                SubpacketData::EmbeddedSignature(backsig) => Some(*backsig.clone()),
+                _ => None,
+            })
+        });
+
+        PublicSubkey::new(self.key.public_key().clone(), keyflags, embedded)
     }
 
     /// Decrypts session key using this key.
