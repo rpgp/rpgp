@@ -306,6 +306,12 @@ impl SignedPublicSubKey {
     ) -> Result<PkeskBytes> {
         self.key.encrypt(rng, plain, typ)
     }
+
+    pub fn imprint<D: KnownDigest>(
+        &self,
+    ) -> Result<generic_array::GenericArray<u8, D::OutputSize>> {
+        self.key.imprint::<D>()
+    }
 }
 
 impl KeyDetails for SignedPublicSubKey {
