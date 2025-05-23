@@ -8,6 +8,7 @@ use pgp::{
         checksum, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
+    helper::{EcdsaSigner, RsaSigner},
     packet,
     packet::{PubKeyInner, PublicKey, SignatureConfig},
     types::{
@@ -481,4 +482,63 @@ fn card_sign() {
 
         signature.verify(&pubkey, DATA).expect("ok");
     }
+}
+
+#[test]
+fn ecdsa_signer() {
+    use rsa::pkcs8::DecodePrivateKey;
+
+    let inner =
+        p256::ecdsa::SigningKey::read_pkcs8_pem_file("tests/unit-tests/hsm/p256.pem").unwrap();
+
+    let signer = EcdsaSigner::<_, p256::NistP256>::new(inner, Default::default()).unwrap();
+    const DATA: &[u8] = b"Hello World";
+
+    let mut config = SignatureConfig::v4(
+        packet::SignatureType::Binary,
+        signer.algorithm(),
+        HashAlgorithm::Sha256,
+    );
+
+    config.hashed_subpackets = vec![
+        packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
+            DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
+        ))
+        .unwrap(),
+        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.key_id())).unwrap(),
+    ];
+
+    let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();
+
+    signature.verify(&signer, DATA).expect("ok");
+}
+
+#[test]
+fn rsa_signer() {
+    use rsa::pkcs8::DecodePrivateKey;
+    let inner = rsa::pkcs1v15::SigningKey::<sha2::Sha256>::read_pkcs8_pem_file(
+        "tests/unit-tests/hsm/rsa.pem",
+    )
+    .unwrap();
+
+    let signer = RsaSigner::new(inner, Default::default()).unwrap();
+    const DATA: &[u8] = b"Hello World";
+
+    let mut config = SignatureConfig::v4(
+        packet::SignatureType::Binary,
+        signer.algorithm(),
+        HashAlgorithm::Sha256,
+    );
+
+    config.hashed_subpackets = vec![
+        packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
+            DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
+        ))
+        .unwrap(),
+        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.key_id())).unwrap(),
+    ];
+
+    let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();
+
+    signature.verify(&signer, DATA).expect("ok");
 }
