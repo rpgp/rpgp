@@ -1,6 +1,7 @@
 use std::{io, ops::Deref};
 
 use chrono::{DateTime, Utc};
+use generic_array::GenericArray;
 use log::{debug, warn};
 use rand::{CryptoRng, Rng};
 
@@ -11,10 +12,11 @@ use crate::{
         signed_key::{SignedKeyDetails, SignedPublicSubKey},
         ArmorOptions, PlainSessionKey, SignedPublicKey,
     },
+    crypto::hash::KnownDigest,
     errors::{ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
-    types::{EskType, Password, PkeskBytes, PublicKeyTrait, Tag},
+    types::{EskType, Imprint, Password, PkeskBytes, PublicKeyTrait, Tag},
 };
 
 /// Represents a secret signed PGP key.
@@ -255,6 +257,12 @@ impl Deref for SignedSecretKey {
     }
 }
 
+impl Imprint for SignedSecretKey {
+    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+        self.primary_key.imprint::<D>()
+    }
+}
+
 /// Represents a composed secret PGP SubKey.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedSecretSubKey {
@@ -358,6 +366,12 @@ impl Serialize for SignedSecretSubKey {
             sum += sig.write_len_with_header()
         }
         sum
+    }
+}
+
+impl Imprint for SignedSecretSubKey {
+    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+        self.key.imprint::<D>()
     }
 }
 

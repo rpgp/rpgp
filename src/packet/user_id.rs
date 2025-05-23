@@ -20,6 +20,23 @@ use crate::{
 
 /// User ID Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-user-id-packet-type-id-13>
+///
+/// # Examples
+///
+/// The following example lists [`UserId`]s in a certificate ("public key"):
+///
+/// ```
+/// # fn main() -> testresult::TestResult {
+/// use pgp::composed::{Deserializable, SignedPublicKey};
+///
+/// let file = std::fs::File::open("tests/carol.pub.asc")?;
+/// let (spk, _armor_header) = SignedPublicKey::from_reader_single(file)?;
+/// let users = spk.details.users;
+///
+/// assert_eq!(users.len(), 1);
+/// assert_eq!(users[0].id.id(), b"Carol Oldstyle <carol@openpgp.example>");
+/// # Ok(()) }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[display("User ID: \"{:?}\"", id)]
