@@ -11,12 +11,15 @@ use crate::{
         signed_key::SignedKeyDetails,
         ArmorOptions,
     },
-    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    crypto::{
+        hash::{HashAlgorithm, KnownDigest},
+        public_key::PublicKeyAlgorithm,
+    },
     errors::{ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{
-        EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes,
+        EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes,
         PublicKeyTrait, PublicParams, SignatureBytes, Tag,
     },
 };
@@ -195,6 +198,12 @@ impl KeyDetails for SignedPublicKey {
     }
 }
 
+impl Imprint for SignedPublicKey {
+    fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>> {
+        self.primary_key.imprint::<D>()
+    }
+}
+
 impl PublicKeyTrait for SignedPublicKey {
     fn verify_signature(
         &self,
@@ -294,6 +303,12 @@ impl SignedPublicSubKey {
         typ: EskType,
     ) -> Result<PkeskBytes> {
         self.key.encrypt(rng, plain, typ)
+    }
+}
+
+impl Imprint for SignedPublicSubKey {
+    fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>> {
+        self.key.imprint::<D>()
     }
 }
 

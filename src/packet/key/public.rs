@@ -1,19 +1,25 @@
 use std::io::BufRead;
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
+use digest::generic_array::GenericArray;
 use md5::Md5;
 use rand::{CryptoRng, Rng};
 use rsa::traits::PublicKeyParts;
-use sha1_checked::{Digest, Sha1};
+use sha1_checked::Sha1;
+use sha2::Sha256;
 
 use crate::{
-    crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    crypto::{
+        self,
+        hash::{HashAlgorithm, KnownDigest},
+        public_key::PublicKeyAlgorithm,
+    },
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     packet::{PacketHeader, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     ser::Serialize,
     types::{
-        EcdhPublicParams, EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId,
-        KeyVersion, Mpi, Password, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait,
+        EcdhPublicParams, EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails,
+        KeyId, KeyVersion, Mpi, Password, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait,
         SignatureBytes, Tag,
     },
 };
@@ -615,29 +621,24 @@ impl crate::packet::PacketTrait for PublicSubkey {
     }
 }
 
-impl KeyDetails for PubKeyInner {
-    fn version(&self) -> KeyVersion {
-        self.version
-    }
+impl PubKeyInner {
+    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+        let mut hasher = D::new();
 
-    fn fingerprint(&self) -> Fingerprint {
         use crate::ser::Serialize;
 
         match self.version {
             KeyVersion::V2 | KeyVersion::V3 => {
-                let mut h = Md5::new();
-                self.public_params
-                    .to_writer(&mut h)
-                    .expect("write to hasher");
-                let digest = h.finalize();
+                let mut v: Vec<u8> = Vec::new();
+                self.public_params.to_writer(&mut v)?;
 
-                if self.version == KeyVersion::V2 {
-                    Fingerprint::V2(digest.into())
-                } else {
-                    Fingerprint::V3(digest.into())
-                }
+                hasher.update(&v);
+
+                Ok(hasher.finalize())
             }
             KeyVersion::V4 => {
+                hasher.update([0x99]);
+
                 // A one-octet version number (4).
                 let mut packet = vec![4, 0, 0, 0, 0];
 
@@ -646,60 +647,83 @@ impl KeyDetails for PubKeyInner {
 
                 // A one-octet number denoting the public-key algorithm of this key.
                 packet.push(self.algorithm.into());
-                self.public_params
-                    .to_writer(&mut packet)
-                    .expect("write to vec");
 
-                let mut h = Sha1::new();
-                h.update([0x99]);
-                h.write_u16::<BigEndian>(packet.len() as u16)
-                    .expect("write to hasher");
-                h.update(&packet);
+                self.public_params.to_writer(&mut packet)?;
 
-                let digest = h.finalize();
+                hasher.update((packet.len() as u16).to_be_bytes());
+                hasher.update(&packet);
 
-                Fingerprint::V4(digest.into())
+                Ok(hasher.finalize())
             }
-            KeyVersion::V5 => unimplemented!("V5 keys"),
+            KeyVersion::V5 => unsupported_err!("Imprint for V5 keys"),
             KeyVersion::V6 => {
-                // Serialize public parameters
-                let mut pp: Vec<u8> = vec![];
-                self.public_params
-                    .to_writer(&mut pp)
-                    .expect("serialize to Vec<u8>");
-
-                // A v6 fingerprint is the 256-bit SHA2-256 hash of:
-                let mut h = sha2::Sha256::new();
-
                 // a.1) 0x9B (1 octet)
-                h.update([0x9B]);
+                hasher.update([0x9B]);
+
+                // length of public parameters
+                let len = self.public_params.write_len() as u32;
 
                 // a.2) four-octet scalar octet count of (b)-(f)
-                let total_len: u32 = 1 + 4 + 1 + 4 + pp.len() as u32;
-                h.write_u32::<BigEndian>(total_len)
-                    .expect("write to hasher");
+                let total_len: u32 = 1 + 4 + 1 + 4 + len;
+                hasher.update(total_len.to_be_bytes());
 
                 // b) version number = 6 (1 octet);
-                h.update([0x06]);
+                hasher.update([0x06]);
 
                 // c) timestamp of key creation (4 octets);
-                h.write_u32::<BigEndian>(self.created_at.timestamp() as u32)
-                    .expect("write to hasher");
+                hasher.update((self.created_at.timestamp() as u32).to_be_bytes());
 
                 // d) algorithm (1 octet);
-                h.update([self.algorithm.into()]);
+                hasher.update([self.algorithm.into()]);
 
                 // e) four-octet scalar octet count for the following key material;
-                h.write_u32::<BigEndian>(pp.len() as u32)
-                    .expect("write to hasher");
+                hasher.update(len.to_be_bytes());
 
                 // f) algorithm-specific fields.
-                h.update(&pp);
+                let mut pp: Vec<u8> = vec![];
+                self.public_params.to_writer(&mut pp)?;
+                hasher.update(&pp);
 
-                let digest = h.finalize();
-
-                Fingerprint::V6(digest.into())
+                Ok(hasher.finalize())
             }
+            KeyVersion::Other(v) => unsupported_err!("Imprint for {} keys", v),
+        }
+    }
+}
+
+impl KeyDetails for PubKeyInner {
+    fn version(&self) -> KeyVersion {
+        self.version
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        match self.version {
+            KeyVersion::V2 | KeyVersion::V3 => {
+                if self.version == KeyVersion::V2 {
+                    Fingerprint::V2(
+                        self.imprint::<Md5>()
+                            .expect("failure is not an option")
+                            .into(),
+                    )
+                } else {
+                    Fingerprint::V3(
+                        self.imprint::<Md5>()
+                            .expect("failure is not an option")
+                            .into(),
+                    )
+                }
+            }
+            KeyVersion::V4 => Fingerprint::V4(
+                self.imprint::<Sha1>()
+                    .expect("failure is not an option")
+                    .into(),
+            ),
+            KeyVersion::V5 => unimplemented!("V5 keys"),
+            KeyVersion::V6 => Fingerprint::V6(
+                self.imprint::<Sha256>()
+                    .expect("failure is not an option")
+                    .into(),
+            ),
             KeyVersion::Other(v) => unimplemented!("Unsupported key version {}", v),
         }
     }
@@ -896,6 +920,13 @@ impl KeyDetails for PublicKey {
         self.inner.algorithm()
     }
 }
+
+impl Imprint for PublicKey {
+    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+        self.inner.imprint::<D>()
+    }
+}
+
 impl PublicKeyTrait for PublicKey {
     fn verify_signature(
         &self,
@@ -934,6 +965,12 @@ impl KeyDetails for PublicSubkey {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.inner.algorithm()
+    }
+}
+
+impl Imprint for PublicSubkey {
+    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+        self.inner.imprint::<D>()
     }
 }
 

@@ -1,11 +1,15 @@
 use std::io::BufRead;
 
+use generic_array::GenericArray;
 use log::debug;
 use rand::{CryptoRng, Rng};
 
 use super::public::{encrypt, PubKeyInner};
 use crate::{
-    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    crypto::{
+        hash::{HashAlgorithm, KnownDigest},
+        public_key::PublicKeyAlgorithm,
+    },
     errors::{bail, ensure_eq, unsupported_err, Result},
     packet::{
         PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
@@ -13,9 +17,9 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Password,
-        PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
-        SignatureBytes, Tag,
+        EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion,
+        Password, PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait,
+        SecretParams, SignatureBytes, Tag,
     },
 };
 
@@ -234,6 +238,12 @@ impl KeyDetails for SecretKey {
     }
 }
 
+impl Imprint for SecretKey {
+    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+        self.details.imprint::<D>()
+    }
+}
+
 impl KeyDetails for SecretSubkey {
     fn version(&self) -> KeyVersion {
         self.details.version()
@@ -247,6 +257,12 @@ impl KeyDetails for SecretSubkey {
     }
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.details.algorithm()
+    }
+}
+
+impl Imprint for SecretSubkey {
+    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+        self.details.imprint::<D>()
     }
 }
 

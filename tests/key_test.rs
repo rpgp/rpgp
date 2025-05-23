@@ -24,9 +24,9 @@ use pgp::{
     },
     ser::Serialize,
     types::{
-        CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, PacketHeaderVersion,
-        PacketLength, PlainSecretParams, PublicKeyTrait, PublicParams, S2kParams, SecretParams,
-        SignedUser, StringToKey, Tag,
+        CompressionAlgorithm, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Mpi,
+        PacketHeaderVersion, PacketLength, PlainSecretParams, PublicKeyTrait, PublicParams,
+        S2kParams, SecretParams, SignedUser, StringToKey, Tag,
     },
 };
 use rand::{thread_rng, SeedableRng};
@@ -1406,4 +1406,33 @@ fn key_pub_regression1() {
         pgp::composed::SignedPublicKey::from_armor_single(original.as_bytes()).expect("parsing");
 
     dbg!(&key);
+}
+
+#[test]
+fn key_imprint_sha256() {
+    let (pkey, _) = SignedPublicKey::from_armor_single(
+        File::open("./tests/autocrypt/alice@autocrypt.example.pub.asc").unwrap(),
+    )
+    .unwrap();
+
+    let sha256 = pkey.imprint::<sha2::Sha256>().unwrap().to_vec();
+
+    let expect =
+        hex::decode("0b95ca2d0df951f9d02f1089fdf1623267ee2b80b7fb84f2a069bad9a7e0b447").unwrap();
+
+    assert_eq!(sha256, expect);
+
+    // Example from
+    // <https://github.com/ProtonMail/gopenpgp/blob/2d743b4967eef9c1de7279ef771c7cfe2703608c/crypto/key_test.go#L334-L347>
+    // to test compatibility with GopenPGP.
+    let (pkey, _) =
+        SignedPublicKey::from_armor_single(File::open("./tests/openpgpjs.pub.asc").unwrap())
+            .unwrap();
+
+    let sha256 = pkey.imprint::<sha2::Sha256>().unwrap().to_vec();
+
+    let expect =
+        hex::decode("d9ac0b857da6d2c8be985b251a9e3db31e7a1d2d832d1f07ebe838a9edce9c24").unwrap();
+
+    assert_eq!(sha256, expect);
 }
