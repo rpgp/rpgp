@@ -291,7 +291,6 @@ impl<'a> Message<'a> {
             } => match edata {
                 Edata::SymEncryptedData { reader } => {
                     let packet_header = reader.packet_header();
-                    assert!(reader.is_done());
                     (
                         reader.into_inner().into_inner(),
                         MessageParts::Encrypted {
@@ -390,7 +389,7 @@ impl MessageParts {
                     let reader = SymEncryptedProtectedDataReader::new_done(config, reader);
                     Edata::SymEncryptedProtectedData { reader }
                 } else {
-                    let reader = SymEncryptedDataReader::new_done(reader);
+                    let reader = SymEncryptedDataReader::new(reader).expect("used before");
                     Edata::SymEncryptedData { reader }
                 };
                 Message::Encrypted {
