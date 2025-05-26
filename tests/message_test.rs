@@ -972,3 +972,19 @@ fn test_mock_pq_cert_leniency_ecdh_opaque() {
         SignedPublicKey::from_armor_file("./tests/mock_pq/ecdh_opaque_small.pub.asc").unwrap();
     dbg!(key);
 }
+
+#[test]
+fn fuzz_msg_reader() {
+    // those are fuzzer-generated "messages" that each contain a nonsensical series of packets
+    // (surely with nonsensical package contents, as well)
+    pretty_env_logger::try_init().ok();
+
+    for file in [
+        // OPS SIG PKESK SED BAD
+        "./tests/fuzz/minimized-from-7585e756306047aba2218ebf70b24c6373e82e2a",
+        // OPS SKESK SED
+        "./tests/fuzz/minimized-from-82b02bbac39a10c7b98d020f78153ffb75c94607",
+    ] {
+        let _ = Message::from_file(file).unwrap().as_data_vec();
+    }
+}

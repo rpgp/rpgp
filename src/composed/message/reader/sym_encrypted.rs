@@ -15,9 +15,6 @@ pub enum SymEncryptedDataReader<R: BufRead> {
     Body {
         decryptor: MaybeDecryptor<PacketBodyReader<R>>,
     },
-    Done {
-        source: PacketBodyReader<R>,
-    },
     Error,
 }
 
@@ -30,18 +27,9 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
         })
     }
 
-    pub(crate) fn new_done(source: PacketBodyReader<R>) -> Self {
-        Self::Done { source }
-    }
-
-    pub fn is_done(&self) -> bool {
-        matches!(self, Self::Done { .. })
-    }
-
     pub fn into_inner(self) -> PacketBodyReader<R> {
         match self {
             Self::Body { decryptor, .. } => decryptor.into_inner(),
-            Self::Done { source, .. } => source,
             Self::Error => panic!("SymEncryptedDataReader errored"),
         }
     }
@@ -49,7 +37,6 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
     pub fn get_mut(&mut self) -> &mut PacketBodyReader<R> {
         match self {
             Self::Body { decryptor, .. } => decryptor.get_mut(),
-            Self::Done { source, .. } => source,
             Self::Error => panic!("SymEncryptedDataReader errored"),
         }
     }
@@ -57,7 +44,6 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
     pub fn packet_header(&self) -> PacketHeader {
         match self {
             Self::Body { decryptor, .. } => decryptor.get_ref().packet_header(),
-            Self::Done { source, .. } => source.packet_header(),
             Self::Error => panic!("SymEncryptedDataReader errored"),
         }
     }
@@ -86,10 +72,6 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
             } => {
                 bail!("already decrypting")
             }
-            Self::Done { source } => {
-                *self = Self::Done { source };
-                bail!("cannot decrypt after finishing to read")
-            }
             Self::Error => panic!("SymEncryptedDataReader errored"),
         }
     }
@@ -98,16 +80,16 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
 impl<R: BufRead> BufRead for SymEncryptedDataReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         match self {
-            Self::Body { decryptor } => decryptor.fill_buf(),
-            Self::Done { .. } => Ok(&[][..]),
-            Self::Error => Err(io::Error::other("SymEncryptedDataReader errored")),
+            Self::Body { ref mut decryptor } => decryptor.fill_buf(),
+            Self::Error => {
+                panic!("SymEncryptedDataReader errored")
+            }
         }
     }
 
     fn consume(&mut self, amt: usize) {
         match self {
             Self::Body { decryptor } => decryptor.consume(amt),
-            Self::Done { .. } => {}
             Self::Error => panic!("SymEncryptedDataReader errored"),
         }
     }
@@ -117,7 +99,6 @@ impl<R: BufRead> Read for SymEncryptedDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::Body { decryptor } => decryptor.read(buf),
-            Self::Done { .. } => Ok(0),
             Self::Error => Err(io::Error::other("SymEncryptedDataReader errored")),
         }
     }
