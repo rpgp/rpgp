@@ -484,40 +484,19 @@ impl Signature {
         signer.verify_signature(config.hash_alg, hash, signature)
     }
 
-    /// Verifies a key binding (which binds a subkey to the primary key).
+    /// Verifies a subkey binding (which binds a subkey to the primary key).
+    ///
+    /// The primary key is expected as `signer`, the subkey as `signee`.
     ///
     /// "Subkey Binding Signature (type ID 0x18)"
-    pub fn verify_key_binding<P, K>(&self, signing_key: &P, key: &K) -> Result<()>
-    where
-        P: PublicKeyTrait + Serialize,
-        K: PublicKeyTrait + Serialize,
-    {
-        self.verify_key_binding_internal(signing_key, key, false)
-    }
-
-    /// Verifies a primary key binding signature, or "back signature" (which links the primary to a signing subkey).
-    ///
-    /// "Primary Key Binding Signature (type ID 0x19)"
-    pub fn verify_backwards_key_binding<P, K>(&self, signing_key: &P, key: &K) -> Result<()>
-    where
-        P: PublicKeyTrait + Serialize,
-        K: PublicKeyTrait + Serialize,
-    {
-        self.verify_key_binding_internal(signing_key, key, true)
-    }
-
-    /// Verify subkey binding signatures, either regular subkey binding, or a "back signature".
-    ///
-    /// - when backsig is false: verify a "Subkey Binding Signature (type ID 0x18)"
-    /// - when backsig is true: verify a "Primary Key Binding Signature (type ID 0x19)"
-    fn verify_key_binding_internal<P, K>(&self, signer: &P, signee: &K, backsig: bool) -> Result<()>
+    pub fn verify_subkey_binding<P, K>(&self, signer: &P, signee: &K) -> Result<()>
     where
         P: PublicKeyTrait + Serialize,
         K: PublicKeyTrait + Serialize,
     {
         debug!(
-            "verifying key binding: {:#?} - {:#?} - {:#?} (backsig: {})",
-            self, signer, signee, backsig
+            "verifying subkey binding: {:#?} - {:#?} - {:#?}",
+            self, signer, signee,
         );
 
         let InnerSignature::Known {
@@ -537,26 +516,56 @@ impl Signature {
             hasher.update(salt.as_ref())
         }
 
-        // Hash the two keys:
-        // - for a regular binding signature, first the signer (primary), then the signee (subkey)
-        // - for a "backward signature" (Primary Key Binding Signature), the order of hashing is signee (primary), signer (subkey)
+        serialize_for_hashing(signer, &mut hasher)?; // primary
+        serialize_for_hashing(signee, &mut hasher)?; // subkey
 
-        // First key to hash
-        {
-            if !backsig {
-                serialize_for_hashing(signer, &mut hasher)?; // primary
-            } else {
-                serialize_for_hashing(signee, &mut hasher)?; // primary
-            }
+        let len = config.hash_signature_data(&mut hasher)?;
+        hasher.update(&config.trailer(len)?);
+
+        let hash = &hasher.finalize()[..];
+        ensure_eq!(
+            signed_hash_value,
+            &hash[0..2],
+            "subkey binding: invalid signed hash value"
+        );
+
+        signer.verify_signature(config.hash_alg, hash, signature)
+    }
+
+    /// Verifies a primary key binding signature, or "back signature" (which links the primary to a signing subkey).
+    ///
+    /// The subkey is expected as `signer`, the primary key as `signee`.
+    ///
+    /// "Primary Key Binding Signature (type ID 0x19)"
+    pub fn verify_primary_key_binding<P, K>(&self, signer: &P, signee: &K) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+        K: PublicKeyTrait + Serialize,
+    {
+        debug!(
+            "verifying primary key binding: {:#?} - {:#?} - {:#?}",
+            self, signer, signee
+        );
+
+        let InnerSignature::Known {
+            ref config,
+            ref signed_hash_value,
+            ref signature,
+        } = self.inner
+        else {
+            unsupported_err!("signature version {:?}", self.version());
+        };
+
+        Self::check_signature_key_version_alignment(&signer, config)?;
+
+        let mut hasher = config.hash_alg.new_hasher()?;
+
+        if let SignatureVersionSpecific::V6 { salt } = &config.version_specific {
+            hasher.update(salt.as_ref())
         }
-        // Second key to hash
-        {
-            if !backsig {
-                serialize_for_hashing(signee, &mut hasher)?; // subkey
-            } else {
-                serialize_for_hashing(signer, &mut hasher)?; // subkey
-            }
-        }
+
+        serialize_for_hashing(signee, &mut hasher)?; // primary
+        serialize_for_hashing(signer, &mut hasher)?; // subkey
 
         let len = config.hash_signature_data(&mut hasher)?;
         hasher.update(&config.trailer(len)?);

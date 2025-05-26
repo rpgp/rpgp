@@ -1,6 +1,7 @@
 use std::io::BufRead;
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
+use chrono::SubsecRound;
 use digest::generic_array::GenericArray;
 use md5::Md5;
 use rand::{CryptoRng, Rng};
@@ -15,7 +16,9 @@ use crate::{
         public_key::PublicKeyAlgorithm,
     },
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
-    packet::{PacketHeader, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
+    packet::{
+        KeyFlags, PacketHeader, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
+    },
     ser::Serialize,
     types::{
         EcdhPublicParams, EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails,
@@ -91,18 +94,6 @@ impl PublicKey {
         })
     }
 
-    pub fn sign<R: CryptoRng + Rng, K>(
-        &self,
-        rng: R,
-        key: &K,
-        key_pw: &Password,
-    ) -> Result<Signature>
-    where
-        K: SecretKeyTrait + Serialize,
-    {
-        self.inner.sign(rng, key, key_pw, SignatureType::KeyBinding)
-    }
-
     pub fn encrypt<R: rand::CryptoRng + rand::Rng>(
         &self,
         rng: R,
@@ -167,17 +158,62 @@ impl PublicSubkey {
         })
     }
 
-    pub fn sign<R: CryptoRng + Rng, K>(
+    /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
+    pub fn sign<R: CryptoRng + Rng, K, P>(
         &self,
-        rng: R,
-        key: &K,
+        mut rng: R,
+        primary_sec_key: &K,
+        primary_pub_key: &P,
         key_pw: &Password,
+        keyflags: KeyFlags,
+        embedded: Option<Signature>,
     ) -> Result<Signature>
     where
-        K: SecretKeyTrait + Serialize,
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
     {
-        self.inner
-            .sign(rng, key, key_pw, SignatureType::SubkeyBinding)
+        let mut config = match primary_sec_key.version() {
+            KeyVersion::V4 => SignatureConfig::v4(
+                SignatureType::SubkeyBinding,
+                primary_sec_key.algorithm(),
+                primary_sec_key.hash_alg(),
+            ),
+            KeyVersion::V6 => SignatureConfig::v6(
+                &mut rng,
+                SignatureType::SubkeyBinding,
+                primary_sec_key.algorithm(),
+                primary_sec_key.hash_alg(),
+            )?,
+            v => unsupported_err!("unsupported key version: {:?}", v),
+        };
+
+        config.hashed_subpackets = vec![
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                chrono::Utc::now().trunc_subsecs(0),
+            ))?,
+            Subpacket::regular(SubpacketData::KeyFlags(keyflags))?,
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                primary_sec_key.fingerprint(),
+            ))?,
+        ];
+
+        if let Some(embedded) = embedded {
+            config
+                .hashed_subpackets
+                .push(Subpacket::regular(SubpacketData::EmbeddedSignature(
+                    Box::new(embedded),
+                ))?)
+        }
+
+        // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
+        // the signature.
+        if primary_sec_key.version() <= KeyVersion::V4 {
+            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+                primary_sec_key.key_id(),
+            ))?];
+        }
+
+        config.sign_subkey_binding(primary_sec_key, primary_pub_key, key_pw, &self)
     }
 
     pub fn encrypt<R: rand::CryptoRng + rand::Rng>(
@@ -364,6 +400,9 @@ impl PubKeyInner {
         sum
     }
 
+    /// Signs a direct key signature or a revocation.
+    #[allow(dead_code)]
+    // TODO: Expose in public API
     fn sign<R: CryptoRng + Rng, K>(
         &self,
         mut rng: R,

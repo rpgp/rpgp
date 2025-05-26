@@ -1,13 +1,12 @@
 use aes_gcm::aead::rand_core::CryptoRng;
-use chrono::SubsecRound;
 use rand::Rng;
 
 use crate::{
     composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey},
-    errors::{unsupported_err, Result},
-    packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData},
+    errors::Result,
+    packet::{self, KeyFlags, Signature},
     ser::Serialize,
-    types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
+    types::{Password, PublicKeyTrait, SecretKeyTrait},
 };
 
 /// User facing interface to work with the components of a "Transferable Secret Key (TSK)"
@@ -25,6 +24,11 @@ pub struct SecretKey {
 pub struct SecretSubkey {
     key: packet::SecretSubkey,
     keyflags: KeyFlags,
+
+    /// Embedded primary key binding signature, required for signing-capable subkeys.
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#sigtype-primary-binding>
+    pub embedded: Option<Signature>,
 }
 
 impl SecretKey {
@@ -71,15 +75,20 @@ impl SecretKey {
 }
 
 impl SecretSubkey {
-    pub fn new(key: packet::SecretSubkey, keyflags: KeyFlags) -> Self {
-        SecretSubkey { key, keyflags }
+    pub fn new(key: packet::SecretSubkey, keyflags: KeyFlags, embedded: Option<Signature>) -> Self {
+        SecretSubkey {
+            key,
+            keyflags,
+            embedded,
+        }
     }
 
+    /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
     pub fn sign<R, K, P>(
         self,
         mut rng: R,
-        sec_key: &K,
-        pub_key: &P,
+        primary_sec_key: &K,
+        primary_pub_key: &P,
         key_pw: &Password,
     ) -> Result<SignedSecretSubKey>
     where
@@ -89,38 +98,14 @@ impl SecretSubkey {
     {
         let key = self.key;
 
-        let mut config = match sec_key.version() {
-            KeyVersion::V4 => SignatureConfig::v4(
-                SignatureType::SubkeyBinding,
-                sec_key.algorithm(),
-                sec_key.hash_alg(),
-            ),
-            KeyVersion::V6 => SignatureConfig::v6(
-                &mut rng,
-                SignatureType::SubkeyBinding,
-                sec_key.algorithm(),
-                sec_key.hash_alg(),
-            )?,
-            v => unsupported_err!("unsupported key version: {:?}", v),
-        };
-
-        config.hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))?,
-            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags))?,
-            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint()))?,
-        ];
-
-        // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
-        // the signature.
-        if sec_key.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets =
-                vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
-        }
-
-        let signatures =
-            vec![config.sign_key_binding(sec_key, pub_key, key_pw, key.public_key())?];
+        let signatures = vec![key.sign(
+            &mut rng,
+            primary_sec_key,
+            primary_pub_key,
+            key_pw,
+            self.keyflags,
+            self.embedded,
+        )?];
 
         Ok(SignedSecretSubKey { key, signatures })
     }

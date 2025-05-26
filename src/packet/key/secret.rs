@@ -1,5 +1,6 @@
 use std::io::BufRead;
 
+use chrono::SubsecRound;
 use generic_array::GenericArray;
 use log::debug;
 use rand::{CryptoRng, Rng};
@@ -12,7 +13,7 @@ use crate::{
     },
     errors::{bail, ensure_eq, unsupported_err, Result},
     packet::{
-        PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
+        KeyFlags, PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
         SubpacketData,
     },
     ser::Serialize,
@@ -88,20 +89,6 @@ impl SecretKey {
         self.secret_params.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, K, P>(
-        &self,
-        rng: R,
-        key: &K,
-        pub_key: &P,
-        key_pw: &Password,
-    ) -> Result<Signature>
-    where
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
-    {
-        sign(rng, key, key_pw, SignatureType::KeyBinding, pub_key)
-    }
-
     pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
@@ -167,18 +154,47 @@ impl SecretSubkey {
         self.secret_params.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, K, P>(
+    /// Produce a Primary Key Binding Signature over the primary `pub_key`.
+    ///
+    /// This signature is used in an embedded signature subpacket to show that the subkey is
+    /// willing to be associated with the primary.
+    pub fn sign_primary_key_binding<R: CryptoRng + Rng, P>(
         &self,
-        rng: R,
-        key: &K,
+        mut rng: R,
         pub_key: &P,
         key_pw: &Password,
     ) -> Result<Signature>
     where
-        K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
-        sign(rng, key, key_pw, SignatureType::SubkeyBinding, pub_key)
+        let mut config = match self.version() {
+            KeyVersion::V4 => {
+                SignatureConfig::v4(SignatureType::KeyBinding, self.algorithm(), self.hash_alg())
+            }
+            KeyVersion::V6 => SignatureConfig::v6(
+                &mut rng,
+                SignatureType::KeyBinding,
+                self.algorithm(),
+                self.hash_alg(),
+            )?,
+            v => unsupported_err!("unsupported key version: {:?}", v),
+        };
+
+        config.hashed_subpackets = vec![
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                chrono::Utc::now().trunc_subsecs(0),
+            ))?,
+            Subpacket::regular(SubpacketData::IssuerFingerprint(self.fingerprint()))?,
+        ];
+
+        // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
+        // the signature.
+        if self.version() <= KeyVersion::V4 {
+            config.unhashed_subpackets =
+                vec![Subpacket::regular(SubpacketData::Issuer(self.key_id()))?];
+        }
+
+        config.sign_primary_key_binding(self, &self.public_key(), key_pw, &pub_key)
     }
 
     pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
@@ -459,6 +475,30 @@ impl SecretSubkey {
         Ok(())
     }
 
+    /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
+    pub fn sign<R: CryptoRng + Rng, K, P>(
+        &self,
+        mut rng: R,
+        primary_sec_key: &K,
+        primary_pub_key: &P,
+        key_pw: &Password,
+        keyflags: KeyFlags,
+        embedded: Option<Signature>,
+    ) -> Result<Signature>
+    where
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
+    {
+        self.details.sign(
+            &mut rng,
+            primary_sec_key,
+            primary_pub_key,
+            key_pw,
+            keyflags,
+            embedded,
+        )
+    }
+
     pub fn encrypt<R: rand::Rng + rand::CryptoRng>(
         &self,
         rng: R,
@@ -584,6 +624,9 @@ fn create_signature(
     }
 }
 
+/// Signs a direct key signature or a revocation.
+#[allow(dead_code)]
+// TODO: Expose in public API
 fn sign<R: CryptoRng + Rng, K, P>(
     mut rng: R,
     key: &K,

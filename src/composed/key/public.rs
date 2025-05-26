@@ -1,17 +1,16 @@
 use std::ops::Deref;
 
-use chrono::SubsecRound;
 use rand::{CryptoRng, Rng};
 
 use crate::{
     composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey},
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::{unsupported_err, Result},
-    packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData},
+    errors::Result,
+    packet::{self, KeyFlags, Signature},
     ser::Serialize,
     types::{
-        EskType, Fingerprint, KeyId, KeyVersion, Password, PkeskBytes, PublicKeyTrait,
-        PublicParams, SecretKeyTrait, SignatureBytes,
+        EskType, Fingerprint, KeyId, Password, PkeskBytes, PublicKeyTrait, PublicParams,
+        SecretKeyTrait, SignatureBytes,
     },
 };
 
@@ -27,6 +26,11 @@ pub struct PublicKey {
 pub struct PublicSubkey {
     pub key: packet::PublicSubkey,
     pub keyflags: KeyFlags,
+
+    /// Embedded primary key binding signature, required for signing-capable subkeys.
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#sigtype-primary-binding>
+    pub embedded: Option<Signature>,
 }
 
 impl PublicKey {
@@ -88,15 +92,20 @@ impl Deref for PublicKey {
 }
 
 impl PublicSubkey {
-    pub fn new(key: packet::PublicSubkey, keyflags: KeyFlags) -> Self {
-        PublicSubkey { key, keyflags }
+    pub fn new(key: packet::PublicSubkey, keyflags: KeyFlags, embedded: Option<Signature>) -> Self {
+        PublicSubkey {
+            key,
+            keyflags,
+            embedded,
+        }
     }
 
+    /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
     pub fn sign<R, K, P>(
         self,
         mut rng: R,
-        sec_key: &K,
-        pub_key: &P,
+        primary_sec_key: &K,
+        primary_pub_key: &P,
         key_pw: &Password,
     ) -> Result<SignedPublicSubKey>
     where
@@ -105,39 +114,15 @@ impl PublicSubkey {
         P: PublicKeyTrait + Serialize,
     {
         let key = self.key;
-        let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))?,
-            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags))?,
-            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint()))?,
-        ];
 
-        let mut config = match sec_key.version() {
-            KeyVersion::V4 => SignatureConfig::v4(
-                SignatureType::SubkeyBinding,
-                sec_key.algorithm(),
-                sec_key.hash_alg(),
-            ),
-            KeyVersion::V6 => SignatureConfig::v6(
-                &mut rng,
-                SignatureType::SubkeyBinding,
-                sec_key.algorithm(),
-                sec_key.hash_alg(),
-            )?,
-            v => unsupported_err!("unsupported key version: {:?}", v),
-        };
-
-        config.hashed_subpackets = hashed_subpackets;
-
-        // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
-        // the signature.
-        if sec_key.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets =
-                vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
-        }
-
-        let signatures = vec![config.sign_key_binding(sec_key, pub_key, key_pw, &key)?];
+        let signatures = vec![key.sign(
+            &mut rng,
+            primary_sec_key,
+            primary_pub_key,
+            key_pw,
+            self.keyflags,
+            self.embedded,
+        )?];
 
         Ok(SignedPublicSubKey { key, signatures })
     }
