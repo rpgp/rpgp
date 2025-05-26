@@ -15,8 +15,8 @@ use crate::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{ensure, Result},
-    packet::{self, Packet, PacketTrait, SignatureType},
+    errors::{bail, ensure, Result},
+    packet::{self, Packet, PacketTrait, SignatureType, SubpacketData},
     ser::Serialize,
     types::{
         EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes,
@@ -279,21 +279,36 @@ impl SignedPublicSubKey {
         P: PublicKeyTrait + Serialize,
     {
         ensure!(!self.signatures.is_empty(), "missing subkey bindings");
+
+        // TODO: It's sufficient if the latest binding signature is valid
         for sig in &self.signatures {
-            sig.verify_key_binding(key, &self.key)?;
+            sig.verify_subkey_binding(key, &self.key)?;
+
+            // If the subkey is signing capable, check the embedded backward signature
+            if sig.key_flags().sign() {
+                let Some(backsig) = sig.embedded_signature() else {
+                    bail!("missing embedded signature for signing capable subkey");
+                };
+                backsig.verify_primary_key_binding(&self.key, key)?;
+            }
         }
 
         Ok(())
     }
 
     pub fn as_unsigned(&self) -> PublicSubkey {
-        let keyflags = self
-            .signatures
-            .first()
-            .expect("missing signatures")
-            .key_flags();
+        let sig = self.signatures.first().expect("missing signatures");
 
-        PublicSubkey::new(self.key.clone(), keyflags)
+        let embedded = sig.config().and_then(|c| {
+            c.hashed_subpackets().find_map(|p| match &p.data {
+                SubpacketData::EmbeddedSignature(backsig) => Some(*backsig.clone()),
+                _ => None,
+            })
+        });
+
+        let keyflags = sig.key_flags();
+
+        PublicSubkey::new(self.key.clone(), keyflags, embedded)
     }
 
     pub fn encrypt<R: Rng + CryptoRng>(

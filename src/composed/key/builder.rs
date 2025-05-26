@@ -259,8 +259,8 @@ impl SecretKeyParams {
             self.expiration.map(|v| v.as_secs() as u16),
             public_params,
         )?;
-        let pub_key = crate::packet::PublicKey::from_inner(pub_key)?;
-        let mut primary_key = packet::SecretKey::new(pub_key, secret_params)?;
+        let primary_pub_key = crate::packet::PublicKey::from_inner(pub_key)?;
+        let mut primary_key = packet::SecretKey::new(primary_pub_key.clone(), secret_params)?;
         if let Some(passphrase) = passphrase {
             primary_key.set_password_with_s2k(&passphrase.into(), s2k)?;
         }
@@ -326,11 +326,21 @@ impl SecretKeyParams {
                     let pub_key = packet::PublicSubkey::from_inner(pub_key)?;
                     let mut sub = packet::SecretSubkey::new(pub_key, secret_params)?;
 
+                    // Produce embedded back signature for signing-capable subkeys
+                    let embedded = if subkey.can_sign {
+                        let backsig =
+                            sub.sign_primary_key_binding(&mut rng, &primary_pub_key, &"".into())?;
+
+                        Some(backsig)
+                    } else {
+                        None
+                    };
+
                     if let Some(passphrase) = passphrase {
                         sub.set_password_with_s2k(&passphrase.as_str().into(), s2k)?;
                     }
 
-                    Ok(SecretSubkey::new(sub, keyflags))
+                    Ok(SecretSubkey::new(sub, keyflags, embedded))
                 })
                 .collect::<Result<Vec<_>>>()?,
         ))
@@ -1326,6 +1336,80 @@ mod tests {
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
         signed_key2.verify().expect("invalid public key");
+    }
+
+    #[test]
+    fn signing_capable_subkey() {
+        let _ = pretty_env_logger::try_init();
+
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        let key_params = SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V6)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V6)
+                    .key_type(KeyType::Ed25519)
+                    .can_sign(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let secret_key = key_params
+            .generate(&mut rng)
+            .expect("failed to generate secret key");
+
+        let signed_secret_key = secret_key
+            .sign(&mut rng, &"".into())
+            .expect("failed to sign key");
+
+        // The signing capable subkey should have an embedded signature
+        let subkey = signed_secret_key
+            .secret_subkeys
+            .first()
+            .expect("signing subkey");
+        let embedded = subkey
+            .signatures
+            .first()
+            .expect("binding signature")
+            .embedded_signature();
+        assert!(embedded.is_some());
+
+        embedded
+            .unwrap()
+            .verify_primary_key_binding(
+                &subkey.key.public_key(),
+                &signed_secret_key.primary_key.public_key(),
+            )
+            .expect("verify ok");
+
+        let public_key = signed_secret_key.public_key();
+
+        let signed_public_key = public_key
+            .sign(
+                &mut rng,
+                &*signed_secret_key,
+                &*signed_secret_key.public_key(),
+                &"".into(),
+            )
+            .expect("failed to sign public key");
+
+        // The signing capable subkey should have an embedded signature
+        assert!(signed_public_key
+            .public_subkeys
+            .first()
+            .expect("signing subkey")
+            .signatures
+            .first()
+            .expect("binding signature")
+            .embedded_signature()
+            .is_some());
+
+        signed_public_key.verify().expect("invalid public key");
     }
 
     #[test]
