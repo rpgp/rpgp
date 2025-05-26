@@ -483,13 +483,20 @@ impl SecretSubkey {
         primary_pub_key: &P,
         key_pw: &Password,
         keyflags: KeyFlags,
+        embedded: Option<Signature>,
     ) -> Result<Signature>
     where
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
-        self.details
-            .sign(&mut rng, primary_sec_key, primary_pub_key, key_pw, keyflags)
+        self.details.sign(
+            &mut rng,
+            primary_sec_key,
+            primary_pub_key,
+            key_pw,
+            keyflags,
+            embedded,
+        )
     }
 
     pub fn encrypt<R: rand::Rng + rand::CryptoRng>(

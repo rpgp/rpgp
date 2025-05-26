@@ -16,7 +16,7 @@ use crate::{
         public_key::PublicKeyAlgorithm,
     },
     errors::{bail, ensure, Result},
-    packet::{self, Packet, PacketTrait, SignatureType},
+    packet::{self, Packet, PacketTrait, SignatureType, SubpacketData},
     ser::Serialize,
     types::{
         EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes,
@@ -297,13 +297,18 @@ impl SignedPublicSubKey {
     }
 
     pub fn as_unsigned(&self) -> PublicSubkey {
-        let keyflags = self
-            .signatures
-            .first()
-            .expect("missing signatures")
-            .key_flags();
+        let sig = self.signatures.first().expect("missing signatures");
 
-        PublicSubkey::new(self.key.clone(), keyflags)
+        let embedded = sig.config().and_then(|c| {
+            c.hashed_subpackets().find_map(|p| match &p.data {
+                SubpacketData::EmbeddedSignature(backsig) => Some(*backsig.clone()),
+                _ => None,
+            })
+        });
+
+        let keyflags = sig.key_flags();
+
+        PublicSubkey::new(self.key.clone(), keyflags, embedded)
     }
 
     pub fn encrypt<R: Rng + CryptoRng>(

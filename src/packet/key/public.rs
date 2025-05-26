@@ -166,6 +166,7 @@ impl PublicSubkey {
         primary_pub_key: &P,
         key_pw: &Password,
         keyflags: KeyFlags,
+        embedded: Option<Signature>,
     ) -> Result<Signature>
     where
         K: SecretKeyTrait,
@@ -195,6 +196,14 @@ impl PublicSubkey {
                 primary_sec_key.fingerprint(),
             ))?,
         ];
+
+        if let Some(embedded) = embedded {
+            config
+                .hashed_subpackets
+                .push(Subpacket::regular(SubpacketData::EmbeddedSignature(
+                    Box::new(embedded),
+                ))?)
+        }
 
         // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
         // the signature.

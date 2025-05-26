@@ -4,7 +4,7 @@ use rand::Rng;
 use crate::{
     composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey},
     errors::Result,
-    packet::{self, KeyFlags},
+    packet::{self, KeyFlags, Signature},
     ser::Serialize,
     types::{Password, PublicKeyTrait, SecretKeyTrait},
 };
@@ -24,6 +24,11 @@ pub struct SecretKey {
 pub struct SecretSubkey {
     key: packet::SecretSubkey,
     keyflags: KeyFlags,
+
+    /// Embedded primary key binding signature, required for signing-capable subkeys.
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#sigtype-primary-binding>
+    pub embedded: Option<Signature>,
 }
 
 impl SecretKey {
@@ -70,8 +75,12 @@ impl SecretKey {
 }
 
 impl SecretSubkey {
-    pub fn new(key: packet::SecretSubkey, keyflags: KeyFlags) -> Self {
-        SecretSubkey { key, keyflags }
+    pub fn new(key: packet::SecretSubkey, keyflags: KeyFlags, embedded: Option<Signature>) -> Self {
+        SecretSubkey {
+            key,
+            keyflags,
+            embedded,
+        }
     }
 
     /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
@@ -95,6 +104,7 @@ impl SecretSubkey {
             primary_pub_key,
             key_pw,
             self.keyflags,
+            self.embedded,
         )?];
 
         Ok(SignedSecretSubKey { key, signatures })
