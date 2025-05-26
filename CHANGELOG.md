@@ -2,6 +2,41 @@
 
 All notable changes to rpgp will be documented in this file.
 
+## [0.16.0-alpha.2](https://github.com/rpgp/rpgp/compare/v0.16.0-alpha.1..0.16.0-alpha.2) - 2025-05-26
+
+### ⛰️  Features
+
+- Implement PQC draft 08  - ([a843ebf](https://github.com/rpgp/rpgp/commit/a843ebf8063479ffbb6deec56ac768f8f30ea284))
+- Add support for V6 keygen ([#539](https://github.com/rpgp/rpgp/issues/539)) - ([33097df](https://github.com/rpgp/rpgp/commit/33097dfd1d1113c14359c5c680398a85e403c3ad))
+- Implement PublicKeyAlgorithm::is_pqc ([#552](https://github.com/rpgp/rpgp/issues/552)) - ([6e6fa24](https://github.com/rpgp/rpgp/commit/6e6fa24c13ff1868d22fc9b13e0cb1e6f49e0f50))
+- Imprint function  - ([c17d370](https://github.com/rpgp/rpgp/commit/c17d370b434ea5eb7ae5b602d6602f64051010b3))
+- Implement primary key binding signing; cleanup fn names - ([976a03c](https://github.com/rpgp/rpgp/commit/976a03ce45fd8a25e26368b93f1c63100037583f))
+- Update pqc tests and links to draft-ietf-openpgp-pqc-09  - ([7dfdf40](https://github.com/rpgp/rpgp/commit/7dfdf40ce2c75ede2f17da8c37f45cb74a285518))
+
+### 🐛 Bug Fixes
+
+- *(message)* Remove done state in sym_encrypted reader - ([9c78e99](https://github.com/rpgp/rpgp/commit/9c78e99b6223722e29e9ca39e8610072d81e8df9))
+- Make KeyDetails::new public again ([#557](https://github.com/rpgp/rpgp/issues/557)) - ([cff8ea2](https://github.com/rpgp/rpgp/commit/cff8ea28b8901dfcaf9da1ccc9c42818440e6f7b))
+- Check primary key binding signature for signing capable subkeys - ([cd4ca99](https://github.com/rpgp/rpgp/commit/cd4ca99dbef0b7ef177a357db42d04d01edc84ed))
+- Produce and handle embedded primary key binding (backsig) - ([af4fb28](https://github.com/rpgp/rpgp/commit/af4fb28c01fd72d35a072e279583e5aa285f39d8))
+
+### 🚜 Refactor
+
+- Move subkey binding creation to packet - ([4834bde](https://github.com/rpgp/rpgp/commit/4834bde2018126e6f702e3e241f910e53dd3e53c))
+
+### 📚 Documentation
+
+- Add a bit of text ([#532](https://github.com/rpgp/rpgp/issues/532)) - ([e83f4e9](https://github.com/rpgp/rpgp/commit/e83f4e9817dafbf3d45816287e073631dd7e5c45))
+- Add doctest example for listing User IDs in a key ([#553](https://github.com/rpgp/rpgp/issues/553)) - ([21c735b](https://github.com/rpgp/rpgp/commit/21c735b535a67e5f7958cc607d38364bdfc1a7e7))
+
+### 🧪 Testing
+
+- Generate key with signing capable subkey, check embedded signature - ([e4cc899](https://github.com/rpgp/rpgp/commit/e4cc899c609da63caecf2afe187444a3210ebd20))
+
+### Cleanup
+
+- Simplify SignatureConfig creation ([#559](https://github.com/rpgp/rpgp/issues/559)) - ([9c1c3c0](https://github.com/rpgp/rpgp/commit/9c1c3c084574f776e423438f1c3809cea152c53e))
+
 ## [0.16.0-alpha.1](https://github.com/rpgp/rpgp/compare/v0.16.0-alpha.0..0.16.0-alpha.1) - 2025-04-10
 
 ### ⛰️  Features
