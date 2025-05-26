@@ -5,7 +5,7 @@ use chrono::{SubsecRound, Utc};
 use rand::{CryptoRng, Rng};
 
 use crate::{
-    errors::{unsupported_err, Result},
+    errors::Result,
     packet::{
         PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
         SubpacketData,
@@ -106,20 +106,7 @@ impl UserId {
             Utc::now().trunc_subsecs(0),
         ))?];
 
-        let mut config = match signer.version() {
-            KeyVersion::V4 => SignatureConfig::v4(
-                SignatureType::CertGeneric,
-                signer.algorithm(),
-                signer.hash_alg(),
-            ),
-            KeyVersion::V6 => SignatureConfig::v6(
-                &mut rng,
-                SignatureType::CertGeneric,
-                signer.algorithm(),
-                signer.hash_alg(),
-            )?,
-            v => unsupported_err!("unsupported key version: {:?}", v),
-        };
+        let mut config = SignatureConfig::from(&mut rng, signer, SignatureType::CertGeneric)?;
 
         config.hashed_subpackets = hashed_subpackets;
         if signer.version() <= KeyVersion::V4 {
