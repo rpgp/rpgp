@@ -133,17 +133,11 @@ fn test_a_1_1_transferable_secret_key() -> TestResult {
     TestCase::TransferableSecretKey {
         source: "./tests/pqc/v6-eddsa-sample-sk.asc",
         primary_key_alg: PublicKeyAlgorithm::Ed25519,
-        primary_key_fp: "2357faea8775f69acb11183f81b765cc30db7daf2768827babe202a16d07d4aa",
-        sub_keys: vec![
-            (
-                "fe0f1b20e62a56caacc4d68f32e5a0a3c1e7a69a7d13541fa1761a3933b5b8cf",
-                PublicKeyAlgorithm::X25519,
-            ),
-            (
-                "23eee71a76bc1eab20017a2ba4af492136ec6e6296ed60128b2223273bcb4d2c",
-                PublicKeyAlgorithm::MlKem768X25519,
-            ),
-        ],
+        primary_key_fp: "c789e17d9dbdca7b3c833a3c063feb0353f80ad911fe27868fb0645df803e947",
+        sub_keys: vec![(
+            "dafe0eebb2675ecfcdc20a23fe89ca5d12e83f527dfa354b6dcf662131a48b9d",
+            PublicKeyAlgorithm::MlKem768X25519,
+        )],
     }
     .test()
 }
@@ -153,10 +147,7 @@ fn test_a_1_2_transferable_public_key() -> TestResult {
     TestCase::TransferablePublicKey {
         source: "./tests/pqc/v6-eddsa-sample-pk.asc",
         primary_key_alg: PublicKeyAlgorithm::Ed25519,
-        sub_keys: vec![
-            PublicKeyAlgorithm::X25519,
-            PublicKeyAlgorithm::MlKem768X25519,
-        ],
+        sub_keys: vec![PublicKeyAlgorithm::MlKem768X25519],
     }
     .test()
 }
@@ -179,17 +170,11 @@ fn test_a_2_1_transferable_secret_key() -> TestResult {
     TestCase::TransferableSecretKey {
         source: "./tests/pqc/v4-eddsa-sample-sk.asc",
         primary_key_alg: PublicKeyAlgorithm::Ed25519,
-        primary_key_fp: "bee82527bae0f931a3195628a3687fdca62e4844",
-        sub_keys: vec![
-            (
-                "3e6a6bd51614ff3810ad2256ada71a07c0afbd7d",
-                PublicKeyAlgorithm::X25519,
-            ),
-            (
-                "3c5e54c7de276f3e308e7da8c5bcde48f991e7c8",
-                PublicKeyAlgorithm::MlKem768X25519,
-            ),
-        ],
+        primary_key_fp: "342e5db2de345215cb2c944f7102ffed3b9cf12d",
+        sub_keys: vec![(
+            "e51dbfea51936988b5428fffa4f95f985ed61a51",
+            PublicKeyAlgorithm::MlKem768X25519,
+        )],
     }
     .test()
 }
@@ -199,10 +184,7 @@ fn test_a_2_2_transferable_public_key() -> TestResult {
     TestCase::TransferablePublicKey {
         source: "./tests/pqc/v4-eddsa-sample-pk.asc",
         primary_key_alg: PublicKeyAlgorithm::Ed25519,
-        sub_keys: vec![
-            PublicKeyAlgorithm::X25519,
-            PublicKeyAlgorithm::MlKem768X25519,
-        ],
+        sub_keys: vec![PublicKeyAlgorithm::MlKem768X25519],
     }
     .test()
 }
@@ -212,7 +194,18 @@ fn test_a_2_3_signed_encrypted() -> TestResult {
     TestCase::SignedEncryptedMessage {
         sec_key: "./tests/pqc/v4-eddsa-sample-sk.asc",
         pub_key: "./tests/pqc/v4-eddsa-sample-pk.asc",
-        msg: "./tests/pqc/v4-eddsa-sample-message.asc",
+        msg: "./tests/pqc/v4-eddsa-sample-message-v1.asc",
+        hash: HashAlgorithm::Sha256,
+    }
+    .test()
+}
+
+#[test]
+fn test_a_2_4_signed_encrypted() -> TestResult {
+    TestCase::SignedEncryptedMessage {
+        sec_key: "./tests/pqc/v4-eddsa-sample-sk.asc",
+        pub_key: "./tests/pqc/v4-eddsa-sample-pk.asc",
+        msg: "./tests/pqc/v4-eddsa-sample-message-v2.asc",
         hash: HashAlgorithm::Sha256,
     }
     .test()
@@ -295,9 +288,9 @@ fn test_a_3_1_transferable_secret_key() -> TestResult {
     TestCase::TransferableSecretKey {
         source: "./tests/pqc/v6-mldsa-65-sample-sk.asc",
         primary_key_alg: PublicKeyAlgorithm::MlDsa65Ed25519,
-        primary_key_fp: "42120bfb467bf42c8a3eecb7fd38a8ba426ae95d916f9e77c3fd3f3955e1627d",
+        primary_key_fp: "a3e2e14b6a493ff930fb27321f125e9a6880338be9fb7da3ae065ea65793242f",
         sub_keys: vec![(
-            "8333c14b27fd556d29b18141811531452dd88c23a1c09e92561521014c1cc460",
+            "7dae8fbce23022607167af72a002e774e0ca379a2d7ae072384e1e8fde3265e4",
             PublicKeyAlgorithm::MlKem768X25519,
         )],
     }
@@ -351,9 +344,9 @@ fn test_a_4_1_transferable_secret_key() -> TestResult {
     TestCase::TransferableSecretKey {
         source: "./tests/pqc/v6-mldsa-87-sample-sk.asc",
         primary_key_alg: PublicKeyAlgorithm::MlDsa87Ed448,
-        primary_key_fp: "4141f9deb6ee8c3f8484c3e0d0f41796da5c6b8e6994145e3a335f557cf544c3",
+        primary_key_fp: "0d7a8be1410cd68eed4845ab487b4b4cfaecd8ebad1a1166a84230499200ee20",
         sub_keys: vec![(
-            "8cc1fdaed98c2f3b0601eab83fe96e06a44d234bbe61d9b04c1e81c4f66d2080",
+            "65090e147a8116ab7f62ab4ec7aae59d9e6532feb2af230c73cdc869fbc60c8f",
             PublicKeyAlgorithm::MlKem1024X448,
         )],
     }
@@ -407,9 +400,9 @@ fn test_a_5_1_transferable_secret_key() -> TestResult {
     TestCase::TransferableSecretKey {
         source: "./tests/pqc/v6-slhdsa-128s-sample-sk.asc",
         primary_key_alg: PublicKeyAlgorithm::SlhDsaShake128s,
-        primary_key_fp: "e761d4ec762a5f9c35f72b0c8a030c184b903c35459e74b25341b245819ab3fe",
+        primary_key_fp: "eed4d13fc36c78e48276a93233339c4dd230fd5f6f5c5b82c63d5c0b5e361d92",
         sub_keys: vec![(
-            "1090ff914d4fb0a40eb3354aeec8575609f0f72e6ad881f54e94932cd78227f6",
+            "3e8745a4bb488779e0f32480fa23f8d0bfd8c2f49d7f74e957e1c2ffc2ef4bfc",
             PublicKeyAlgorithm::MlKem768X25519,
         )],
     }
@@ -466,9 +459,9 @@ fn test_a_6_1_transferable_secret_key() -> TestResult {
     TestCase::TransferableSecretKey {
         source: "./tests/pqc/v6-slhdsa-128f-sample-sk.asc",
         primary_key_alg: PublicKeyAlgorithm::SlhDsaShake128f,
-        primary_key_fp: "7625d0725493f2a0c38080e3a3928016d73ec056e4cf54b1f93a1da7794e67ad",
+        primary_key_fp: "d54e0307021169f7b88beb2b76e3aad0e114be1a8f982d74dba9ca51d03537f4",
         sub_keys: vec![(
-            "cea501a4831757a33b9fa03973b81656cf2ecac6f705daf1647e1f7190366ca6",
+            "d8875664256c382dd7f3a5ce05021088922811f5d0b1a1f8c7769944a51b7002",
             PublicKeyAlgorithm::MlKem768X25519,
         )],
     }
@@ -513,9 +506,9 @@ fn test_a_7_1_transferable_secret_key() -> TestResult {
     TestCase::TransferableSecretKey {
         source: "./tests/pqc/v6-slhdsa-256s-sample-sk.asc",
         primary_key_alg: PublicKeyAlgorithm::SlhDsaShake256s,
-        primary_key_fp: "eb55807530d02e475e5a6f403fec5ff9c60b078395fab4c9a862ec8c82a12a95",
+        primary_key_fp: "72fff84863aeba67f0d1d7691173247dd427533b9d7ee76011c6f77f2ce9fa7a",
         sub_keys: vec![(
-            "6e8bbbed8d24472510941bf18639f7f799f86e8d8f3a8f49694e5687885388c1",
+            "570a5bbab93169876a8240da35a1ada7ba8a640aabe3ab467c797214844df15f",
             PublicKeyAlgorithm::MlKem1024X448,
         )],
     }
