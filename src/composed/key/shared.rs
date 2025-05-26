@@ -121,7 +121,7 @@ impl KeyDetails {
         let mut users = vec![];
 
         if let Some(primary_user_id) = self.primary_user_id {
-            let mut config = SignatureConfig::from(&mut rng, key, SignatureType::CertGeneric)?;
+            let mut config = SignatureConfig::from_key(&mut rng, key, SignatureType::CertGeneric)?;
             config.hashed_subpackets = match key.version() {
                 KeyVersion::V6 => basic_subpackets()?,
                 _ => subpackets_with_metadata()?,
@@ -153,7 +153,7 @@ impl KeyDetails {
                 .into_iter()
                 .map(|id| {
                     let mut config =
-                        SignatureConfig::from(&mut rng, key, SignatureType::CertGeneric)?;
+                        SignatureConfig::from_key(&mut rng, key, SignatureType::CertGeneric)?;
 
                     config.hashed_subpackets = match key.version() {
                         KeyVersion::V6 => basic_subpackets()?,

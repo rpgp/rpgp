@@ -73,7 +73,7 @@ where {
             ))?,
         ];
 
-        let mut config = SignatureConfig::from(rng, key, SignatureType::Text)?;
+        let mut config = SignatureConfig::from_key(rng, key, SignatureType::Text)?;
         config.hashed_subpackets = hashed_subpackets;
 
         // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in

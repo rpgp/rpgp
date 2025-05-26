@@ -167,7 +167,7 @@ impl SecretSubkey {
     where
         P: PublicKeyTrait + Serialize,
     {
-        let mut config = SignatureConfig::from(rng, self, SignatureType::KeyBinding)?;
+        let mut config = SignatureConfig::from_key(rng, self, SignatureType::KeyBinding)?;
 
         config.hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
@@ -629,7 +629,7 @@ where
 {
     use chrono::SubsecRound;
 
-    let mut config = SignatureConfig::from(&mut rng, key, sig_typ)?;
+    let mut config = SignatureConfig::from_key(&mut rng, key, sig_typ)?;
     config.hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
         chrono::Utc::now().trunc_subsecs(0),
     ))?];

@@ -252,7 +252,7 @@ impl UserAttribute {
             Utc::now().trunc_subsecs(0),
         ))?];
 
-        let mut config = SignatureConfig::from(&mut rng, signer, SignatureType::CertGeneric)?;
+        let mut config = SignatureConfig::from_key(&mut rng, signer, SignatureType::CertGeneric)?;
 
         config.hashed_subpackets = hashed_subpackets;
         if signer.version() <= KeyVersion::V4 {

@@ -172,7 +172,8 @@ impl PublicSubkey {
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
-        let mut config = SignatureConfig::from(rng, primary_sec_key, SignatureType::SubkeyBinding)?;
+        let mut config =
+            SignatureConfig::from_key(rng, primary_sec_key, SignatureType::SubkeyBinding)?;
 
         config.hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
@@ -402,7 +403,7 @@ impl PubKeyInner {
     {
         use chrono::SubsecRound;
 
-        let mut config = SignatureConfig::from(&mut rng, key, sig_type)?;
+        let mut config = SignatureConfig::from_key(&mut rng, key, sig_type)?;
         config.hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
             chrono::Utc::now().trunc_subsecs(0),
         ))?];

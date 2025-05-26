@@ -62,7 +62,7 @@ impl From<&SignatureVersionSpecific> for SignatureVersion {
 }
 
 impl SignatureConfig {
-    pub fn from<R: CryptoRng + Rng, K: SecretKeyTrait>(
+    pub fn from_key<R: CryptoRng + Rng, K: SecretKeyTrait>(
         mut rng: R,
         key: &K,
         typ: SignatureType,
