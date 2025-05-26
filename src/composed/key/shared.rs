@@ -6,7 +6,7 @@ use smallvec::SmallVec;
 use crate::{
     composed::SignedKeyDetails,
     crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
-    errors::{unsupported_err, Result},
+    errors::Result,
     packet::{
         Features, KeyFlags, PacketTrait, SignatureConfig, SignatureType, Subpacket, SubpacketData,
         UserAttribute, UserId,
@@ -121,19 +121,7 @@ impl KeyDetails {
         let mut users = vec![];
 
         if let Some(primary_user_id) = self.primary_user_id {
-            let mut config = match key.version() {
-                KeyVersion::V4 => {
-                    SignatureConfig::v4(SignatureType::CertGeneric, key.algorithm(), key.hash_alg())
-                }
-                KeyVersion::V6 => SignatureConfig::v6(
-                    &mut rng,
-                    SignatureType::CertGeneric,
-                    key.algorithm(),
-                    key.hash_alg(),
-                )?,
-                v => unsupported_err!("unsupported key version: {:?}", v),
-            };
-
+            let mut config = SignatureConfig::from_key(&mut rng, key, SignatureType::CertGeneric)?;
             config.hashed_subpackets = match key.version() {
                 KeyVersion::V6 => basic_subpackets()?,
                 _ => subpackets_with_metadata()?,
@@ -164,20 +152,8 @@ impl KeyDetails {
             self.non_primary_user_ids
                 .into_iter()
                 .map(|id| {
-                    let mut config = match key.version() {
-                        KeyVersion::V4 => SignatureConfig::v4(
-                            SignatureType::CertGeneric,
-                            key.algorithm(),
-                            key.hash_alg(),
-                        ),
-                        KeyVersion::V6 => SignatureConfig::v6(
-                            &mut rng,
-                            SignatureType::CertGeneric,
-                            key.algorithm(),
-                            key.hash_alg(),
-                        )?,
-                        v => unsupported_err!("unsupported key version: {:?}", v),
-                    };
+                    let mut config =
+                        SignatureConfig::from_key(&mut rng, key, SignatureType::CertGeneric)?;
 
                     config.hashed_subpackets = match key.version() {
                         KeyVersion::V6 => basic_subpackets()?,

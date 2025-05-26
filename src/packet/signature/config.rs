@@ -11,7 +11,7 @@ use crate::{
         hash::{HashAlgorithm, WriteHasher},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{bail, ensure, unimplemented_err, Result},
+    errors::{bail, ensure, unimplemented_err, unsupported_err, Result},
     packet::{
         types::serialize_for_hashing, Signature, SignatureType, SignatureVersion, Subpacket,
         SubpacketData, SubpacketType,
@@ -62,6 +62,18 @@ impl From<&SignatureVersionSpecific> for SignatureVersion {
 }
 
 impl SignatureConfig {
+    pub fn from_key<R: CryptoRng + Rng, K: SecretKeyTrait>(
+        mut rng: R,
+        key: &K,
+        typ: SignatureType,
+    ) -> Result<Self> {
+        match key.version() {
+            KeyVersion::V4 => Ok(SignatureConfig::v4(typ, key.algorithm(), key.hash_alg())),
+            KeyVersion::V6 => SignatureConfig::v6(&mut rng, typ, key.algorithm(), key.hash_alg()),
+            v => unsupported_err!("unsupported key version: {:?}", v),
+        }
+    }
+
     /// Constructor for a v2 SignatureConfig (which represents the data of a v2 OpenPGP signature packet)
     ///
     /// OpenPGP v2 Signatures are historical and not used anymore.

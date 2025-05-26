@@ -160,25 +160,14 @@ impl SecretSubkey {
     /// willing to be associated with the primary.
     pub fn sign_primary_key_binding<R: CryptoRng + Rng, P>(
         &self,
-        mut rng: R,
+        rng: R,
         pub_key: &P,
         key_pw: &Password,
     ) -> Result<Signature>
     where
         P: PublicKeyTrait + Serialize,
     {
-        let mut config = match self.version() {
-            KeyVersion::V4 => {
-                SignatureConfig::v4(SignatureType::KeyBinding, self.algorithm(), self.hash_alg())
-            }
-            KeyVersion::V6 => SignatureConfig::v6(
-                &mut rng,
-                SignatureType::KeyBinding,
-                self.algorithm(),
-                self.hash_alg(),
-            )?,
-            v => unsupported_err!("unsupported key version: {:?}", v),
-        };
+        let mut config = SignatureConfig::from_key(rng, self, SignatureType::KeyBinding)?;
 
         config.hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
@@ -640,12 +629,7 @@ where
 {
     use chrono::SubsecRound;
 
-    let mut config = match key.version() {
-        KeyVersion::V4 => SignatureConfig::v4(sig_typ, key.algorithm(), key.hash_alg()),
-        KeyVersion::V6 => SignatureConfig::v6(&mut rng, sig_typ, key.algorithm(), key.hash_alg())?,
-        v => unsupported_err!("unsupported key version: {:?}", v),
-    };
-
+    let mut config = SignatureConfig::from_key(&mut rng, key, sig_typ)?;
     config.hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
         chrono::Utc::now().trunc_subsecs(0),
     ))?];

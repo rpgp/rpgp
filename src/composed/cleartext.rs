@@ -66,8 +66,6 @@ where {
     where
         R: rand::Rng + rand::CryptoRng,
     {
-        let algorithm = key.algorithm();
-        let hash_algorithm = key.hash_alg();
         let hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
             Subpacket::regular(SubpacketData::SignatureCreationTime(
@@ -75,13 +73,7 @@ where {
             ))?,
         ];
 
-        let mut config = match key.version() {
-            KeyVersion::V4 => SignatureConfig::v4(SignatureType::Text, algorithm, hash_algorithm),
-            KeyVersion::V6 => {
-                SignatureConfig::v6(rng, SignatureType::Text, algorithm, hash_algorithm)?
-            }
-            v => bail!("unsupported key version {:?}", v),
-        };
+        let mut config = SignatureConfig::from_key(rng, key, SignatureType::Text)?;
         config.hashed_subpackets = hashed_subpackets;
 
         // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
