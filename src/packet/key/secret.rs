@@ -13,7 +13,7 @@ use crate::{
     },
     errors::{bail, ensure_eq, unsupported_err, Result},
     packet::{
-        PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
+        KeyFlags, PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
         SubpacketData,
     },
     ser::Serialize,
@@ -89,20 +89,6 @@ impl SecretKey {
         self.secret_params.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, K, P>(
-        &self,
-        rng: R,
-        key: &K,
-        pub_key: &P,
-        key_pw: &Password,
-    ) -> Result<Signature>
-    where
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
-    {
-        sign(rng, key, key_pw, SignatureType::KeyBinding, pub_key)
-    }
-
     pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
@@ -166,20 +152,6 @@ impl SecretSubkey {
     /// Checks if we should expect a SHA1 checksum in the encrypted part.
     pub fn has_sha1_checksum(&self) -> bool {
         self.secret_params.has_sha1_checksum()
-    }
-
-    pub fn sign<R: CryptoRng + Rng, K, P>(
-        &self,
-        rng: R,
-        key: &K,
-        pub_key: &P,
-        key_pw: &Password,
-    ) -> Result<Signature>
-    where
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
-    {
-        sign(rng, key, key_pw, SignatureType::SubkeyBinding, pub_key)
     }
 
     /// Produce a Primary Key Binding Signature over the primary `pub_key`.
@@ -503,6 +475,23 @@ impl SecretSubkey {
         Ok(())
     }
 
+    /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
+    pub fn sign<R: CryptoRng + Rng, K, P>(
+        &self,
+        mut rng: R,
+        primary_sec_key: &K,
+        primary_pub_key: &P,
+        key_pw: &Password,
+        keyflags: KeyFlags,
+    ) -> Result<Signature>
+    where
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
+    {
+        self.details
+            .sign(&mut rng, primary_sec_key, primary_pub_key, key_pw, keyflags)
+    }
+
     pub fn encrypt<R: rand::Rng + rand::CryptoRng>(
         &self,
         rng: R,
@@ -628,6 +617,9 @@ fn create_signature(
     }
 }
 
+/// Signs a direct key signature or a revocation.
+#[allow(dead_code)]
+// TODO: Expose in public API
 fn sign<R: CryptoRng + Rng, K, P>(
     mut rng: R,
     key: &K,

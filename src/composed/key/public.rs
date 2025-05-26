@@ -1,17 +1,16 @@
 use std::ops::Deref;
 
-use chrono::SubsecRound;
 use rand::{CryptoRng, Rng};
 
 use crate::{
     composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey},
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::{unsupported_err, Result},
-    packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData},
+    errors::Result,
+    packet::{self, KeyFlags},
     ser::Serialize,
     types::{
-        EskType, Fingerprint, KeyId, KeyVersion, Password, PkeskBytes, PublicKeyTrait,
-        PublicParams, SecretKeyTrait, SignatureBytes,
+        EskType, Fingerprint, KeyId, Password, PkeskBytes, PublicKeyTrait, PublicParams,
+        SecretKeyTrait, SignatureBytes,
     },
 };
 
@@ -106,43 +105,14 @@ impl PublicSubkey {
         P: PublicKeyTrait + Serialize,
     {
         let key = self.key;
-        let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))?,
-            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags))?,
-            Subpacket::regular(SubpacketData::IssuerFingerprint(
-                primary_sec_key.fingerprint(),
-            ))?,
-        ];
 
-        let mut config = match primary_sec_key.version() {
-            KeyVersion::V4 => SignatureConfig::v4(
-                SignatureType::SubkeyBinding,
-                primary_sec_key.algorithm(),
-                primary_sec_key.hash_alg(),
-            ),
-            KeyVersion::V6 => SignatureConfig::v6(
-                &mut rng,
-                SignatureType::SubkeyBinding,
-                primary_sec_key.algorithm(),
-                primary_sec_key.hash_alg(),
-            )?,
-            v => unsupported_err!("unsupported key version: {:?}", v),
-        };
-
-        config.hashed_subpackets = hashed_subpackets;
-
-        // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
-        // the signature.
-        if primary_sec_key.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
-                primary_sec_key.key_id(),
-            ))?];
-        }
-
-        let signatures =
-            vec![config.sign_subkey_binding(primary_sec_key, primary_pub_key, key_pw, &key)?];
+        let signatures = vec![key.sign(
+            &mut rng,
+            primary_sec_key,
+            primary_pub_key,
+            key_pw,
+            self.keyflags,
+        )?];
 
         Ok(SignedPublicSubKey { key, signatures })
     }

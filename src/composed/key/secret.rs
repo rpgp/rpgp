@@ -1,13 +1,12 @@
 use aes_gcm::aead::rand_core::CryptoRng;
-use chrono::SubsecRound;
 use rand::Rng;
 
 use crate::{
     composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey},
-    errors::{unsupported_err, Result},
-    packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData},
+    errors::Result,
+    packet::{self, KeyFlags},
     ser::Serialize,
-    types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
+    types::{Password, PublicKeyTrait, SecretKeyTrait},
 };
 
 /// User facing interface to work with the components of a "Transferable Secret Key (TSK)"
@@ -90,44 +89,12 @@ impl SecretSubkey {
     {
         let key = self.key;
 
-        let mut config = match primary_sec_key.version() {
-            KeyVersion::V4 => SignatureConfig::v4(
-                SignatureType::SubkeyBinding,
-                primary_sec_key.algorithm(),
-                primary_sec_key.hash_alg(),
-            ),
-            KeyVersion::V6 => SignatureConfig::v6(
-                &mut rng,
-                SignatureType::SubkeyBinding,
-                primary_sec_key.algorithm(),
-                primary_sec_key.hash_alg(),
-            )?,
-            v => unsupported_err!("unsupported key version: {:?}", v),
-        };
-
-        config.hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))?,
-            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags))?,
-            Subpacket::regular(SubpacketData::IssuerFingerprint(
-                primary_sec_key.fingerprint(),
-            ))?,
-        ];
-
-        // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
-        // the signature.
-        if primary_sec_key.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
-                primary_sec_key.key_id(),
-            ))?];
-        }
-
-        let signatures = vec![config.sign_subkey_binding(
+        let signatures = vec![key.sign(
+            &mut rng,
             primary_sec_key,
             primary_pub_key,
             key_pw,
-            key.public_key(),
+            self.keyflags,
         )?];
 
         Ok(SignedSecretSubKey { key, signatures })
