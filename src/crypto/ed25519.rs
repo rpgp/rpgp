@@ -12,6 +12,8 @@
 //! This implicitly yields differing OpenPGP fingerprints, so the two OpenPGP key variants cannot
 //! be used interchangeably.
 
+use std::ops::Deref;
+
 use rand::{CryptoRng, Rng};
 use signature::{Signer as _, Verifier};
 use zeroize::{ZeroizeOnDrop, Zeroizing};
@@ -67,6 +69,14 @@ impl From<&SecretKey> for EddsaLegacyPublicParams {
         Self::Ed25519 {
             key: value.secret.verifying_key(),
         }
+    }
+}
+
+impl Deref for SecretKey {
+    type Target = ed25519_dalek::SigningKey;
+
+    fn deref(&self) -> &Self::Target {
+        &self.secret
     }
 }
 
