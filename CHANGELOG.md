@@ -2,6 +2,20 @@
 
 All notable changes to rpgp will be documented in this file.
 
+## [0.16.0-alpha.3](https://github.com/rpgp/rpgp/compare/v0.16.0-alpha.2..0.16.0-alpha.3) - 2025-05-27
+
+### ⛰️  Features
+
+- Impl Deref for pgp::crypto::ed25519::SecretKey ([#562](https://github.com/rpgp/rpgp/issues/562)) - ([e5d44a2](https://github.com/rpgp/rpgp/commit/e5d44a2e510bf9edcfc38d0e515a645ac5676ab8))
+
+### 🐛 Bug Fixes
+
+- Skip padding packets analogously to marker packets ([#563](https://github.com/rpgp/rpgp/issues/563)) - ([d667b67](https://github.com/rpgp/rpgp/commit/d667b671bc834c606acb22cea4d4c10a2402eb4e))
+
+### Errors
+
+- Lower enum size from 120 bytes to 80 ([#561](https://github.com/rpgp/rpgp/issues/561)) - ([490fc22](https://github.com/rpgp/rpgp/commit/490fc229382bf60f16d75f04be15d53f4b081246))
+
 ## [0.16.0-alpha.2](https://github.com/rpgp/rpgp/compare/v0.16.0-alpha.1..0.16.0-alpha.2) - 2025-05-26
 
 ### ⛰️  Features
