@@ -215,20 +215,23 @@ pub trait Deserializable: Sized {
 
 /// Process results from low level packet parser:
 ///
-/// - Skip Marker packets.
+/// - Skip Marker and Padding packets.
 /// - Pass through other packets.
 /// - Skip any `Error::Unsupported`, those were marked as "safe to ignore" by the low level parser.
 /// - Skip `Error::Incomplete`
 /// - Skip `Error::EllipticCurve`
 /// - Pass through other errors.
 pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<Packet>> {
-    // FIXME: handle padding packets (skip)
     // FIXME: handle criticality of packets from 9580 (error, if unsupported)
 
     match p {
         Ok(ref packet) => {
             if let Packet::Marker(_) = packet {
                 debug!("skipping marker packet");
+                return None;
+            }
+            if let Packet::Padding(_) = packet {
+                debug!("skipping padding packet");
                 return None;
             }
             Some(p)
