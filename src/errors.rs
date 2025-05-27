@@ -36,7 +36,8 @@ pub enum Error {
     PacketTooLarge { size: u64 },
     #[snafu(transparent)]
     RSAError {
-        source: rsa::errors::Error,
+        #[snafu(source(from(rsa::errors::Error, Box::new)))]
+        source: Box<rsa::errors::Error>,
         backtrace: Option<Backtrace>,
     },
     #[snafu(transparent)]
@@ -118,13 +119,13 @@ pub enum Error {
     AesKek { source: aes_kw::Error },
     #[snafu(transparent)]
     PacketParsing {
-        #[snafu(backtrace)]
-        source: ParsingError,
+        #[snafu(backtrace, source(from(ParsingError, Box::new)))]
+        source: Box<ParsingError>,
     },
     #[snafu(display("packet is incomplete"))]
     PacketIncomplete {
         #[snafu(backtrace)]
-        source: ParsingError,
+        source: Box<ParsingError>,
     },
     #[snafu(transparent)]
     Argon2 {
@@ -293,3 +294,21 @@ pub(crate) use err_opt;
 pub(crate) use format_err;
 pub(crate) use unimplemented_err;
 pub(crate) use unsupported_err;
+
+#[cfg(test)]
+mod tests {
+    /// Check the size of the error enum
+    ///
+    /// Because clippy will start throwing warning if an enum gets above 128, we'd like to keep the
+    /// size of the `Error` enum lower than that limit with some headroom to be wrapped by a
+    /// downstream crate.
+    ///
+    /// If this test triggers, you should consider Box'ing the offending member.
+    ///
+    /// See: <https://rust-lang.github.io/rust-clippy/master/index.html#result_large_err>
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn size_of_error() {
+        assert_eq!(core::mem::size_of::<super::Error>(), 80);
+    }
+}
