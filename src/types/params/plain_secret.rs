@@ -677,16 +677,13 @@ impl PlainSecretParams {
                 key.to_writer(writer)?;
             }
             PlainSecretParams::Elgamal(key) => {
-                let x = key.as_mpi();
-                x.to_writer(writer)?;
+                key.to_writer(writer)?;
             }
             PlainSecretParams::ECDSA(key) => {
-                let x = key.as_mpi();
-                x.to_writer(writer)?;
+                key.to_writer(writer)?;
             }
             PlainSecretParams::ECDH(key) => {
-                let x = key.as_mpi();
-                x.to_writer(writer)?;
+                key.to_writer(writer)?;
             }
             PlainSecretParams::X25519(key) => key.to_writer(writer)?,
             PlainSecretParams::Ed25519(key) => {
@@ -741,18 +738,9 @@ impl PlainSecretParams {
         match self {
             PlainSecretParams::RSA(key) => key.write_len(),
             PlainSecretParams::DSA(key) => key.write_len(),
-            PlainSecretParams::Elgamal(key) => {
-                let x = key.as_mpi();
-                x.write_len()
-            }
-            PlainSecretParams::ECDSA(key) => {
-                let x = key.as_mpi();
-                x.write_len()
-            }
-            PlainSecretParams::ECDH(key) => {
-                let x = key.as_mpi();
-                x.write_len()
-            }
+            PlainSecretParams::Elgamal(key) => key.write_len(),
+            PlainSecretParams::ECDSA(key) => key.write_len(),
+            PlainSecretParams::ECDH(key) => key.write_len(),
             PlainSecretParams::Ed25519(key) => key.write_len(),
             PlainSecretParams::Ed25519Legacy(key) => key.write_len(),
             PlainSecretParams::X25519(key) => key.write_len(),

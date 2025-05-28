@@ -56,13 +56,13 @@ impl SecretKey {
     }
 
     /// Create from the given MPI and matching public params.
-    pub fn try_from_mpi(pub_params: &DsaPublicParams, x: Mpi) -> Result<Self> {
+    pub(crate) fn try_from_mpi(pub_params: &DsaPublicParams, x: Mpi) -> Result<Self> {
         let secret = dsa::SigningKey::from_components(pub_params.key.clone(), x.into())?;
         Ok(Self { key: secret })
     }
 
     /// Returns the secret point `x` as MPI.
-    pub fn to_mpi(&self) -> Mpi {
+    fn to_mpi(&self) -> Mpi {
         Mpi::from(self.key.x())
     }
 

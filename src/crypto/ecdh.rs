@@ -10,6 +10,7 @@ use crate::{
         Decryptor,
     },
     errors::{ensure, ensure_eq, unsupported_err, Error, Result},
+    ser::Serialize,
     types::{pad_key, EcdhPublicParams, Mpi, PkeskBytes},
 };
 
@@ -71,7 +72,7 @@ impl Curve25519 {
         self.0.as_bytes()
     }
 
-    pub fn as_mpi(&self) -> Mpi {
+    fn as_mpi(&self) -> Mpi {
         let bytes = self.to_bytes_rev();
 
         // create scalar and reverse to little endian
@@ -165,7 +166,7 @@ impl SecretKey {
         }
     }
 
-    pub fn try_from_mpi(pub_params: &EcdhPublicParams, d: Mpi) -> Result<Self> {
+    pub(crate) fn try_from_mpi(pub_params: &EcdhPublicParams, d: Mpi) -> Result<Self> {
         match pub_params {
             EcdhPublicParams::Curve25519 { .. } => {
                 let key = Curve25519::try_from_bytes_rev(d.as_ref())?;
@@ -207,7 +208,7 @@ impl SecretKey {
         }
     }
 
-    pub fn as_mpi(&self) -> Mpi {
+    fn as_mpi(&self) -> Mpi {
         match self {
             Self::Curve25519(key) => key.as_mpi(),
             Self::P256 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
@@ -223,6 +224,28 @@ impl SecretKey {
             Self::P384 { .. } => ECCCurve::P384,
             Self::P521 { .. } => ECCCurve::P521,
         }
+    }
+
+    /// Returns the secret material as raw bytes.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            Self::Curve25519(key) => key.as_bytes().to_vec(),
+            Self::P256 { secret, .. } => secret.to_bytes().to_vec(),
+            Self::P384 { secret, .. } => secret.to_bytes().to_vec(),
+            Self::P521 { secret, .. } => secret.to_bytes().to_vec(),
+        }
+    }
+}
+
+impl Serialize for SecretKey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        let x = self.as_mpi();
+        x.to_writer(writer)
+    }
+
+    fn write_len(&self) -> usize {
+        let x = self.as_mpi();
+        x.write_len()
     }
 }
 

@@ -7,6 +7,7 @@ use zeroize::ZeroizeOnDrop;
 use crate::{
     crypto::{ecc_curve::ECCCurve, hash::HashAlgorithm, Signer},
     errors::{bail, ensure, ensure_eq, unsupported_err, Error, Result},
+    ser::Serialize,
     types::{EcdsaPublicParams, Mpi, SignatureBytes},
 };
 
@@ -91,7 +92,7 @@ impl SecretKey {
         }
     }
 
-    pub fn try_from_mpi(pub_params: &EcdsaPublicParams, d: Mpi) -> Result<Self> {
+    pub(crate) fn try_from_mpi(pub_params: &EcdsaPublicParams, d: Mpi) -> Result<Self> {
         match pub_params {
             EcdsaPublicParams::P256 { .. } => {
                 let secret = p256::SecretKey::from_slice(d.as_ref())?;
@@ -139,7 +140,7 @@ impl SecretKey {
         }
     }
 
-    pub fn as_mpi(&self) -> Mpi {
+    fn as_mpi(&self) -> Mpi {
         match self {
             Self::P256(k) => Mpi::from_slice(k.to_bytes().as_ref()),
             Self::P384(k) => Mpi::from_slice(k.to_bytes().as_ref()),
@@ -147,6 +148,29 @@ impl SecretKey {
             Self::Secp256k1(k) => Mpi::from_slice(k.to_bytes().as_ref()),
             Self::Unsupported { x, .. } => Mpi::from_slice(x),
         }
+    }
+
+    /// Returns the secret material as raw bytes.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            Self::P256(k) => k.to_bytes().to_vec(),
+            Self::P384(k) => k.to_bytes().to_vec(),
+            Self::P521(k) => k.to_bytes().to_vec(),
+            Self::Secp256k1(k) => k.to_bytes().to_vec(),
+            Self::Unsupported { x, .. } => x.clone(),
+        }
+    }
+}
+
+impl Serialize for SecretKey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> crate::errors::Result<()> {
+        let x = self.as_mpi();
+        x.to_writer(writer)
+    }
+
+    fn write_len(&self) -> usize {
+        let x = self.as_mpi();
+        x.write_len()
     }
 }
 

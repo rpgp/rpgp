@@ -45,7 +45,7 @@ impl SecretKey {
         Ok(SecretKey(key))
     }
 
-    pub fn try_from_mpi(
+    pub(crate) fn try_from_mpi(
         pub_params: &RsaPublicParams,
         d: Mpi,
         p: Mpi,
@@ -62,7 +62,7 @@ impl SecretKey {
     }
 
     /// Returns `d`, `p`, `q`, `u` as MPIs
-    pub fn to_mpi(&self) -> (Mpi, Mpi, Mpi, Mpi) {
+    fn to_mpi(&self) -> (Mpi, Mpi, Mpi, Mpi) {
         let d = self.0.d();
         let p = &self.0.primes()[0];
         let q = &self.0.primes()[1];
