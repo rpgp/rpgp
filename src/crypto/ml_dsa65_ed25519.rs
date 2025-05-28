@@ -12,7 +12,7 @@ use crate::{
 
 /// Size in bytes of the ED25519 secret key.
 pub const ED25519_KEY_LEN: usize = 32;
-/// Size in bytes of the ML DSA 84 secret key.
+/// Size in bytes of the ML DSA 65 secret key.
 pub const ML_DSA65_KEY_LEN: usize = 32;
 
 /// Secret key for ML DSA 65 with Curve25519.
