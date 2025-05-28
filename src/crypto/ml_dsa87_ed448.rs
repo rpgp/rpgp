@@ -12,8 +12,8 @@ use crate::{
 
 /// Size in bytes of the ED448 secret key.
 pub const ED448_KEY_LEN: usize = 57;
-/// Size in bytes of the ML DSA 84 secret key.
-pub const ML_DSA84_KEY_LEN: usize = 32;
+/// Size in bytes of the ML DSA 87 secret key.
+pub const ML_DSA87_KEY_LEN: usize = 32;
 
 /// Secret key for ML DSA 87 with Curve448.
 #[derive(Clone, PartialEq, derive_more::Debug)]
@@ -27,7 +27,7 @@ pub struct SecretKey {
     ml_dsa_verify: Box<ml_dsa::VerifyingKey<MlDsa87>>,
     // Store the seed, as it can't be extracted from the ml_dsa keys currently
     #[debug("..")]
-    ml_dsa_seed: [u8; ML_DSA84_KEY_LEN],
+    ml_dsa_seed: [u8; ML_DSA87_KEY_LEN],
 }
 
 impl Eq for SecretKey {}
@@ -47,7 +47,7 @@ impl SecretKey {
     /// Generate an Ed448 `SecretKey`.
     pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
         let ed448 = cx448::SigningKey::generate(&mut rng);
-        let mut ml_dsa_seed = [0u8; ML_DSA84_KEY_LEN];
+        let mut ml_dsa_seed = [0u8; ML_DSA87_KEY_LEN];
         rng.fill_bytes(&mut ml_dsa_seed);
         let ml_dsa = MlDsa87::key_gen_internal(&ml_dsa_seed.into());
 
@@ -62,7 +62,7 @@ impl SecretKey {
     /// Create a key from the raw byte values
     pub fn try_from_bytes(
         ed448: [u8; ED448_KEY_LEN],
-        ml_dsa: [u8; ML_DSA84_KEY_LEN],
+        ml_dsa: [u8; ML_DSA87_KEY_LEN],
     ) -> Result<Self> {
         let ed448 = cx448::SigningKey::from(cx448::SecretKey::from_slice(&ed448));
         // use the seed format
@@ -77,8 +77,8 @@ impl SecretKey {
     }
 
     /// Returns the individual secret keys in their raw byte level representation.
-    /// The first is the `ed448` and the second the `ml dsa 84` key.
-    pub fn as_bytes(&self) -> (&[u8; ED448_KEY_LEN], &[u8; ML_DSA84_KEY_LEN]) {
+    /// The first is the `ed448` and the second the `ml dsa 87` key.
+    pub fn as_bytes(&self) -> (&[u8; ED448_KEY_LEN], &[u8; ML_DSA87_KEY_LEN]) {
         let r: &[u8] = self.ed448.as_bytes().as_ref();
         (r.try_into().expect("known size"), &self.ml_dsa_seed)
     }
@@ -93,7 +93,7 @@ impl Serialize for SecretKey {
     }
 
     fn write_len(&self) -> usize {
-        ED448_KEY_LEN + ML_DSA84_KEY_LEN
+        ED448_KEY_LEN + ML_DSA87_KEY_LEN
     }
 }
 
