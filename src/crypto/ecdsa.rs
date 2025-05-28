@@ -140,7 +140,7 @@ impl SecretKey {
         }
     }
 
-    fn as_mpi(&self) -> Mpi {
+    fn to_mpi(&self) -> Mpi {
         match self {
             Self::P256(k) => Mpi::from_slice(k.to_bytes().as_ref()),
             Self::P384(k) => Mpi::from_slice(k.to_bytes().as_ref()),
@@ -164,12 +164,12 @@ impl SecretKey {
 
 impl Serialize for SecretKey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> crate::errors::Result<()> {
-        let x = self.as_mpi();
+        let x = self.to_mpi();
         x.to_writer(writer)
     }
 
     fn write_len(&self) -> usize {
-        let x = self.as_mpi();
+        let x = self.to_mpi();
         x.write_len()
     }
 }

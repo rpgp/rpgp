@@ -17,7 +17,7 @@ pub struct SecretKey {
 }
 
 impl SecretKey {
-    fn as_mpi(&self) -> Mpi {
+    fn to_mpi(&self) -> Mpi {
         Mpi::from_slice(&self.x)
     }
 
@@ -41,12 +41,12 @@ impl From<&SecretKey> for ElgamalPublicParams {
 
 impl Serialize for SecretKey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> crate::errors::Result<()> {
-        let x = self.as_mpi();
+        let x = self.to_mpi();
         x.to_writer(writer)
     }
 
     fn write_len(&self) -> usize {
-        let x = self.as_mpi();
+        let x = self.to_mpi();
         x.write_len()
     }
 }

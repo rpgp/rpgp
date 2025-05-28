@@ -71,14 +71,6 @@ impl Curve25519 {
     pub fn as_bytes(&self) -> &[u8; 32] {
         self.0.as_bytes()
     }
-
-    fn as_mpi(&self) -> Mpi {
-        let bytes = self.to_bytes_rev();
-
-        // create scalar and reverse to little endian
-        // https://www.rfc-editor.org/rfc/rfc9580.html#name-curve25519legacy-ecdh-secre
-        Mpi::from_raw(bytes.to_vec().into())
-    }
 }
 
 /// Secret key for ECDH
@@ -208,9 +200,15 @@ impl SecretKey {
         }
     }
 
-    fn as_mpi(&self) -> Mpi {
+    fn to_mpi(&self) -> Mpi {
         match self {
-            Self::Curve25519(key) => key.as_mpi(),
+            Self::Curve25519(key) => {
+                let bytes = key.to_bytes_rev();
+
+                // create scalar and reverse to little endian
+                // https://www.rfc-editor.org/rfc/rfc9580.html#name-curve25519legacy-ecdh-secre
+                Mpi::from_raw(bytes.to_vec().into())
+            }
             Self::P256 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
             Self::P384 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
             Self::P521 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
@@ -239,12 +237,12 @@ impl SecretKey {
 
 impl Serialize for SecretKey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        let x = self.as_mpi();
+        let x = self.to_mpi();
         x.to_writer(writer)
     }
 
     fn write_len(&self) -> usize {
-        let x = self.as_mpi();
+        let x = self.to_mpi();
         x.write_len()
     }
 }
