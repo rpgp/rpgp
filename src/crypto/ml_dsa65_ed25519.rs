@@ -10,7 +10,7 @@ use crate::{
     types::{MlDsa65Ed25519PublicParams, SignatureBytes},
 };
 
-/// Size in bytes of the ED448 secret key.
+/// Size in bytes of the ED25519 secret key.
 pub const ED25519_KEY_LEN: usize = 32;
 /// Size in bytes of the ML DSA 84 secret key.
 pub const ML_DSA65_KEY_LEN: usize = 32;
