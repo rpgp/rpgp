@@ -1,12 +1,11 @@
-use std::ops::Deref;
-
 use digest::{const_oid::AssociatedOid, Digest};
 use md5::Md5;
+use num_bigint::ModInverse;
 use rand::{CryptoRng, Rng};
 use ripemd::Ripemd160;
 use rsa::{
     pkcs1v15::{Pkcs1v15Encrypt, Signature as RsaSignature, SigningKey, VerifyingKey},
-    traits::PublicKeyParts,
+    traits::{PrivateKeyParts, PublicKeyParts},
     RsaPrivateKey, RsaPublicKey,
 };
 use sha1_checked::Sha1; // not used for hashing, just as a source of the OID
@@ -21,6 +20,7 @@ use zeroize::ZeroizeOnDrop;
 use crate::{
     crypto::{hash::HashAlgorithm, Decryptor, Signer},
     errors::{format_err, unsupported_err, Result},
+    ser::Serialize,
     types::{Mpi, PkeskBytes, RsaPublicParams, SignatureBytes},
 };
 
@@ -60,21 +60,71 @@ impl SecretKey {
         )?;
         Ok(Self(secret_key))
     }
+
+    /// Returns `d`, `p`, `q`, `u` as MPIs
+    fn to_mpi(&self) -> (Mpi, Mpi, Mpi, Mpi) {
+        let d = self.0.d();
+        let p = &self.0.primes()[0];
+        let q = &self.0.primes()[1];
+        let u = p
+            .clone()
+            .mod_inverse(q)
+            .expect("invalid prime")
+            .to_biguint()
+            .expect("invalid prime");
+
+        (Mpi::from(d), Mpi::from(p), Mpi::from(q), Mpi::from(u))
+    }
+
+    /// Returns the modulus size in bytes.
+    pub fn size(&self) -> usize {
+        self.0.size()
+    }
+
+    /// Returns `d`, `p`, `q`, `u` in big endian
+    pub fn to_bytes(&self) -> (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>) {
+        let d = self.0.d().to_bytes_be();
+        let p = self.0.primes()[0].to_bytes_be();
+        let q = self.0.primes()[1].to_bytes_be();
+        let u = self.0.primes()[0]
+            .clone()
+            .mod_inverse(&self.0.primes()[1])
+            .expect("invalid prime")
+            .to_biguint()
+            .expect("invalid prime")
+            .to_bytes_be();
+
+        (d, p, q, u)
+    }
 }
 
 impl From<&SecretKey> for RsaPublicParams {
     fn from(value: &SecretKey) -> Self {
         RsaPublicParams {
-            key: value.to_public_key(),
+            key: value.0.to_public_key(),
         }
     }
 }
 
-impl Deref for SecretKey {
-    type Target = RsaPrivateKey;
+impl Serialize for SecretKey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        let (d, p, q, u) = self.to_mpi();
+        d.to_writer(writer)?;
+        p.to_writer(writer)?;
+        q.to_writer(writer)?;
+        u.to_writer(writer)?;
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 0;
+        let (d, p, q, u) = self.to_mpi();
+        sum += d.write_len();
+        sum += p.write_len();
+        sum += q.write_len();
+        sum += u.write_len();
+        sum
     }
 }
 

@@ -1,6 +1,9 @@
 use zeroize::Zeroize;
 
-use crate::types::{ElgamalPublicParams, Mpi};
+use crate::{
+    ser::Serialize,
+    types::{ElgamalPublicParams, Mpi},
+};
 
 /// Secret key for Elgamal.
 #[derive(Clone, PartialEq, Zeroize, derive_more::Debug, Eq)]
@@ -14,7 +17,7 @@ pub struct SecretKey {
 }
 
 impl SecretKey {
-    pub(crate) fn as_mpi(&self) -> Mpi {
+    fn to_mpi(&self) -> Mpi {
         Mpi::from_slice(&self.x)
     }
 
@@ -24,10 +27,26 @@ impl SecretKey {
             public: pub_params,
         }
     }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.x
+    }
 }
 
 impl From<&SecretKey> for ElgamalPublicParams {
     fn from(value: &SecretKey) -> Self {
         value.public.clone()
+    }
+}
+
+impl Serialize for SecretKey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> crate::errors::Result<()> {
+        let x = self.to_mpi();
+        x.to_writer(writer)
+    }
+
+    fn write_len(&self) -> usize {
+        let x = self.to_mpi();
+        x.write_len()
     }
 }

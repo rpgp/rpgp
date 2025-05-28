@@ -7,6 +7,7 @@ use zeroize::ZeroizeOnDrop;
 use crate::{
     crypto::{ecc_curve::ECCCurve, hash::HashAlgorithm, Signer},
     errors::{bail, ensure, ensure_eq, unsupported_err, Error, Result},
+    ser::Serialize,
     types::{EcdsaPublicParams, Mpi, SignatureBytes},
 };
 
@@ -118,6 +119,59 @@ impl SecretKey {
             }
         }
     }
+
+    pub fn curve(&self) -> ECCCurve {
+        match self {
+            Self::P256 { .. } => ECCCurve::P256,
+            Self::P384 { .. } => ECCCurve::P384,
+            Self::P521 { .. } => ECCCurve::P521,
+            Self::Secp256k1 { .. } => ECCCurve::Secp256k1,
+            Self::Unsupported { curve, .. } => curve.clone(),
+        }
+    }
+
+    pub(crate) fn secret_key_length(&self) -> Option<usize> {
+        match self {
+            Self::P256 { .. } => Some(32),
+            Self::P384 { .. } => Some(48),
+            Self::P521 { .. } => Some(66),
+            Self::Secp256k1 { .. } => Some(32),
+            Self::Unsupported { .. } => None,
+        }
+    }
+
+    fn to_mpi(&self) -> Mpi {
+        match self {
+            Self::P256(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::P384(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::P521(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::Secp256k1(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::Unsupported { x, .. } => Mpi::from_slice(x),
+        }
+    }
+
+    /// Returns the secret material as raw bytes.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            Self::P256(k) => k.to_bytes().to_vec(),
+            Self::P384(k) => k.to_bytes().to_vec(),
+            Self::P521(k) => k.to_bytes().to_vec(),
+            Self::Secp256k1(k) => k.to_bytes().to_vec(),
+            Self::Unsupported { x, .. } => x.clone(),
+        }
+    }
+}
+
+impl Serialize for SecretKey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> crate::errors::Result<()> {
+        let x = self.to_mpi();
+        x.to_writer(writer)
+    }
+
+    fn write_len(&self) -> usize {
+        let x = self.to_mpi();
+        x.write_len()
+    }
 }
 
 impl Signer for SecretKey {
@@ -171,28 +225,6 @@ impl Signer for SecretKey {
         };
 
         Ok(SignatureBytes::Mpis(vec![r, s]))
-    }
-}
-
-impl SecretKey {
-    pub(crate) fn secret_key_length(&self) -> Option<usize> {
-        match self {
-            Self::P256 { .. } => Some(32),
-            Self::P384 { .. } => Some(48),
-            Self::P521 { .. } => Some(66),
-            Self::Secp256k1 { .. } => Some(32),
-            Self::Unsupported { .. } => None,
-        }
-    }
-
-    pub(crate) fn as_mpi(&self) -> Mpi {
-        match self {
-            Self::P256(k) => Mpi::from_slice(k.to_bytes().as_ref()),
-            Self::P384(k) => Mpi::from_slice(k.to_bytes().as_ref()),
-            Self::P521(k) => Mpi::from_slice(k.to_bytes().as_ref()),
-            Self::Secp256k1(k) => Mpi::from_slice(k.to_bytes().as_ref()),
-            Self::Unsupported { x, .. } => Mpi::from_slice(x),
-        }
     }
 }
 

@@ -3,12 +3,10 @@ use std::{
     io::{self, BufRead},
 };
 
-use ::rsa::traits::PrivateKeyParts;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, Bytes, BytesMut};
 use hkdf::Hkdf;
 use log::debug;
-use num_bigint::ModInverse;
 use sha2::Sha256;
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
@@ -168,7 +166,7 @@ impl PlainSecretParams {
             }
             (PublicKeyAlgorithm::X25519, PublicParams::X25519(_)) => {
                 let secret = i.read_array::<32>()?;
-                let key = crate::crypto::x25519::SecretKey::try_from_array(secret)?;
+                let key = crate::crypto::x25519::SecretKey::try_from_bytes(secret)?;
                 Self::X25519(key)
             }
             (PublicKeyAlgorithm::X448, PublicParams::X448 { .. }) => {
@@ -180,22 +178,20 @@ impl PlainSecretParams {
             (PublicKeyAlgorithm::MlKem768X25519, PublicParams::MlKem768X25519(_)) => {
                 // X25519
                 let x = i.read_array::<32>()?;
-                let x = x25519_dalek::StaticSecret::from(x);
 
                 // ML KEM
                 let ml_kem = i.read_array::<64>()?;
-                let key = crate::crypto::ml_kem768_x25519::SecretKey::try_from_parts(x, ml_kem)?;
+                let key = crate::crypto::ml_kem768_x25519::SecretKey::try_from_bytes(x, ml_kem)?;
                 Self::MlKem768X25519(key)
             }
             #[cfg(feature = "draft-pqc")]
             (PublicKeyAlgorithm::MlKem1024X448, PublicParams::MlKem1024X448(_)) => {
                 // X448
                 let x = i.read_array::<56>()?;
-                let x = cx448::x448::Secret::from(x);
 
                 // ML KEM
                 let ml_kem = i.read_array::<64>()?;
-                let key = crate::crypto::ml_kem1024_x448::SecretKey::try_from_parts(x, ml_kem)?;
+                let key = crate::crypto::ml_kem1024_x448::SecretKey::try_from_bytes(x, ml_kem)?;
                 Self::MlKem1024X448(key)
             }
             (
@@ -675,44 +671,23 @@ impl PlainSecretParams {
     fn to_writer_raw<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
             PlainSecretParams::RSA(key) => {
-                let d = key.d();
-                let p = &key.primes()[0];
-                let q = &key.primes()[1];
-                let u = p
-                    .clone()
-                    .mod_inverse(q)
-                    .expect("invalid prime")
-                    .to_biguint()
-                    .expect("invalid prime");
-
-                Mpi::from(d).to_writer(writer)?;
-                Mpi::from(p).to_writer(writer)?;
-                Mpi::from(q).to_writer(writer)?;
-                Mpi::from(u).to_writer(writer)?;
+                key.to_writer(writer)?;
             }
             PlainSecretParams::DSA(key) => {
-                let x = key.x();
-                Mpi::from(x).to_writer(writer)?;
+                key.to_writer(writer)?;
             }
             PlainSecretParams::Elgamal(key) => {
-                let x = key.as_mpi();
-                x.to_writer(writer)?;
+                key.to_writer(writer)?;
             }
             PlainSecretParams::ECDSA(key) => {
-                let x = key.as_mpi();
-                x.to_writer(writer)?;
+                key.to_writer(writer)?;
             }
             PlainSecretParams::ECDH(key) => {
-                let x = key.as_mpi();
-                x.to_writer(writer)?;
+                key.to_writer(writer)?;
             }
-            PlainSecretParams::X25519(key) => {
-                let q = key.secret.to_bytes();
-                writer.write_all(&q)?;
-            }
+            PlainSecretParams::X25519(key) => key.to_writer(writer)?,
             PlainSecretParams::Ed25519(key) => {
-                let q = key.secret.to_bytes();
-                writer.write_all(&q)?;
+                key.to_writer(writer)?;
             }
             #[cfg(feature = "draft-pqc")]
             PlainSecretParams::MlKem768X25519(key) => {
@@ -723,38 +698,33 @@ impl PlainSecretParams {
                 key.to_writer(writer)?;
             }
             PlainSecretParams::Ed448(key) => {
-                writer.write_all(key.secret.as_bytes().as_ref())?;
+                key.to_writer(writer)?;
             }
             PlainSecretParams::Ed25519Legacy(key) => {
-                let x = key.as_mpi();
-                x.to_writer(writer)?;
+                key.to_writer(writer)?;
             }
             PlainSecretParams::X448(key) => {
-                writer.write_all(&key.secret)?;
+                key.to_writer(writer)?;
             }
             #[cfg(feature = "draft-pqc")]
             PlainSecretParams::MlDsa65Ed25519(key) => {
-                let q = key.ed25519.as_bytes();
-                writer.write_all(q)?;
-                writer.write_all(&key.ml_dsa_seed)?;
+                key.to_writer(writer)?;
             }
             #[cfg(feature = "draft-pqc")]
             PlainSecretParams::MlDsa87Ed448(key) => {
-                let q = key.ed448.as_bytes();
-                writer.write_all(q)?;
-                writer.write_all(&key.ml_dsa_seed)?;
+                key.to_writer(writer)?;
             }
             #[cfg(feature = "draft-pqc")]
             PlainSecretParams::SlhDsaShake128s(key) => {
-                writer.write_all(&key.key.to_bytes()[..])?;
+                key.to_writer(writer)?;
             }
             #[cfg(feature = "draft-pqc")]
             PlainSecretParams::SlhDsaShake128f(key) => {
-                writer.write_all(&key.key.to_bytes()[..])?;
+                key.to_writer(writer)?;
             }
             #[cfg(feature = "draft-pqc")]
             PlainSecretParams::SlhDsaShake256s(key) => {
-                writer.write_all(&key.key.to_bytes()[..])?;
+                key.to_writer(writer)?;
             }
             PlainSecretParams::Unknown { data, .. } => {
                 writer.write_all(data)?;
@@ -766,62 +736,30 @@ impl PlainSecretParams {
 
     fn write_len_raw(&self) -> usize {
         match self {
-            PlainSecretParams::RSA(key) => {
-                let d = key.d();
-                let p = &key.primes()[0];
-                let q = &key.primes()[1];
-                let u = p
-                    .clone()
-                    .mod_inverse(q)
-                    .expect("invalid prime")
-                    .to_biguint()
-                    .expect("invalid prime");
-
-                let mut sum = 0;
-                sum += Mpi::from(d).write_len();
-                sum += Mpi::from(p).write_len();
-                sum += Mpi::from(q).write_len();
-                sum += Mpi::from(u).write_len();
-                sum
-            }
-            PlainSecretParams::DSA(key) => {
-                let x = key.x();
-                Mpi::from(x).write_len()
-            }
-            PlainSecretParams::Elgamal(key) => {
-                let x = key.as_mpi();
-                x.write_len()
-            }
-            PlainSecretParams::ECDSA(key) => {
-                let x = key.as_mpi();
-                x.write_len()
-            }
-            PlainSecretParams::ECDH(key) => {
-                let x = key.as_mpi();
-                x.write_len()
-            }
-            PlainSecretParams::Ed25519(_key) => 32,
-            PlainSecretParams::Ed25519Legacy(key) => {
-                let x = key.as_mpi();
-                x.write_len()
-            }
-            PlainSecretParams::X25519(_key) => 32,
-            PlainSecretParams::Ed448(_key) => 57,
+            PlainSecretParams::RSA(key) => key.write_len(),
+            PlainSecretParams::DSA(key) => key.write_len(),
+            PlainSecretParams::Elgamal(key) => key.write_len(),
+            PlainSecretParams::ECDSA(key) => key.write_len(),
+            PlainSecretParams::ECDH(key) => key.write_len(),
+            PlainSecretParams::Ed25519(key) => key.write_len(),
+            PlainSecretParams::Ed25519Legacy(key) => key.write_len(),
+            PlainSecretParams::X25519(key) => key.write_len(),
+            PlainSecretParams::Ed448(key) => key.write_len(),
+            PlainSecretParams::X448(key) => key.write_len(),
             #[cfg(feature = "draft-pqc")]
             PlainSecretParams::MlKem768X25519(key) => key.write_len(),
             #[cfg(feature = "draft-pqc")]
             PlainSecretParams::MlKem1024X448(key) => key.write_len(),
             #[cfg(feature = "draft-pqc")]
-            PlainSecretParams::MlDsa65Ed25519(_) => 32 + 32,
+            PlainSecretParams::MlDsa65Ed25519(key) => key.write_len(),
             #[cfg(feature = "draft-pqc")]
-            PlainSecretParams::MlDsa87Ed448(_) => 57 + 32,
+            PlainSecretParams::MlDsa87Ed448(key) => key.write_len(),
             #[cfg(feature = "draft-pqc")]
-            PlainSecretParams::SlhDsaShake128s(_) => 64,
+            PlainSecretParams::SlhDsaShake128s(key) => key.write_len(),
             #[cfg(feature = "draft-pqc")]
-            PlainSecretParams::SlhDsaShake128f(_) => 64,
+            PlainSecretParams::SlhDsaShake128f(key) => key.write_len(),
             #[cfg(feature = "draft-pqc")]
-            PlainSecretParams::SlhDsaShake256s(_) => 128,
-            PlainSecretParams::X448(_key) => 56,
+            PlainSecretParams::SlhDsaShake256s(key) => key.write_len(),
             PlainSecretParams::Unknown { data, .. } => data.len(),
         }
     }
