@@ -161,7 +161,7 @@ impl Decryptor for SecretKey {
     }
 }
 
-/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-09.html#name-x448-kem>
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-x448-kem>
 fn x448_kem_decaps(
     their_public: &PublicKey,
     ecdh_secret_key: &Secret,
@@ -187,7 +187,7 @@ fn ml_kem_1024_decaps(
 
 const DOM_SEP: &[u8] = b"OpenPGPCompositeKDFv1";
 
-/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-09.html#name-key-combiner>
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-key-combiner>
 fn multi_key_combine(
     ml_kem_key_share: &[u8; 32],
     ecdh_key_share: &[u8; 56],
@@ -214,7 +214,7 @@ fn multi_key_combine(
 
 /// ML KEM 1024 - X448 Encryption
 ///
-/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-09.html#name-encryption-procedure>
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-encryption-procedure>
 ///
 /// Returns
 /// - ecdh_ciphertext
@@ -255,7 +255,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     Ok((ecdh_ciphertext, ml_kem_ciphertext, c))
 }
 
-/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-09.html#name-x448-kem>
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-x448-kem>
 fn x448_kem_encaps<R: CryptoRng + Rng>(
     mut rng: R,
     public_key: &PublicKey,
