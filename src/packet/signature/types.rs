@@ -318,6 +318,30 @@ impl Signature {
         Ok(())
     }
 
+    /// Check if the hash algorithm is acceptable for the signature configuration
+    /// (in particular, if it's allowed in combination with the public key algorithm).
+    pub(crate) fn check_signature_hash_strength(config: &SignatureConfig) -> Result<()> {
+        if config.pub_alg.is_pqc() {
+            // For all signature algorithms in draft-ietf-openpgp-pqc-10,
+            // hash digest sizes of at least 256 bits are required:
+            //
+            // https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-signature-packet-tag-2
+            // https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-signature-packet-tag-2-2
+
+            let Some(digest_size) = config.hash_alg.digest_size() else {
+                bail!("Illegal hash_alg setting {}", config.hash_alg);
+            };
+
+            ensure!(
+                digest_size * 8 >= 256,
+                "PQC signatures must use hash algorithms with digest size >= 256 bits, {} is insufficient",
+                config.hash_alg
+            );
+        }
+
+        Ok(())
+    }
+
     /// Verify this signature.
     pub fn verify<R>(&self, key: &impl PublicKeyTrait, data: R) -> Result<()>
     where
@@ -333,6 +357,7 @@ impl Signature {
         };
 
         Self::check_signature_key_version_alignment(&key, config)?;
+        Self::check_signature_hash_strength(config)?;
 
         ensure!(
             Self::match_identity(self, key),
@@ -420,6 +445,7 @@ impl Signature {
         debug!("verifying certification {:?} {:#?}", key_id, self);
 
         Self::check_signature_key_version_alignment(&signer, config)?;
+        Self::check_signature_hash_strength(config)?;
 
         ensure!(
             Self::match_identity(self, signer),
@@ -509,6 +535,7 @@ impl Signature {
         };
 
         Self::check_signature_key_version_alignment(&signer, config)?;
+        Self::check_signature_hash_strength(config)?;
 
         let mut hasher = config.hash_alg.new_hasher()?;
 
@@ -557,6 +584,7 @@ impl Signature {
         };
 
         Self::check_signature_key_version_alignment(&signer, config)?;
+        Self::check_signature_hash_strength(config)?;
 
         let mut hasher = config.hash_alg.new_hasher()?;
 
@@ -596,6 +624,7 @@ impl Signature {
             unsupported_err!("signature version {:?}", self.version());
         };
         Self::check_signature_key_version_alignment(&key, config)?;
+        Self::check_signature_hash_strength(config)?;
 
         ensure!(
             Self::match_identity(self, key),

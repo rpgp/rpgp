@@ -730,6 +730,8 @@ impl SignatureHasher {
             config.typ
         );
 
+        Signature::check_signature_hash_strength(&config)?;
+
         let len = config.hash_signature_data(&mut hasher)?;
         let trailer = config.trailer(len)?;
         hasher.update(&trailer);
