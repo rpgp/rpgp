@@ -1,12 +1,10 @@
 ## FAQs
 
-### Is rPGP considering adding support for Post Quantum Cryptography (PQC)? 
+### Is rPGP adding support for Post Quantum Cryptography (PQC)? 
 
-Yes, it is tracked in [#356](https://github.com/rpgp/rpgp/issues/356). 
+Yes, rPGP implements the IETF draft [Post-Quantum Cryptography in OpenPGP](https://datatracker.ietf.org/doc/draft-ietf-openpgp-pqc/), gated behind the feature `draft-pqc`.
 
-We are following the IETF [Post-Quantum Cryptography in OpenPGP](https://datatracker.ietf.org/doc/draft-ietf-openpgp-pqc/) work and discussed with some of its authors
-but have not fully assessed yet the work needed to support it in rPGP. 
-
+NOTE: draft-ietf-openpgp-pqc is not finalized, the format should NOT be used in production yet! This feature is currently only intended for testing purposes.
 
 ### What other standards are you considering for implementation? 
 
