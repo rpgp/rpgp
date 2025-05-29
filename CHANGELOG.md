@@ -2,6 +2,16 @@
 
 All notable changes to rpgp will be documented in this file.
 
+## [0.16.0](https://github.com/rpgp/rpgp/compare/v0.16.0-alpha.3..0.16.0) - 2025-05-29
+
+### ⛰️  Features
+
+- Update to draft-ietf-openpgp-pqc-10 ([#565](https://github.com/rpgp/rpgp/issues/565)) - ([01a9643](https://github.com/rpgp/rpgp/commit/01a96430774b9b83216d39dcfd7d4b20e6abc0bd))
+
+### 🚜 Refactor
+
+- Cleanup the interface of crypto::*::SecretKey - ([45e1ea8](https://github.com/rpgp/rpgp/commit/45e1ea867cb863412d60e08cf2bb5de90962a685))
+
 ## [0.16.0-alpha.3](https://github.com/rpgp/rpgp/compare/v0.16.0-alpha.2..0.16.0-alpha.3) - 2025-05-27
 
 ### ⛰️  Features
