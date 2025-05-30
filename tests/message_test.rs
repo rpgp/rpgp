@@ -991,6 +991,8 @@ fn fuzz_msg_reader() {
 
 #[test]
 fn message_parsing_pqc_pkesk() {
+    pretty_env_logger::try_init().ok();
+
     // This is a message that is encrypted to one traditional PKESK and one PQC PKESK
     let (message, _) = Message::from_armor_file("./tests/message_pqc.asc").expect("ok");
 
@@ -998,6 +1000,5 @@ fn message_parsing_pqc_pkesk() {
         panic!("destructure encrypted message")
     };
 
-    // We expect to find 1 or 2 esk, depending on if rPGP is compiled with support for pqc formats
-    assert!(!esk.is_empty());
+    assert_eq!(esk.len(), 2);
 }
