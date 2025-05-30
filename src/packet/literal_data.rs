@@ -194,9 +194,15 @@ impl LiteralData {
     /// Convert the data to a UTF-8 string, if appropriate for the type.
     /// Returns `None` if `mode` is `Binary`, or the data is not valid UTF-8.
     pub fn to_string(&self) -> Option<String> {
+        self.as_str().map(str::to_owned)
+    }
+
+    /// Convert the data to a UTF-8 string, if appropriate for the type.
+    /// Returns `None` if `mode` is `Binary`, or the data is not valid UTF-8.
+    pub fn as_str(&self) -> Option<&str> {
         match self.header.mode {
             DataMode::Binary => None,
-            _ => std::str::from_utf8(&self.data).map(str::to_owned).ok(),
+            _ => std::str::from_utf8(&self.data).ok(),
         }
     }
 }
