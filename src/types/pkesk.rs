@@ -71,7 +71,10 @@ pub enum PkeskBytes {
         /// Set for v3 PKESK only (the sym_alg is not encrypted with the session key for X448)
         sym_alg: Option<SymmetricKeyAlgorithm>,
     },
-    Other,
+    Other {
+        #[debug("{}", hex::encode(key))]
+        key: Bytes,
+    },
 }
 
 impl PkeskBytes {
@@ -94,7 +97,10 @@ impl PkeskBytes {
             }
             PublicKeyAlgorithm::ECDSA
             | PublicKeyAlgorithm::DSA
-            | PublicKeyAlgorithm::DiffieHellman => Ok(PkeskBytes::Other),
+            | PublicKeyAlgorithm::DiffieHellman => {
+                let key = i.rest()?.freeze();
+                Ok(PkeskBytes::Other { key })
+            }
             PublicKeyAlgorithm::ECDH => {
                 let public_point = Mpi::try_from_reader(&mut i)?;
                 let session_key_len = i.read_u8()?;
@@ -163,7 +169,11 @@ impl PkeskBytes {
                     session_key,
                 })
             }
-            PublicKeyAlgorithm::Unknown(_) => Ok(PkeskBytes::Other), // we don't know the format of this data
+            PublicKeyAlgorithm::Unknown(_) => {
+                // we don't know the format of this data
+                let key = i.rest()?.freeze();
+                Ok(PkeskBytes::Other { key })
+            }
             #[cfg(feature = "draft-pqc")]
             PublicKeyAlgorithm::MlKem768X25519 => {
                 // <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-public-key-encrypted-sessio>
@@ -370,8 +380,8 @@ impl Serialize for PkeskBytes {
 
                 writer.write_all(session_key)?; // encrypted session key
             }
-            PkeskBytes::Other => {
-                // Nothing to do
+            PkeskBytes::Other { key } => {
+                writer.write_all(key)?;
             }
         }
         Ok(())
@@ -484,7 +494,9 @@ impl Serialize for PkeskBytes {
                 }
                 sum += session_key.len(); // encrypted session key
             }
-            PkeskBytes::Other => {}
+            PkeskBytes::Other { key } => {
+                sum += key.len();
+            }
         }
         sum
     }
