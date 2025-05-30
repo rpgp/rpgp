@@ -73,6 +73,12 @@ impl UserId {
         &self.id
     }
 
+    /// Convert the id to a UTF-8 string, if possible.
+    /// Returns `None` if the data is not valid UTF-8.
+    pub fn as_str(&self) -> Option<&str> {
+        std::str::from_utf8(&self.id).ok()
+    }
+
     /// Create a self-signature.
     pub fn sign<R, K, P>(
         &self,
