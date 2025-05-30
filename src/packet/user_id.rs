@@ -5,7 +5,7 @@ use chrono::{SubsecRound, Utc};
 use rand::{CryptoRng, Rng};
 
 use crate::{
-    errors::Result,
+    errors::{Error, Result},
     packet::{
         PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
         SubpacketData,
@@ -122,6 +122,19 @@ impl UserId {
 
     pub fn into_signed(self, sig: Signature) -> SignedUser {
         SignedUser::new(self, vec![sig])
+    }
+}
+
+impl TryFrom<UserId> for String {
+    type Error = Error;
+
+    fn try_from(value: UserId) -> std::result::Result<Self, Self::Error> {
+        String::from_utf8(value.id().to_vec()).map_err(|e: std::string::FromUtf8Error| {
+            Error::Utf8Error {
+                source: e.utf8_error(),
+                backtrace: None,
+            }
+        })
     }
 }
 
