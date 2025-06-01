@@ -730,7 +730,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::io::Read;
+    use std::{io::Read, time::Instant};
 
     use log::info;
     use rand::{Rng, SeedableRng};
@@ -924,5 +924,82 @@ mod tests {
         assert!(SymmetricKeyAlgorithm::AES128
             .decrypt(&key, &mut prefix, &mut cipher_text)
             .is_err());
+    }
+
+    use rand::RngCore;
+
+    #[test]
+    fn bench_aes_256_protected() {
+        const SIZE: usize = 1024 * 1024 * 64;
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut data = vec![0u8; SIZE];
+        rng.fill_bytes(&mut data);
+
+        let mut key = vec![0u8; SymmetricKeyAlgorithm::AES256.key_size()];
+        rng.fill_bytes(&mut key);
+
+        let now = Instant::now();
+        let mut encryptor = SymmetricKeyAlgorithm::AES256
+            .stream_encryptor(&mut rng, &key, &data[..])
+            .unwrap();
+
+        let mut output = Vec::new();
+        encryptor.read_to_end(&mut output).unwrap();
+
+        let elapsed = now.elapsed();
+        let elapsed_milli = elapsed.as_millis();
+        let mb_per_s = ((SIZE as f64) / 1000f64 / 1000f64 / elapsed_milli as f64) * 1000f64;
+        println!("Encryption: {elapsed_milli} ms, MByte/s: {mb_per_s:.2?}");
+
+        let now = Instant::now();
+
+        let mut decryptor = SymmetricKeyAlgorithm::AES256
+            .stream_decryptor_protected(&key, &output[..])
+            .unwrap();
+        let mut res = Vec::new();
+        decryptor.read_to_end(&mut res).unwrap();
+        let elapsed = now.elapsed();
+
+        assert_eq!(res, data);
+
+        let elapsed_milli = elapsed.as_millis();
+        let mb_per_s = (SIZE as f64 / 1000f64 / 1000f64 / elapsed_milli as f64) * 1000f64;
+        println!("Decryption: {elapsed_milli} ms, MByte/s: {mb_per_s:.2?}");
+    }
+
+    #[test]
+    fn bench_aes_256_unprotected() {
+        const SIZE: usize = 1024 * 1024 * 256;
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut data = vec![0u8; SIZE];
+        rng.fill_bytes(&mut data);
+
+        let mut key = vec![0u8; SymmetricKeyAlgorithm::AES256.key_size()];
+        rng.fill_bytes(&mut key);
+
+        let now = Instant::now();
+        let output = SymmetricKeyAlgorithm::AES256
+            .encrypt(&mut rng, &key, &data[..])
+            .unwrap();
+
+        let elapsed = now.elapsed();
+        let elapsed_milli = elapsed.as_millis();
+        let mb_per_s = ((SIZE as f64) / 1000f64 / 1000f64 / elapsed_milli as f64) * 1000f64;
+        println!("Encryption: {elapsed_milli} ms, MByte/s: {mb_per_s:.2?}");
+
+        let now = Instant::now();
+
+        let mut decryptor = SymmetricKeyAlgorithm::AES256
+            .stream_decryptor_unprotected(&key, &output[..])
+            .unwrap();
+        let mut res = Vec::new();
+        decryptor.read_to_end(&mut res).unwrap();
+        let elapsed = now.elapsed();
+
+        assert_eq!(res, data);
+
+        let elapsed_milli = elapsed.as_millis();
+        let mb_per_s = (SIZE as f64 / 1000f64 / 1000f64 / elapsed_milli as f64) * 1000f64;
+        println!("Decryption: {elapsed_milli} ms, MByte/s: {mb_per_s:.2?}");
     }
 }
