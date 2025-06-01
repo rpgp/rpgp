@@ -8,7 +8,7 @@ use crate::{
     composed::{Message, MessageReader, RingResult, TheRing},
     errors::{bail, ensure_eq, Result},
     packet::{Signature, SignatureType, SignatureVersionSpecific},
-    util::{fill_buffer, NormalizingHasher},
+    util::{fill_buffer_bytes, NormalizingHasher},
 };
 
 #[derive(derive_more::Debug)]
@@ -132,9 +132,8 @@ impl<'a> SignatureBodyReader<'a> {
                     signature,
                 } => {
                     debug!("SignatureReader init");
-                    let mut buffer = BytesMut::zeroed(1024);
-                    let read = fill_buffer(&mut source, &mut buffer, None)?;
-                    buffer.truncate(read);
+                    let mut buffer = BytesMut::with_capacity(1024);
+                    let read = fill_buffer_bytes(&mut source, &mut buffer, 1024)?;
 
                     if read == 0 {
                         return Err(io::Error::new(
@@ -172,9 +171,7 @@ impl<'a> SignatureBodyReader<'a> {
                         return Ok(());
                     }
 
-                    buffer.resize(1024, 0);
-                    let read = fill_buffer(&mut source, &mut buffer, None)?;
-                    buffer.truncate(read);
+                    let read = fill_buffer_bytes(&mut source, &mut buffer, 1024)?;
 
                     if let Some(ref mut hasher) = norm_hasher {
                         hasher.hash_buf(&buffer);
