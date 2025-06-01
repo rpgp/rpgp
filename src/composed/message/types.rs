@@ -534,6 +534,13 @@ impl Read for Edata<'_> {
             Self::SymEncryptedProtectedData { reader } => reader.read(buf),
         }
     }
+
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        match self {
+            Self::SymEncryptedData { reader } => reader.read_to_end(buf),
+            Self::SymEncryptedProtectedData { reader } => reader.read_to_end(buf),
+        }
+    }
 }
 
 impl<'a> Edata<'a> {
@@ -1021,6 +1028,20 @@ impl Read for Message<'_> {
         if read == 0 {
             self.check_trailing_data()?;
         }
+
+        Ok(read)
+    }
+
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        let read = match self {
+            Self::Literal { reader, .. } => reader.read_to_end(buf),
+            Self::Compressed { reader, .. } => reader.read_to_end(buf),
+            Self::Signed { reader, .. } => reader.read_to_end(buf),
+            Self::SignedOnePass { reader, .. } => reader.read_to_end(buf),
+            Self::Encrypted { edata, .. } => edata.read_to_end(buf),
+        }?;
+
+        self.check_trailing_data()?;
 
         Ok(read)
     }
