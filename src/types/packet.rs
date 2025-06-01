@@ -328,6 +328,7 @@ pub enum PkeskVersion {
 #[repr(u8)]
 pub enum SkeskVersion {
     V4 = 4,
+    V5 = 5,
     V6 = 6,
 
     #[num_enum(catch_all)]
