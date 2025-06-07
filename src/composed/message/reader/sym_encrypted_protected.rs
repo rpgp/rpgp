@@ -84,7 +84,16 @@ impl<R: DebugBufRead> Read for MaybeDecryptor<R> {
 impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
     pub fn new(mut source: PacketBodyReader<R>) -> Result<Self> {
         debug_assert_eq!(source.packet_header().tag(), Tag::SymEncryptedProtectedData);
+
         let config = SymEncryptedProtectedDataConfig::try_from_reader(&mut source)?;
+
+        Ok(Self::Init { source, config })
+    }
+
+    pub fn new_libre_ocb(mut source: PacketBodyReader<R>) -> Result<Self> {
+        debug_assert_eq!(source.packet_header().tag(), Tag::LibreOcb);
+
+        let config = SymEncryptedProtectedDataConfig::try_from_reader_libre_ocb(&mut source)?;
 
         Ok(Self::Init { source, config })
     }
@@ -97,7 +106,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                         let (sym_alg, session_key) = match session_key {
                             PlainSessionKey::V3_4 { sym_alg, key } => (sym_alg, key),
                             PlainSessionKey::V5 { .. } => {
-                                unsupported_err!("v5 is not supported");
+                                unsupported_err!("v5 session key is not supported for v1 SKESK");
                             }
                             PlainSessionKey::V6 { .. } => {
                                 bail!("mismatch between session key and edata config");
@@ -106,6 +115,44 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                         };
 
                         StreamDecryptor::v1(*sym_alg, session_key, source)?
+                    }
+                    SymEncryptedProtectedDataConfig::LibreOcb {
+                        sym_alg,
+                        aead,
+                        chunk_size,
+                        ref iv,
+                    } => {
+                        let (sym_alg_session_key, session_key) = match session_key {
+                            PlainSessionKey::V3_4 { sym_alg, key } => (Some(sym_alg), key),
+                            PlainSessionKey::V5 { key } => (None, key),
+                            PlainSessionKey::V6 { .. } => {
+                                bail!("mismatch between session key and edata config")
+                            }
+                            PlainSessionKey::Unknown { sym_alg, key } => (Some(sym_alg), key),
+                        };
+                        if let Some(sym_alg_session_key) = sym_alg_session_key {
+                            ensure_eq!(
+                                sym_alg,
+                                *sym_alg_session_key,
+                                "mismatching symmetric key algorithm"
+                            );
+                        }
+
+                        ensure_eq!(
+                            session_key.len(),
+                            sym_alg.key_size(),
+                            "Unexpected session key length for {:?}",
+                            sym_alg
+                        );
+
+                        StreamDecryptor::libre_ocb(
+                            sym_alg,
+                            aead,
+                            chunk_size,
+                            session_key,
+                            iv,
+                            source,
+                        )?
                     }
                     SymEncryptedProtectedDataConfig::V2 {
                         sym_alg,
@@ -118,7 +165,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                                 bail!("mismatch between session key and edata config");
                             }
                             PlainSessionKey::V5 { .. } => {
-                                unsupported_err!("v5 is not supported");
+                                unsupported_err!("v5 session key is not supported for v2 SKESK");
                             }
                             PlainSessionKey::V6 { key } => (None, key),
                             PlainSessionKey::Unknown { sym_alg, key } => (Some(sym_alg), key),

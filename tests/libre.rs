@@ -94,7 +94,7 @@ fn libre_v5_skesk() {
 
     // -- try decrypt
     let pw = Password::from("password");
-    let sk = pgp::composed::decrypt_session_key_with_password(&skesk, &pw).expect("decrypt");
+    let sk = pgp::composed::decrypt_session_key_with_password(skesk, &pw).expect("decrypt");
     let PlainSessionKey::V5 { key } = &sk else {
         panic!("unexpected plain session key version");
     };
@@ -118,6 +118,8 @@ fn libre_ocb_message() {
     message.extend_from_slice(&decode(OCB).expect("hex"));
 
     let msg = Message::from_bytes(BufReader::new(&*message)).expect("message from bytes");
+
+    eprintln!("msg {:#?}", msg);
 
     let pw = Password::from("password");
     let mut dec = msg.decrypt_with_password(&pw).expect("decrypt");

@@ -88,6 +88,7 @@ impl<R: BufRead> PacketBodyReader<R> {
                         | Tag::CompressedData
                         | Tag::SymEncryptedData
                         | Tag::SymEncryptedProtectedData
+                        | Tag::LibreOcb
                 ) {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
