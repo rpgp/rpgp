@@ -131,6 +131,11 @@ pub enum Tag {
     SymEncryptedProtectedData = 18,
     /// Modification Detection Code Packet
     ModDetectionCode = 19,
+    /// "OCB Encrypted Data Packet", a GnuPG-specific format (not standardized in OpenPGP)
+    /// rPGP handles it like a non-standardized proto-SEIPDv2, but only supports decryption.
+    ///
+    /// See <https://www.ietf.org/archive/id/draft-koch-librepgp-03.html#name-ocb-encrypted-data-packet-t>
+    LibreOcb = 20,
     /// Padding Packet
     Padding = 21,
 
@@ -161,6 +166,7 @@ impl Tag {
             Self::UserAttribute => 17,
             Self::SymEncryptedProtectedData => 18,
             Self::ModDetectionCode => 19,
+            Self::LibreOcb => 20,
             Self::Padding => 21,
             Self::Other(i) => i,
         };
@@ -328,6 +334,7 @@ pub enum PkeskVersion {
 #[repr(u8)]
 pub enum SkeskVersion {
     V4 = 4,
+    V5 = 5,
     V6 = 6,
 
     #[num_enum(catch_all)]

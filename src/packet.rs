@@ -73,6 +73,7 @@ mod single;
 
 mod compressed_data;
 mod key;
+mod libre_ocb;
 mod literal_data;
 mod marker;
 mod mod_detection_code;
@@ -94,6 +95,7 @@ pub use self::{
     compressed_data::*,
     header::{NewPacketHeader, OldPacketHeader, PacketHeader},
     key::*,
+    libre_ocb::LibreOcbData,
     literal_data::*,
     many::*,
     marker::*,

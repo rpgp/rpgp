@@ -56,7 +56,7 @@ pub(super) fn next(
                             esks.push(esk);
                             packets = crate::packet::PacketParser::new(packet.into_inner());
                         }
-                        Tag::SymEncryptedData | Tag::SymEncryptedProtectedData => {
+                        Tag::SymEncryptedData | Tag::SymEncryptedProtectedData | Tag::LibreOcb => {
                             let edata = Edata::try_from_reader(packet)?;
                             let esk = match edata {
                                 Edata::SymEncryptedData { .. } => {
@@ -67,13 +67,30 @@ pub(super) fn next(
                                         crate::packet::SymEncryptedProtectedDataConfig::V1 => {
                                             esk_filter(esks, PkeskVersion::V3, SkeskVersion::V4)
                                         }
+                                        crate::packet::SymEncryptedProtectedDataConfig::LibreOcb {
+                                            ..
+                                        } => bail!("not allowed here"),
                                         crate::packet::SymEncryptedProtectedDataConfig::V2 {
                                             ..
                                         } => esk_filter(esks, PkeskVersion::V6, SkeskVersion::V6),
                                     }
                                 }
+                                Edata::LibreOcbData { ref reader, .. } => {
+                                    match reader.config() {
+                                        crate::packet::SymEncryptedProtectedDataConfig::V1 | crate::packet::SymEncryptedProtectedDataConfig::V2 {
+                                            ..
+                                        } => {
+                                            bail!("not allowed here");
+                                        }
+                                        crate::packet::SymEncryptedProtectedDataConfig::LibreOcb {
+                                            ..
+                                        } => {
+                                            // FIXME: also allow v4 skesk
+                                            esk_filter(esks, PkeskVersion::V3, SkeskVersion::V5)
+                                        }
+                                    }
+                                }
                             };
-
                             return Ok(Some(Message::Encrypted {
                                 esk,
                                 edata,

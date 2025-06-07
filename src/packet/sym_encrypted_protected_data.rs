@@ -29,6 +29,12 @@ pub struct SymEncryptedProtectedData {
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum Config {
     V1,
+    LibreOcb {
+        sym_alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: ChunkSize,
+        iv: Vec<u8>,
+    },
     V2 {
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
@@ -64,6 +70,42 @@ impl Config {
                 version
             )),
         }
+    }
+
+    pub fn try_from_reader_libre_ocb<R: BufRead>(mut data: R) -> Result<Self> {
+        // A one-octet version number. The only currently defined value is 1.
+        let version = data.read_u8()?;
+        ensure_eq!(version, 0x01, "LibreOcb version {} is unsupported", version);
+
+        // A one-octet cipher algorithm.
+        let sym_alg = data.read_u8().map(SymmetricKeyAlgorithm::from)?;
+
+        // A one-octet encryption mode octet with the fixed value 0x02.
+        // If decryption using the EAX mode is supported this octet may have the value 0x01.
+        let aead = data.read_u8().map(AeadAlgorithm::from)?;
+        ensure_eq!(
+            aead,
+            AeadAlgorithm::Ocb,
+            "LibreOcb AEAD mode {:?} is unsupported",
+            aead
+        );
+
+        // A one-octet chunk size.
+        // (Note: LibreOcb chunk size is encoded in the same way as for SEIPDv2)
+        let chunk_size = data
+            .read_u8()?
+            .try_into()
+            .map_err(|_| InvalidInputSnafu.build())?;
+
+        // A starting initialization vector of size specified by the encryption mode (15 octets for OCB).
+        let iv = data.read_array::<15>()?; // OCB iv size
+
+        Ok(Self::LibreOcb {
+            sym_alg,
+            aead,
+            chunk_size,
+            iv: iv.into(),
+        })
     }
 }
 
@@ -168,13 +210,6 @@ impl SymEncryptedProtectedData {
         &self.data
     }
 
-    pub fn version(&self) -> usize {
-        match self.config {
-            Config::V1 => 1,
-            Config::V2 { .. } => 2,
-        }
-    }
-
     /// Returns the configuration for this packet.
     pub fn config(&self) -> &Config {
         &self.config
@@ -194,6 +229,7 @@ impl SymEncryptedProtectedData {
                 decryptor.read_to_end(&mut out)?;
                 Ok(out)
             }
+            Config::LibreOcb { .. } => unimplemented!(),
             Config::V2 {
                 sym_alg,
                 aead,
@@ -229,6 +265,7 @@ impl Serialize for Config {
             Config::V1 => {
                 writer.write_u8(0x01)?;
             }
+            Config::LibreOcb { .. } => unimplemented!(),
             Config::V2 {
                 sym_alg,
                 aead,
@@ -248,6 +285,7 @@ impl Serialize for Config {
     fn write_len(&self) -> usize {
         match self {
             Config::V1 => 1,
+            Config::LibreOcb { .. } => unimplemented!(),
             Config::V2 { salt, .. } => {
                 let mut sum = 1 + 1 + 1 + 1;
                 sum += salt.len();
@@ -280,6 +318,7 @@ impl PacketTrait for SymEncryptedProtectedData {
 #[allow(clippy::large_enum_variant)]
 pub enum StreamDecryptor<R: BufRead> {
     V1(crate::crypto::sym::StreamDecryptor<R>),
+    LibreOcb(crate::crypto::libre_ocb::StreamDecryptor<R>),
     V2(crate::crypto::aead::StreamDecryptor<R>),
 }
 
@@ -287,6 +326,7 @@ impl<R: BufRead> BufRead for StreamDecryptor<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         match self {
             Self::V1(r) => r.fill_buf(),
+            Self::LibreOcb(r) => r.fill_buf(),
             Self::V2(r) => r.fill_buf(),
         }
     }
@@ -294,6 +334,7 @@ impl<R: BufRead> BufRead for StreamDecryptor<R> {
     fn consume(&mut self, amt: usize) {
         match self {
             Self::V1(r) => r.consume(amt),
+            Self::LibreOcb(r) => r.consume(amt),
             Self::V2(r) => r.consume(amt),
         }
     }
@@ -303,6 +344,7 @@ impl<R: BufRead> Read for StreamDecryptor<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::V1(r) => r.read(buf),
+            Self::LibreOcb(r) => r.read(buf),
             Self::V2(r) => r.read(buf),
         }
     }
@@ -312,6 +354,20 @@ impl<R: BufRead> StreamDecryptor<R> {
     pub fn v1(sym_alg: SymmetricKeyAlgorithm, key: &[u8], source: R) -> Result<Self> {
         let decryptor = sym_alg.stream_decryptor_protected(key, source)?;
         Ok(Self::V1(decryptor))
+    }
+
+    pub fn libre_ocb(
+        sym_alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: ChunkSize,
+        key: &[u8],
+        iv: &[u8],
+        source: R,
+    ) -> Result<Self> {
+        let decryptor = crate::crypto::libre_ocb::StreamDecryptor::new(
+            sym_alg, aead, chunk_size, key, iv, source,
+        )?;
+        Ok(Self::LibreOcb(decryptor))
     }
 
     pub fn v2(
@@ -331,6 +387,7 @@ impl<R: BufRead> StreamDecryptor<R> {
     pub fn into_inner(self) -> R {
         match self {
             Self::V1(r) => r.into_inner(),
+            Self::LibreOcb(r) => r.into_inner(),
             Self::V2(r) => r.into_inner(),
         }
     }
@@ -338,6 +395,7 @@ impl<R: BufRead> StreamDecryptor<R> {
     pub fn get_ref(&self) -> &R {
         match self {
             Self::V1(r) => r.get_ref(),
+            Self::LibreOcb(r) => r.get_ref(),
             Self::V2(r) => r.get_ref(),
         }
     }
@@ -345,6 +403,7 @@ impl<R: BufRead> StreamDecryptor<R> {
     pub fn get_mut(&mut self) -> &mut R {
         match self {
             Self::V1(r) => r.get_mut(),
+            Self::LibreOcb(r) => r.get_mut(),
             Self::V2(r) => r.get_mut(),
         }
     }

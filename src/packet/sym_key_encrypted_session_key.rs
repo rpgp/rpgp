@@ -153,7 +153,7 @@ impl SymKeyEncryptedSessionKey {
     pub fn version(&self) -> SkeskVersion {
         match self {
             Self::V4 { .. } => SkeskVersion::V4,
-            Self::V5 { .. } => SkeskVersion::Other(5),
+            Self::V5 { .. } => SkeskVersion::V5,
             Self::V6 { .. } => SkeskVersion::V6,
             Self::Other { version, .. } => SkeskVersion::Other(*version),
         }
@@ -198,8 +198,7 @@ impl SymKeyEncryptedSessionKey {
             } => {
                 // Initial key material is the s2k derived key.
                 let ikm = key;
-                // No salt is used
-                let salt = None;
+
                 let alg = AeadAlgorithm::from(aead);
 
                 let info = [
@@ -209,12 +208,8 @@ impl SymKeyEncryptedSessionKey {
                     alg.into(),
                 ];
 
-                let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
-                let mut okm = [0u8; 42];
-                hk.expand(&info, &mut okm).expect("42");
-
                 // AEAD decrypt
-                alg.decrypt_in_place(sym_algorithm, &okm, aead.iv(), &info, &mut decrypted_key)?;
+                alg.decrypt_in_place(sym_algorithm, ikm, aead.iv(), &info, &mut decrypted_key)?;
 
                 Ok(PlainSessionKey::V5 {
                     key: decrypted_key.into(),
@@ -411,15 +406,31 @@ fn parse_v5<B: BufRead>(
     packet_header: PacketHeader,
     mut i: B,
 ) -> Result<SymKeyEncryptedSessionKey> {
-    let _count = i.read_u8()?;
+    // A version 5 Symmetric-Key Encrypted Session Key packet consists of:
+    // A one-octet version number with value 5. (parsed before this fn is called)
+
+    // A one-octet cipher algorithm.
     let sym_alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
-    let aead = i.read_u8().map(AeadAlgorithm::from)?;
-    let s2k_len = i.read_u8()?;
-    let s2k_data = i.read_take(s2k_len.into());
-    let s2k = StringToKey::try_from_reader(s2k_data)?;
+
+    // A one-octet encryption mode number which MUST be 2 to indicate OCB.
+    let mode = i.read_u8()?;
+
+    // we only support OCB mode (it's unclear if 1 (EAX) was every produced)
+    ensure_eq!(mode, 2, "Unsupported mode {}", mode);
+    let aead = AeadAlgorithm::Ocb;
+
+    // A string-to-key (S2K) specifier, length as defined above.
+    let s2k = StringToKey::try_from_reader(&mut i)?;
+
+    // A starting initialization vector of size specified by the mode.
     let iv = i.take_bytes(aead.iv_size())?;
+
+    // An authentication tag for the encryption mode.
     let aead_tag_size = aead.tag_size().unwrap_or_default();
-    let esk = i.rest()?;
+
+    // The encrypted session key itself, which is decrypted with the string-to-key object using
+    // the given cipher and encryption mode.
+    let esk = i.take_bytes(sym_alg.key_size() + aead_tag_size)?; // TODO: is this always the right length?
 
     if esk.len() < aead_tag_size {
         return Err(InvalidInputSnafu.build());
@@ -508,18 +519,13 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 encrypted_key,
             } => {
                 writer.write_u8(0x05)?;
-                let s2k_len = s2k.write_len();
-                let first_len = 1 + 1 + 1 + s2k_len + aead.iv().len();
-
-                // length
-                writer.write_u8(first_len.try_into()?)?;
 
                 writer.write_u8((*sym_algorithm).into())?;
                 writer.write_u8(AeadAlgorithm::from(aead).into())?;
-                writer.write_u8(s2k_len.try_into()?)?;
-                s2k.to_writer(writer)?;
-                writer.write_all(aead.iv())?;
 
+                s2k.to_writer(writer)?;
+
+                writer.write_all(aead.iv())?;
                 writer.write_all(encrypted_key)?;
             }
             SymKeyEncryptedSessionKey::V6 {
@@ -569,18 +575,16 @@ impl Serialize for SymKeyEncryptedSessionKey {
             }
             SymKeyEncryptedSessionKey::V5 {
                 s2k,
-                encrypted_key,
                 aead,
+                encrypted_key,
                 ..
             } => {
-                sum += 1;
-                sum += 1 + 1;
+                sum += 1; // version
+                sum += 1 + 1; // sym, aead
 
                 sum += s2k.write_len();
-                sum += 1;
-                sum += aead.iv().len();
 
-                sum += 1;
+                sum += aead.iv().len();
                 sum += encrypted_key.len();
             }
             SymKeyEncryptedSessionKey::V6 {

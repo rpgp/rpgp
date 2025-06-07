@@ -315,6 +315,20 @@ impl<'a> Message<'a> {
                         },
                     )
                 }
+                Edata::LibreOcbData { reader } => {
+                    assert!(reader.is_done());
+                    let packet_header = reader.packet_header();
+                    let config = Some(reader.config().clone());
+                    (
+                        reader.into_inner().into_inner(),
+                        MessageParts::Encrypted {
+                            packet_header,
+                            esk,
+                            config,
+                            is_nested,
+                        },
+                    )
+                }
             },
         }
     }
@@ -493,6 +507,9 @@ pub enum Edata<'a> {
     SymEncryptedProtectedData {
         reader: SymEncryptedProtectedDataReader<MessageReader<'a>>,
     },
+    LibreOcbData {
+        reader: SymEncryptedProtectedDataReader<MessageReader<'a>>,
+    },
 }
 
 impl<'a> Edata<'a> {
@@ -501,6 +518,15 @@ impl<'a> Edata<'a> {
             Tag::SymEncryptedData => {
                 let reader = SymEncryptedDataReader::new(reader)?;
                 Ok(Self::SymEncryptedData { reader })
+            }
+            Tag::LibreOcb => {
+                // We're reusing the SEIPD infrastructure for the "Ocb" packet type,
+                // even though it's a separate packet type in the wire format.
+                //
+                // It's not a standardized OpenPGP format, but it's a bit like a proto SEIPDv2,
+                // with some missing bits.
+                let reader = SymEncryptedProtectedDataReader::new_libre_ocb(reader)?;
+                Ok(Self::LibreOcbData { reader })
             }
             Tag::SymEncryptedProtectedData => {
                 let reader = SymEncryptedProtectedDataReader::new(reader)?;
@@ -516,6 +542,7 @@ impl BufRead for Edata<'_> {
         match self {
             Self::SymEncryptedData { reader } => reader.fill_buf(),
             Self::SymEncryptedProtectedData { reader } => reader.fill_buf(),
+            Self::LibreOcbData { reader } => reader.fill_buf(),
         }
     }
 
@@ -523,6 +550,7 @@ impl BufRead for Edata<'_> {
         match self {
             Self::SymEncryptedData { reader } => reader.consume(amt),
             Self::SymEncryptedProtectedData { reader } => reader.consume(amt),
+            Self::LibreOcbData { reader } => reader.consume(amt),
         }
     }
 }
@@ -532,6 +560,7 @@ impl Read for Edata<'_> {
         match self {
             Self::SymEncryptedData { reader } => reader.read(buf),
             Self::SymEncryptedProtectedData { reader } => reader.read(buf),
+            Self::LibreOcbData { reader } => reader.read(buf),
         }
     }
 }
@@ -541,6 +570,7 @@ impl<'a> Edata<'a> {
         match self {
             Self::SymEncryptedData { reader } => reader.packet_header(),
             Self::SymEncryptedProtectedData { reader } => reader.packet_header(),
+            Self::LibreOcbData { reader } => reader.packet_header(),
         }
     }
 
@@ -552,6 +582,7 @@ impl<'a> Edata<'a> {
         match self {
             Self::SymEncryptedData { reader } => reader.get_mut(),
             Self::SymEncryptedProtectedData { reader } => reader.get_mut(),
+            Self::LibreOcbData { reader } => reader.get_mut(),
         }
     }
 
@@ -568,6 +599,9 @@ impl<'a> Edata<'a> {
             Self::SymEncryptedData { .. } => {
                 // SED packets are malleable, decrypting them should only be necessary for historical data
                 bail!("Decryption of SymEncryptedData is discouraged")
+            }
+            Self::LibreOcbData { reader } => {
+                reader.decrypt(key)?;
             }
         }
 
@@ -587,6 +621,9 @@ impl<'a> Edata<'a> {
                 reader.decrypt(key)?;
             }
             Self::SymEncryptedData { reader } => {
+                reader.decrypt(key)?;
+            }
+            Self::LibreOcbData { reader } => {
                 reader.decrypt(key)?;
             }
         }
@@ -952,6 +989,7 @@ impl<'a> Message<'a> {
             Self::Encrypted { edata, .. } => match edata {
                 Edata::SymEncryptedData { reader } => reader.into_inner(),
                 Edata::SymEncryptedProtectedData { reader } => reader.into_inner(),
+                Edata::LibreOcbData { reader } => reader.into_inner(),
             },
         }
     }
@@ -965,6 +1003,7 @@ impl<'a> Message<'a> {
             Self::Encrypted { edata, .. } => match edata {
                 Edata::SymEncryptedData { reader } => reader.get_mut(),
                 Edata::SymEncryptedProtectedData { reader } => reader.get_mut(),
+                Edata::LibreOcbData { reader } => reader.get_mut(),
             },
         }
     }
