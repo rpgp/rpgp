@@ -10,11 +10,18 @@ use crate::{
         sym::SymmetricKeyAlgorithm,
     },
     errors::{ensure_eq, format_err, InvalidInputSnafu, Result},
-    packet::{PacketHeader, PacketTrait},
+    packet::{PacketHeader, PacketTrait, SymEncryptedProtectedDataConfig},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::Tag,
 };
+
+/// Either a standard OpenPGP SEIPD config or a Gnupg-specific AEAD config
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
+pub enum ProtectedDataConfig {
+    Seipd(SymEncryptedProtectedDataConfig),
+    GnupgAead(crate::packet::gnupg_aead::Config),
+}
 
 /// Symmetrically Encrypted Integrity Protected Data Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetrically-encrypted-and>
@@ -280,6 +287,7 @@ impl PacketTrait for SymEncryptedProtectedData {
 #[allow(clippy::large_enum_variant)]
 pub enum StreamDecryptor<R: BufRead> {
     V1(crate::crypto::sym::StreamDecryptor<R>),
+    GnupgAead(crate::crypto::gnupg_aead::StreamDecryptor<R>),
     V2(crate::crypto::aead::StreamDecryptor<R>),
 }
 
@@ -287,6 +295,7 @@ impl<R: BufRead> BufRead for StreamDecryptor<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         match self {
             Self::V1(r) => r.fill_buf(),
+            Self::GnupgAead(r) => r.fill_buf(),
             Self::V2(r) => r.fill_buf(),
         }
     }
@@ -294,6 +303,7 @@ impl<R: BufRead> BufRead for StreamDecryptor<R> {
     fn consume(&mut self, amt: usize) {
         match self {
             Self::V1(r) => r.consume(amt),
+            Self::GnupgAead(r) => r.consume(amt),
             Self::V2(r) => r.consume(amt),
         }
     }
@@ -303,6 +313,7 @@ impl<R: BufRead> Read for StreamDecryptor<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::V1(r) => r.read(buf),
+            Self::GnupgAead(r) => r.read(buf),
             Self::V2(r) => r.read(buf),
         }
     }
@@ -312,6 +323,20 @@ impl<R: BufRead> StreamDecryptor<R> {
     pub fn v1(sym_alg: SymmetricKeyAlgorithm, key: &[u8], source: R) -> Result<Self> {
         let decryptor = sym_alg.stream_decryptor_protected(key, source)?;
         Ok(Self::V1(decryptor))
+    }
+
+    pub fn gnupg_aead(
+        sym_alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: ChunkSize,
+        key: &[u8],
+        iv: &[u8],
+        source: R,
+    ) -> Result<Self> {
+        let decryptor = crate::crypto::gnupg_aead::StreamDecryptor::new(
+            sym_alg, aead, chunk_size, key, iv, source,
+        )?;
+        Ok(Self::GnupgAead(decryptor))
     }
 
     pub fn v2(
@@ -331,6 +356,7 @@ impl<R: BufRead> StreamDecryptor<R> {
     pub fn into_inner(self) -> R {
         match self {
             Self::V1(r) => r.into_inner(),
+            Self::GnupgAead(r) => r.into_inner(),
             Self::V2(r) => r.into_inner(),
         }
     }
@@ -338,6 +364,7 @@ impl<R: BufRead> StreamDecryptor<R> {
     pub fn get_ref(&self) -> &R {
         match self {
             Self::V1(r) => r.get_ref(),
+            Self::GnupgAead(r) => r.get_ref(),
             Self::V2(r) => r.get_ref(),
         }
     }
@@ -345,6 +372,7 @@ impl<R: BufRead> StreamDecryptor<R> {
     pub fn get_mut(&mut self) -> &mut R {
         match self {
             Self::V1(r) => r.get_mut(),
+            Self::GnupgAead(r) => r.get_mut(),
             Self::V2(r) => r.get_mut(),
         }
     }

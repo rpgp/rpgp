@@ -6,7 +6,7 @@
 use std::io::BufReader;
 
 use pgp::{
-    composed::PlainSessionKey,
+    composed::{Deserializable, Message, PlainSessionKey, SignedSecretKey},
     crypto::{hash::HashAlgorithm::Sha256, sym::SymmetricKeyAlgorithm},
     packet::{AeadProps, Packet, PacketParser},
     ser::Serialize,
@@ -98,7 +98,7 @@ fn libre_v5_skesk() {
 
     // -- try decrypt
     let pw = Password::from("password");
-    let sk = pgp::composed::decrypt_session_key_with_password(&skesk, &pw).expect("decrypt");
+    let sk = pgp::composed::decrypt_session_key_with_password(skesk, &pw).expect("decrypt");
     let PlainSessionKey::V5 { key } = &sk else {
         panic!("unexpected plain session key version");
     };
@@ -111,4 +111,71 @@ fn libre_v5_skesk() {
             0xae, 0x44
         ]
     );
+}
+
+#[test]
+fn libre_ocb_message() {
+    const PLAIN: &str = "Hello, world!\n";
+
+    let mut message = vec![];
+    message.extend_from_slice(&decode(SKESK5).expect("hex"));
+    message.extend_from_slice(&decode(OCB).expect("hex"));
+
+    let msg = Message::from_bytes(BufReader::new(&*message)).expect("message from bytes");
+
+    eprintln!("msg {:#?}", msg);
+
+    let pw = Password::from("password");
+    let mut dec = msg.decrypt_with_password(&pw).expect("decrypt");
+
+    let plain = dec.as_data_vec().expect("data");
+
+    assert_eq!(&plain, &PLAIN.as_bytes());
+}
+
+#[test]
+/// Decrypt a very short OCB-encrypted message that was produced by GnuPG 2.4.7
+///
+/// This test data was produced by `gpg -e -a --force-ocb <plaintext-file>`
+fn libre_ocb_msg_to_bob() {
+    let (skey, _headers) = SignedSecretKey::from_armor_single(
+        std::fs::File::open("./tests/draft-bre-openpgp-samples-00/bob.sec.asc").unwrap(),
+    )
+    .unwrap();
+
+    let (msg, _) = Message::from_armor_file("./tests/libre/msg_to_bob.asc").expect("msg");
+
+    eprintln!("msg {:#?}", msg);
+
+    let dec = msg.decrypt(&Password::empty(), &skey).expect("decrypt");
+    let mut plain = dec.decompress().expect("decompress");
+
+    eprintln!("dec {:#?}", plain);
+
+    let decrypted = plain.as_data_string().unwrap();
+    assert_eq!(&decrypted, "foo\n");
+}
+
+#[test]
+/// Decrypt a slightly longer OCB-encrypted message, with a small chunk size,
+/// that was produced by GnuPG 2.4.7
+///
+/// The plaintext is 300 bytes of /dev/random, the message was encrypted using
+/// `gpg --force-ocb --chunk-size 6 -e -a <plaintext>`.
+///
+/// The OCB packet has a chunk size of 64 bytes.
+fn libre_ocb_msg_to_bob_multi_chunk() {
+    let (skey, _headers) = SignedSecretKey::from_armor_single(
+        std::fs::File::open("./tests/draft-bre-openpgp-samples-00/bob.sec.asc").unwrap(),
+    )
+    .unwrap();
+
+    let (msg, _) =
+        Message::from_armor_file("./tests/libre/msg_to_bob_multi_chunk.asc").expect("msg");
+
+    let dec = msg.decrypt(&Password::empty(), &skey).expect("decrypt");
+    let mut plain = dec.decompress().expect("decompress");
+
+    let decrypted = plain.as_data_vec().unwrap();
+    assert_eq!(decrypted.len(), 300);
 }

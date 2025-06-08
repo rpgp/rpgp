@@ -131,6 +131,14 @@ pub enum Tag {
     SymEncryptedProtectedData = 18,
     /// Modification Detection Code Packet
     ModDetectionCode = 19,
+    /// "OCB Encrypted Data Packet", a GnuPG proprietary AEAD encryption container format
+    /// (not standardized in OpenPGP).
+    ///
+    /// rPGP only supports decryption, for users who have inadvertently ended up with such data.
+    ///
+    /// This format was initially outlined in RFC 4880-bis, but superseded by SEIPDv2 in RFC 9580.
+    /// See <https://www.ietf.org/archive/id/draft-koch-librepgp-03.html#name-ocb-encrypted-data-packet-t>
+    GnupgAead = 20,
     /// Padding Packet
     Padding = 21,
 
@@ -161,6 +169,7 @@ impl Tag {
             Self::UserAttribute => 17,
             Self::SymEncryptedProtectedData => 18,
             Self::ModDetectionCode => 19,
+            Self::GnupgAead => 20,
             Self::Padding => 21,
             Self::Other(i) => i,
         };
