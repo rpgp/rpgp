@@ -10,7 +10,7 @@ use nom::{
     combinator::{complete, map, map_res, opt, success, value},
     multi::many0,
     sequence::{delimited, pair, preceded, terminated},
-    AsChar, IResult, InputTakeAtPosition,
+    AsChar, IResult, Input, Parser,
 };
 
 use crate::{
@@ -106,7 +106,7 @@ pub type Headers = BTreeMap<String, Vec<String>>;
 
 /// Parses a single ascii armor header separator.
 fn armor_header_sep(i: &[u8]) -> IResult<&[u8], &[u8]> {
-    tag(b"-----")(i)
+    tag(&b"-----"[..])(i)
 }
 
 #[inline]
@@ -175,16 +175,18 @@ fn armor_header_type(i: &[u8]) -> IResult<&[u8], BlockType> {
         value(BlockType::PrivateKeyPKCS8, tag("PRIVATE KEY")),
         // OpenSSH Private Key File
         value(BlockType::PrivateKeyOpenssh, tag("OPENSSH PRIVATE KEY")),
-    ))(i)
+    ))
+    .parse(i)
 }
 
 /// Parses a single armor header line.
 fn armor_header_line(i: &[u8]) -> IResult<&[u8], BlockType> {
     delimited(
-        pair(armor_header_sep, tag(b"BEGIN ")),
+        pair(armor_header_sep, tag(&b"BEGIN "[..])),
         armor_header_type,
         pair(armor_header_sep, line_ending),
-    )(i)
+    )
+    .parse(i)
 }
 
 /// Parses a single key value pair, for the header.
@@ -196,14 +198,15 @@ fn key_value_pair(i: &[u8]) -> IResult<&[u8], (&str, &str)> {
             complete(take_until1(": ")),
         )),
         str::from_utf8,
-    )(i)?;
+    )
+    .parse(i)?;
 
     // consume the ":"
     let (i, _) = tag(":")(i)?;
-    let (i, t) = alt((tag(" "), line_ending))(i)?;
+    let (i, t) = alt((tag(" "), line_ending)).parse(i)?;
 
     let (i, value) = if t == b" " {
-        let (i, value) = map_res(not_line_ending, str::from_utf8)(i)?;
+        let (i, value) = map_res(not_line_ending, str::from_utf8).parse(i)?;
         let (i, _) = line_ending(i)?;
         (i, value)
     } else {
@@ -216,7 +219,7 @@ fn key_value_pair(i: &[u8]) -> IResult<&[u8], (&str, &str)> {
 
 /// Parses a list of key value pairs.
 fn key_value_pairs(i: &[u8]) -> IResult<&[u8], Vec<(&str, &str)>> {
-    many0(complete(key_value_pair))(i)
+    many0(complete(key_value_pair)).parse(i)
 }
 
 /// Parses the full armor header.
@@ -229,7 +232,8 @@ fn armor_headers(i: &[u8]) -> IResult<&[u8], Headers> {
             e.push(v.to_string());
         }
         out
-    })(i)
+    })
+    .parse(i)
 }
 
 /// Armor Header
@@ -244,7 +248,7 @@ fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
 }
 
 fn armor_headers_hash(i: &[u8]) -> IResult<&[u8], Headers> {
-    let (i, headers) = many0(complete(hash_header_line))(i)?;
+    let (i, headers) = many0(complete(hash_header_line)).parse(i)?;
 
     let mut res = BTreeMap::new();
     let headers = headers.into_iter().flatten().collect();
@@ -255,8 +259,8 @@ fn armor_headers_hash(i: &[u8]) -> IResult<&[u8], Headers> {
 
 pub fn alphanumeric1_or_dash<T, E: nom::error::ParseError<T>>(input: T) -> IResult<T, T, E>
 where
-    T: InputTakeAtPosition,
-    <T as InputTakeAtPosition>::Item: AsChar,
+    T: Input,
+    <T as Input>::Item: AsChar,
 {
     input.split_at_position1(
         |item| {
@@ -272,14 +276,16 @@ fn hash_header_line(i: &[u8]) -> IResult<&[u8], Vec<String>> {
     let (i, _) = tag("Hash: ")(i)?;
     let (i, mut values) = many0(map_res(terminated(alphanumeric1_or_dash, tag(",")), |s| {
         str::from_utf8(s).map(|s| s.to_string())
-    }))(i)?;
+    }))
+    .parse(i)?;
 
     let (i, last_value) = terminated(
         map_res(alphanumeric1_or_dash, |s| {
             str::from_utf8(s).map(|s| s.to_string())
         }),
         line_ending,
-    )(i)?;
+    )
+    .parse(i)?;
     values.push(last_value);
 
     Ok((i, values))
@@ -312,7 +318,7 @@ pub fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, Headers, bool)> {
     let (i, (typ, headers)) = armor_header(i)?;
 
     // "A blank (zero length or containing only whitespace) line"
-    let (i, _) = pair(space0, line_ending)(i)?;
+    let (i, _) = pair(space0, line_ending).parse(i)?;
 
     Ok((i, (typ, headers, has_leading_data)))
 }
@@ -321,18 +327,19 @@ fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<u64>, BlockType)> {
     let (i, checksum) = map_res(
         alt((
             delimited(
-                tag(b"="),
+                tag(&b"="[..]),
                 map(take(4u8), Some),
-                pair(many0(line_ending), tag(b"--")),
+                pair(many0(line_ending), tag(&b"--"[..])),
             ),
             delimited(
-                many0(tag(b"=")),
+                many0(tag(&b"="[..])),
                 success(None),
-                pair(many0(line_ending), tag(b"--")),
+                pair(many0(line_ending), tag(&b"--"[..])),
             ),
         )),
         |c| c.map(read_checksum).transpose(),
-    )(i)?;
+    )
+    .parse(i)?;
     let (i, typ) = armor_footer_line(i)?;
 
     Ok((i, (checksum, typ)))
@@ -342,10 +349,11 @@ fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<u64>, BlockType)> {
 fn armor_footer_line(i: &[u8]) -> IResult<&[u8], BlockType> {
     // Only 3, because we parsed two already in the `footer_parser`.
     delimited(
-        tag(b"---END "),
+        tag(&b"---END "[..]),
         armor_header_type,
         pair(armor_header_sep, opt(complete(line_ending))),
-    )(i)
+    )
+    .parse(i)
 }
 
 /// Streaming based ascii armor parsing.

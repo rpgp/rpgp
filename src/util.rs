@@ -3,7 +3,7 @@
 use std::{hash, io};
 
 use digest::DynDigest;
-use nom::InputIter;
+use nom::Input;
 
 pub(crate) fn fill_buffer<R: std::io::Read>(
     mut source: R,
