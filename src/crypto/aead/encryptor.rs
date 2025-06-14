@@ -3,10 +3,10 @@ use std::io;
 use bytes::{Buf, BytesMut};
 use zeroize::Zeroizing;
 
-use super::{ChunkSize, InvalidSessionKeySnafu};
+use super::{aead_setup_rfc9580, ChunkSize, InvalidSessionKeySnafu};
 use crate::{
     crypto::{
-        aead::{aead_setup, AeadAlgorithm, Error},
+        aead::{AeadAlgorithm, Error},
         sym::SymmetricKeyAlgorithm,
     },
     util::fill_buffer,
@@ -47,7 +47,7 @@ impl<R: io::Read> StreamEncryptor<R> {
         }
 
         let (info, message_key, nonce) =
-            aead_setup(sym_alg, aead, chunk_size, &salt[..], session_key);
+            aead_setup_rfc9580(sym_alg, aead, chunk_size, &salt[..], session_key);
         let chunk_size_expanded: usize = chunk_size
             .as_byte_size()
             .try_into()

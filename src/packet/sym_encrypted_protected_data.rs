@@ -287,7 +287,7 @@ impl PacketTrait for SymEncryptedProtectedData {
 #[allow(clippy::large_enum_variant)]
 pub enum StreamDecryptor<R: BufRead> {
     V1(crate::crypto::sym::StreamDecryptor<R>),
-    GnupgAead(crate::crypto::gnupg_aead::StreamDecryptor<R>),
+    GnupgAead(crate::crypto::aead::StreamDecryptor<R>),
     V2(crate::crypto::aead::StreamDecryptor<R>),
 }
 
@@ -333,7 +333,7 @@ impl<R: BufRead> StreamDecryptor<R> {
         iv: &[u8],
         source: R,
     ) -> Result<Self> {
-        let decryptor = crate::crypto::gnupg_aead::StreamDecryptor::new(
+        let decryptor = crate::crypto::aead::StreamDecryptor::new_gnupg(
             sym_alg, aead, chunk_size, key, iv, source,
         )?;
         Ok(Self::GnupgAead(decryptor))
@@ -347,7 +347,7 @@ impl<R: BufRead> StreamDecryptor<R> {
         key: &[u8],
         source: R,
     ) -> Result<Self> {
-        let decryptor = crate::crypto::aead::StreamDecryptor::new(
+        let decryptor = crate::crypto::aead::StreamDecryptor::new_rfc9580(
             sym_alg, aead, chunk_size, salt, key, source,
         )?;
         Ok(Self::V2(decryptor))
