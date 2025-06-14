@@ -47,62 +47,56 @@ flate2 = { version = "1.1.1", default-features = false, features = ["zlib-rs"] }
 bzip2 = { version = "0.5.2", default-features = false, features = ["libbz2-rs-sys"], optional = true }
 
 # Crypto
-aes = "0.8.4"
-aead = { version = "0.5", features = ["bytes"] }
-argon2 = { version = "0.5", features = ["zeroize", "std"] }
-block-padding = "0.3"
-blowfish = "0.9"
-camellia = "0.1"
-cast5 = "0.11"
-cfb-mode = "0.8.2"
-cipher = "0.4.2"
-const-oid = "0.9.6"
+aes = "0.9.0-rc.0"
+aead = { version = "0.6.0-rc.0", features = ["bytes"] }
+argon2 = { version = "0.6.0-rc.0", features = ["alloc", "zeroize"] }
+block-padding = "0.4.0-rc.3"
+blowfish = "0.10.0-rc.0"
+camellia = "=0.2.0-pre"
+cast5 = "=0.12.0-pre"
+cfb-mode = "0.9.0-rc.0"
+cipher = "0.5.0-rc.0"
+const-oid = "0.10"
 crc24 = "0.1.6"
 curve25519-dalek = { version = "4.1.3", default-features = false, features = [
     "alloc",
     "precomputed-tables",
     "zeroize",
 ] }
-des = "0.8"
-digest = "0.10.7"
-dsa = "0.6.3"
-ecdsa = "0.16.9"
-ed25519-dalek = { version = "2.1.1", default-features = false, features = ["std", "zeroize", "fast", "rand_core"] }
-elliptic-curve = "0.13"
-generic-array = "0.14.6"
-idea = "0.5"
-md-5 = { version = "0.10.5", features = ["oid"] }
+des = "0.9.0-rc.0"
+digest = "0.11.0-rc.0"
+dsa = { version = "0.7.0-rc.0", features = [ "hazmat" ] }
+ecdsa = "0.17.0-rc.0"
+ed25519-dalek = { version = "=2.2.0-pre", default-features = false, features = ["alloc", "fast", "rand_core"] }
+elliptic-curve = "0.14.0-rc.3"
+hybrid-array = "0.3"
+idea = "=0.6.0-pre"
+md-5 = { version = "0.11.0-rc.0", features = ["oid"] }
 num_enum = ">=0.5.7, < 0.8"
 num-traits = "0.2.19"
-p256 = { version = "0.13", features = ["ecdsa", "ecdh"] }
-p384 = { version = "0.13", features = ["ecdsa"] }
-p521 = { version = "0.13", features = ["ecdsa", "ecdh"] }
-k256 = { version = "0.13", features = ["ecdsa"] }
-rand = "0.8.5"
-ripemd = { version = "0.1.3", features = ["oid"] }
-rsa = { version = "0.9.7" }
-sha1 = { version = "0.10.6", features = ["oid"] }
+p256 = { version = "=0.14.0-pre.5", features = ["ecdsa", "ecdh"] }
+p384 = { version = "=0.14.0-pre.5", features = ["ecdsa"] }
+p521 = { version = "=0.14.0-pre.5", features = ["ecdsa", "ecdh"] }
+k256 = { version = "=0.14.0-pre.5", features = ["ecdsa"] }
+rand = "0.9"
+ripemd = { version = "0.2.0-rc.0", features = ["oid"] }
+rsa = { version = "0.10.0-rc.0" }
+sha1 = { version = "0.11.0-rc.0", features = ["oid"] }
 sha1-asm = { version = "0.5.3", optional = true }
-sha1-checked = { version = "0.10", features = ["zeroize"] }
-sha2 = { version = "0.10.6", features = ["oid"] }
-sha3 = { version = "0.10.8", features = ["oid"] }
-signature = "2.2"
-twofish = "0.7"
+sha1-checked = { version = "=0.11.0-pre", features = ["zeroize"] }
+sha2 = { version = "0.11.0-rc.0", features = ["oid"] }
+sha3 = { version = "0.11.0-rc.0", features = ["oid"] }
+signature = "3.0.0-rc.1"
+twofish = "=0.8.0-pre"
 zeroize = { version = "1.8", features = ["zeroize_derive"] }
-getrandom = { version = "0.2", optional = true }
-hkdf = "0.12.4"
-aes-gcm = "0.10.3"
-eax = "0.5.0"
-ocb3 = "0.1"
-aes-kw = { version = "0.2.1", features = ["std"] }
-cx448 = { version = "0.1.1", features = ["zeroize"] }
-num-bigint = { version = "0.8.4", features = [
-    "rand",
-    "i128",
-    "u64_digit",
-    "prime",
-    "zeroize",
-], package = "num-bigint-dig" }
+getrandom = { version = "0.3", optional = true }
+hkdf = "0.13.0-rc.0"
+aes-gcm = "0.11.0-rc.0"
+eax = "=0.6.0-pre"
+ocb3 = "=0.2.0-pre"
+aes-kw = { version = "0.3.0-rc.0" }
+ed448-goldilocks = { version = "0.14.0-pre.0" }
+x448 = { version = "0.7.0-pre" }
 x25519-dalek = { version = "2.0.1", default-features = false, features = [
     "alloc",
     "precomputed-tables",
@@ -111,9 +105,9 @@ x25519-dalek = { version = "2.0.1", default-features = false, features = [
 ] }
 
 # PQC
-ml-kem = { version = "0.2.1", features = ["zeroize", "deterministic"], optional = true }
-ml-dsa = { version = "0.0.4", features = ["zeroize"], optional = true }
-slh-dsa = { version = "0.0.3", optional = true }
+ml-kem = { version = "=0.3.0-pre", features = ["zeroize", "deterministic"], optional = true }
+ml-dsa = { version = "=0.1.0-pre.2", features = ["zeroize"], optional = true }
+slh-dsa = { version = "=0.2.0-pre", optional = true }
 
 
 [dev-dependencies]
@@ -121,8 +115,8 @@ glob = "0.3"
 hex-literal = "0.4"
 pretty_assertions = "1"
 pretty_env_logger = "0.5"
-rand_chacha = "0.3"
-rand_xorshift = "0.3"
+rand_chacha = "0.9"
+rand_xorshift = "0.4"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.47"
 criterion = { version = "0.5", features = ["html_reports"] }
@@ -138,9 +132,9 @@ default = ["bzip2"]
 # Enables bzip2 support
 bzip2 = ["dep:bzip2"]
 # Enables assembly based optimizations
-asm = ["dep:sha1-asm", "sha1/asm", "sha2/asm", "md-5/asm"]
+asm = ["dep:sha1-asm"]
 # Allows building for wasm
-wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
+wasm = ["chrono/wasmbind", "getrandom"]
 
 # Enables implementation of draft-ietf-openpgp-pqc-10
 # This is unstable and can have breaking changes in patch releases.
@@ -154,3 +148,30 @@ debug = 2
 [[bench]]
 name = "benches_main"
 harness = false
+
+[patch.crates-io]
+kem = { git = "https://github.com/RustCrypto/traits.git" }
+
+x448 = { git = "https://github.com/baloo/elliptic-curves.git", branch = "baloo/x448-initial-import" }
+
+ed25519 = { git = "https://github.com/RustCrypto/signatures.git" }
+ml-dsa  = { git = "https://github.com/RustCrypto/signatures.git" }
+slh-dsa = { git = "https://github.com/RustCrypto/signatures.git" }
+
+aead-stream = { git = "https://github.com/RustCrypto/AEADs.git" }
+eax         = { git = "https://github.com/RustCrypto/AEADs.git" }
+ocb3        = { git = "https://github.com/RustCrypto/AEADs.git" }
+
+camellia = { git = "https://github.com/RustCrypto/block-ciphers.git" }
+cast5    = { git = "https://github.com/RustCrypto/block-ciphers.git" }
+idea     = { git = "https://github.com/RustCrypto/block-ciphers.git" }
+twofish  = { git = "https://github.com/RustCrypto/block-ciphers.git" }
+
+sha1-checked = { git = "https://github.com/RustCrypto/hashes.git" }
+
+block-padding = { git = "https://github.com/RustCrypto/utils.git" }
+
+curve25519-dalek = { git = "https://github.com/baloo/curve25519-dalek.git", branch = "baloo/msrv-1.85" }
+ed25519-dalek    = { git = "https://github.com/baloo/curve25519-dalek.git", branch = "baloo/msrv-1.85" }
+
+ml-kem = { git = "https://github.com/RustCrypto/KEMs.git" }

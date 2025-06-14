@@ -2,7 +2,7 @@ use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use zeroize::Zeroizing;
 
 use crate::{
@@ -158,8 +158,8 @@ impl PublicKeyEncryptedSessionKey {
     }
 
     /// Encrypts the given session key to `pkey` as a v3 pkesk.
-    pub fn from_session_key_v3<R: CryptoRng + Rng>(
-        rng: R,
+    pub fn from_session_key_v3<R: CryptoRng + RngCore + ?Sized>(
+        rng: &mut R,
         session_key: &[u8],
         alg: SymmetricKeyAlgorithm,
         pkey: &impl PublicKeyTrait,
@@ -184,8 +184,8 @@ impl PublicKeyEncryptedSessionKey {
     }
 
     /// Encrypts the given session key to `pkey` as a v6 pkesk.
-    pub fn from_session_key_v6<R: CryptoRng + Rng>(
-        rng: R,
+    pub fn from_session_key_v6<R: CryptoRng + RngCore + ?Sized>(
+        rng: &mut R,
         session_key: &[u8],
         pkey: &impl PublicKeyTrait,
     ) -> Result<Self> {

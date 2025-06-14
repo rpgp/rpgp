@@ -6,7 +6,7 @@ use crate::{errors::Result, parsing_reader::BufReadParsing, ser::Serialize};
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Ed448PublicParams {
     #[cfg_attr(test, proptest(strategy = "tests::ed448_pub_gen()"))]
-    pub key: cx448::VerifyingKey,
+    pub key: ed448_goldilocks::VerifyingKey,
 }
 
 impl Ed448PublicParams {
@@ -14,7 +14,7 @@ impl Ed448PublicParams {
     pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         // 57 bytes of public key
         let p = i.read_array::<57>()?;
-        let key = cx448::VerifyingKey::from_bytes(&p)?;
+        let key = ed448_goldilocks::VerifyingKey::from_bytes(&p)?;
         let params = Self { key };
 
         Ok(params)
@@ -39,8 +39,8 @@ mod tests {
     use super::*;
 
     proptest::prop_compose! {
-        pub fn ed448_pub_gen()(bytes: [u8; 57]) -> cx448::VerifyingKey {
-            let secret = cx448::SigningKey::from(cx448::SecretKey::clone_from_slice(&bytes));
+         pub fn ed448_pub_gen()(bytes: [u8; 57]) -> ed448_goldilocks::VerifyingKey {
+            let secret = ed448_goldilocks::SigningKey::from(ed448_goldilocks::ScalarBytes::try_from(&bytes[..]).expect("invariant violation"));
             secret.verifying_key()
         }
     }
