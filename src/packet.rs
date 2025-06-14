@@ -72,6 +72,7 @@ mod packet_sum;
 mod single;
 
 mod compressed_data;
+mod gnupg_aead;
 mod key;
 mod literal_data;
 mod marker;
@@ -92,6 +93,7 @@ mod secret_key_parser;
 
 pub use self::{
     compressed_data::*,
+    gnupg_aead::{Config as GnupgAeadConfig, GnupgAeadData},
     header::{NewPacketHeader, OldPacketHeader, PacketHeader},
     key::*,
     literal_data::*,
@@ -108,7 +110,8 @@ pub use self::{
     },
     sym_encrypted_data::*,
     sym_encrypted_protected_data::{
-        Config as SymEncryptedProtectedDataConfig, StreamDecryptor, SymEncryptedProtectedData,
+        Config as SymEncryptedProtectedDataConfig, ProtectedDataConfig, StreamDecryptor,
+        SymEncryptedProtectedData,
     },
     sym_key_encrypted_session_key::*,
     trust::*,
