@@ -32,10 +32,13 @@ pub struct StreamDecryptor<R: BufRead> {
     source: R,
     /// finished reading from source?
     is_source_done: bool,
-    #[debug("{}", hex::encode(in_buffer))]
-    in_buffer: BytesMut,
-    #[debug("{}", hex::encode(out_buffer))]
-    out_buffer: BytesMut,
+    /// main buffer
+    #[debug("{}", hex::encode(buffer))]
+    buffer: BytesMut,
+    /// end point of encrypted data in `buffer`
+    in_buffer_end: usize,
+    /// start point of decrypted data in `buffer`
+    out_buffer_start: usize,
 }
 
 impl<R: BufRead> StreamDecryptor<R> {
@@ -77,8 +80,9 @@ impl<R: BufRead> StreamDecryptor<R> {
             chunk_size_expanded,
             source,
             is_source_done: false,
-            in_buffer: BytesMut::with_capacity(2 * (chunk_size_expanded + AEAD_TAG_SIZE)),
-            out_buffer: BytesMut::with_capacity(2 * chunk_size_expanded),
+            buffer: BytesMut::with_capacity(2 * (chunk_size_expanded + AEAD_TAG_SIZE)),
+            in_buffer_end: 0,
+            out_buffer_start: 0,
         })
     }
 
@@ -97,8 +101,9 @@ impl<R: BufRead> StreamDecryptor<R> {
     fn decrypt(&mut self) -> io::Result<()> {
         let enc_chunk_size = self.chunk_size_expanded + AEAD_TAG_SIZE;
 
-        let end = enc_chunk_size.min(self.in_buffer.len());
-        let mut out = self.in_buffer.split_to(end);
+        let end = enc_chunk_size.min(self.buffer.len() - self.out_buffer_remaining());
+        let mut out = self.buffer.split_to(end);
+        self.in_buffer_end -= out.len();
 
         self.aead
             .decrypt_in_place(
@@ -111,7 +116,7 @@ impl<R: BufRead> StreamDecryptor<R> {
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
         self.written += out.len() as u64;
 
-        self.out_buffer.extend(out);
+        self.buffer.unsplit(out);
 
         // Update nonce to include the next chunk index
         self.chunk_index += 1;
@@ -123,16 +128,19 @@ impl<R: BufRead> StreamDecryptor<R> {
 
     /// Decrypt the final chunk of data
     pub fn decrypt_last(&mut self) -> io::Result<()> {
+        // all pending data has been read before
+        debug_assert_eq!(self.out_buffer_start, 0, "out start: should be 0");
+
         debug_assert!(
-            self.in_buffer.len() >= AEAD_TAG_SIZE,
+            self.buffer.len() >= AEAD_TAG_SIZE,
             "last chunk size mismatch"
         );
 
-        let mut final_auth_tag = self
-            .in_buffer
-            .split_off(self.in_buffer.len() - AEAD_TAG_SIZE);
+        let mut final_auth_tag = self.buffer.split_off(self.buffer.len() - AEAD_TAG_SIZE);
+        self.in_buffer_end -= final_auth_tag.len();
 
-        while !self.in_buffer.is_empty() {
+        // decrypt any remaining data, not part of the final auth tag
+        while self.in_buffer_end > 0 {
             self.decrypt()?;
         }
 
@@ -158,26 +166,29 @@ impl<R: BufRead> StreamDecryptor<R> {
     }
 
     fn fill_inner(&mut self) -> io::Result<()> {
-        if self.out_buffer.remaining() > 0 || self.is_source_done {
+        if self.out_buffer_remaining() > 0 || self.is_source_done {
             return Ok(());
         }
 
-        let current_len = self.in_buffer.len();
+        let current_len = self.in_buffer_end;
         let buf_size = 2 * (self.chunk_size_expanded + AEAD_TAG_SIZE);
         let to_read = buf_size - current_len;
 
-        self.in_buffer.resize(buf_size, 0);
+        self.buffer.resize(buf_size, 0);
         let read = fill_buffer(
             &mut self.source,
-            &mut self.in_buffer[current_len..],
+            &mut self.buffer[current_len..],
             Some(to_read),
         )?;
-        self.in_buffer.truncate(current_len + read);
+        self.buffer.truncate(current_len + read);
+        self.in_buffer_end += read;
+        // reset out buffer
+        self.out_buffer_start = 0;
 
         if read < to_read {
             debug!("source finished reading");
             // make sure we have as much as data as we need
-            if self.in_buffer.remaining() < AEAD_TAG_SIZE {
+            if self.buffer.remaining() < AEAD_TAG_SIZE {
                 return Err(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
                     "not enough data to finalize aead decryption",
@@ -194,25 +205,35 @@ impl<R: BufRead> StreamDecryptor<R> {
 
         Ok(())
     }
+
+    fn out_buffer(&self) -> &[u8] {
+        let start = self.in_buffer_end + self.out_buffer_start;
+        &self.buffer[start..]
+    }
+
+    fn out_buffer_remaining(&self) -> usize {
+        let start = self.in_buffer_end + self.out_buffer_start;
+        self.buffer.len() - start
+    }
 }
 
 impl<R: BufRead> BufRead for StreamDecryptor<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
-        Ok(&self.out_buffer[..])
+        Ok(self.out_buffer())
     }
 
     fn consume(&mut self, amt: usize) {
-        self.out_buffer.advance(amt);
+        self.out_buffer_start += amt;
     }
 }
 
 impl<R: BufRead> Read for StreamDecryptor<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
-        let to_write = self.out_buffer.remaining().min(buf.len());
-        self.out_buffer.copy_to_slice(&mut buf[..to_write]);
-
+        let to_write = self.out_buffer_remaining().min(buf.len());
+        buf[..to_write].copy_from_slice(&self.out_buffer()[..to_write]);
+        self.out_buffer_start += to_write;
         Ok(to_write)
     }
 }
