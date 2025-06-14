@@ -12,76 +12,17 @@ use crate::{
 };
 
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
-pub enum SymEncryptedProtectedDataReader<R: DebugBufRead> {
-    Init {
-        source: PacketBodyReader<R>,
-        config: ProtectedDataConfig,
-    },
-    Body {
-        config: ProtectedDataConfig,
-        decryptor: MaybeDecryptor<PacketBodyReader<R>>,
-    },
-    Done {
-        source: PacketBodyReader<R>,
-        config: ProtectedDataConfig,
-    },
-    Error,
+pub struct SymEncryptedProtectedDataReader<R: DebugBufRead> {
+    config: ProtectedDataConfig,
+    source: Source<R>,
 }
 
-#[derive(derive_more::Debug)]
-#[allow(clippy::large_enum_variant)]
-pub enum MaybeDecryptor<R: DebugBufRead> {
-    Raw(#[debug("R")] R),
-    Decryptor(StreamDecryptor<R>),
-}
-
-impl<R: DebugBufRead> MaybeDecryptor<R> {
-    pub fn into_inner(self) -> R {
-        match self {
-            Self::Raw(r) => r,
-            Self::Decryptor(r) => r.into_inner(),
-        }
-    }
-
-    pub fn get_ref(&self) -> &R {
-        match self {
-            Self::Raw(r) => r,
-            Self::Decryptor(r) => r.get_ref(),
-        }
-    }
-
-    pub fn get_mut(&mut self) -> &mut R {
-        match self {
-            Self::Raw(r) => r,
-            Self::Decryptor(r) => r.get_mut(),
-        }
-    }
-}
-
-impl<R: DebugBufRead> BufRead for MaybeDecryptor<R> {
-    fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        match self {
-            Self::Raw(r) => r.fill_buf(),
-            Self::Decryptor(r) => r.fill_buf(),
-        }
-    }
-
-    fn consume(&mut self, amt: usize) {
-        match self {
-            Self::Raw(r) => r.consume(amt),
-            Self::Decryptor(r) => r.consume(amt),
-        }
-    }
-}
-
-impl<R: DebugBufRead> Read for MaybeDecryptor<R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Self::Raw(r) => r.read(buf),
-            Self::Decryptor(r) => r.read(buf),
-        }
-    }
+#[derive(Debug)]
+enum Source<R: DebugBufRead> {
+    Init(PacketBodyReader<R>),
+    BodyRaw(PacketBodyReader<R>),
+    BodyDecryptor(StreamDecryptor<PacketBodyReader<R>>),
+    Done(PacketBodyReader<R>),
 }
 
 impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
@@ -92,7 +33,10 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
             &mut source,
         )?);
 
-        Ok(Self::Init { source, config })
+        Ok(Self {
+            config,
+            source: Source::Init(source),
+        })
     }
 
     pub fn new_gnupg_aead(mut source: PacketBodyReader<R>) -> Result<Self> {
@@ -100,205 +44,232 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
 
         let config = ProtectedDataConfig::GnupgAead(GnupgAeadConfig::try_from_reader(&mut source)?);
 
-        Ok(Self::Init { source, config })
+        Ok(Self {
+            config,
+            source: Source::Init(source),
+        })
     }
 
     pub fn decrypt(&mut self, session_key: &PlainSessionKey) -> Result<()> {
-        match std::mem::replace(self, Self::Error) {
-            Self::Init { source, config } => {
-                let decryptor = match config {
-                    ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::V1) => {
-                        let (sym_alg, session_key) = match session_key {
-                            PlainSessionKey::V3_4 { sym_alg, key } => (sym_alg, key),
-                            PlainSessionKey::V5 { .. } => {
-                                unsupported_err!(
-                                    "v5 session keys are unsupported with SEIPD v1 edata"
-                                );
-                            }
-                            PlainSessionKey::V6 { .. } => {
-                                bail!("v6 session keys are not allowed with SEIPD v1 edata");
-                            }
-                            PlainSessionKey::Unknown { sym_alg, key } => (sym_alg, key),
-                        };
-
-                        StreamDecryptor::v1(*sym_alg, session_key, source)?
-                    }
-                    ProtectedDataConfig::GnupgAead(GnupgAeadConfig {
-                        sym_alg,
-                        aead,
-                        chunk_size,
-                        ref iv,
-                    }) => {
-                        let (sym_alg_session_key, session_key) = match session_key {
-                            PlainSessionKey::V3_4 { sym_alg, key } => (Some(sym_alg), key),
-                            PlainSessionKey::V5 { key } => (None, key),
-                            PlainSessionKey::V6 { .. } => {
-                                bail!("v6 session keys are not allowed with GnupgAead edata")
-                            }
-                            PlainSessionKey::Unknown { sym_alg, key } => (Some(sym_alg), key),
-                        };
-                        if let Some(sym_alg_session_key) = sym_alg_session_key {
-                            ensure_eq!(
-                                sym_alg,
-                                *sym_alg_session_key,
-                                "Mismatching symmetric key algorithm"
-                            );
-                        }
-
-                        ensure_eq!(
-                            session_key.len(),
-                            sym_alg.key_size(),
-                            "Unexpected session key length for {:?}",
-                            sym_alg
-                        );
-
-                        StreamDecryptor::gnupg_aead(
-                            sym_alg,
-                            aead,
-                            chunk_size,
-                            session_key,
-                            iv,
-                            source,
-                        )?
-                    }
-                    ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::V2 {
-                        sym_alg,
-                        aead,
-                        chunk_size,
-                        salt,
-                    }) => {
-                        let (sym_alg_session_key, session_key) = match session_key {
-                            PlainSessionKey::V3_4 { .. } => {
-                                bail!("v6 session keys are not allowed with SEIPD v2 edata");
-                            }
-                            PlainSessionKey::V5 { .. } => {
-                                bail!("v5 session keys are not allowed with SEIPD v2 edata");
-                            }
-                            PlainSessionKey::V6 { key } => (None, key),
-                            PlainSessionKey::Unknown { sym_alg, key } => (Some(sym_alg), key),
-                        };
-                        if let Some(sym_alg_session_key) = sym_alg_session_key {
-                            ensure_eq!(
-                                sym_alg,
-                                *sym_alg_session_key,
-                                "mismatching symmetric key algorithm"
-                            );
-                        }
-
-                        ensure_eq!(
-                            session_key.len(),
-                            sym_alg.key_size(),
-                            "Unexpected session key length for {:?}",
-                            sym_alg
-                        );
-                        StreamDecryptor::v2(sym_alg, aead, chunk_size, &salt, session_key, source)?
-                    }
-                };
-
-                *self = Self::Body {
-                    config,
-                    decryptor: MaybeDecryptor::Decryptor(decryptor),
-                };
-                Ok(())
-            }
-            Self::Body { config, decryptor } => {
-                *self = Self::Body { config, decryptor };
+        match self.source {
+            Source::BodyDecryptor(_) => {
                 bail!("cannot decrypt after starting to read")
             }
-            Self::Done { source, config } => {
-                *self = Self::Done { source, config };
+            Source::BodyRaw(_) => {
+                bail!("cannot decrypt after starting to read")
+            }
+            Source::Done(_) => {
                 bail!("cannot decrypt after finishing to read")
             }
-            Self::Error => bail!("SymEncryptedProtectedDataReader errored"),
+            Source::Init(_) => {}
         }
+
+        match self.config {
+            ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::V1) => {
+                let (sym_alg, session_key) = match session_key {
+                    PlainSessionKey::V3_4 { sym_alg, key } => (sym_alg, key),
+                    PlainSessionKey::V5 { .. } => {
+                        unsupported_err!("v5 session keys are unsupported with SEIPD v1 edata");
+                    }
+                    PlainSessionKey::V6 { .. } => {
+                        bail!("v6 session keys are not allowed with SEIPD v1 edata");
+                    }
+                    PlainSessionKey::Unknown { sym_alg, key } => (sym_alg, key),
+                };
+
+                replace_with::replace_with(
+                    &mut self.source,
+                    || todo!(),
+                    |source| {
+                        let Source::Init(source) = source else {
+                            unreachable!("checked");
+                        };
+                        Source::BodyDecryptor(
+                            StreamDecryptor::v1(*sym_alg, session_key, source).unwrap(),
+                        )
+                    },
+                );
+            }
+            ProtectedDataConfig::GnupgAead(GnupgAeadConfig {
+                sym_alg,
+                aead,
+                chunk_size,
+                ref iv,
+            }) => {
+                let (sym_alg_session_key, session_key) = match session_key {
+                    PlainSessionKey::V3_4 { sym_alg, key } => (Some(sym_alg), key),
+                    PlainSessionKey::V5 { key } => (None, key),
+                    PlainSessionKey::V6 { .. } => {
+                        bail!("v6 session keys are not allowed with GnupgAead edata")
+                    }
+                    PlainSessionKey::Unknown { sym_alg, key } => (Some(sym_alg), key),
+                };
+                if let Some(sym_alg_session_key) = sym_alg_session_key {
+                    ensure_eq!(
+                        sym_alg,
+                        *sym_alg_session_key,
+                        "Mismatching symmetric key algorithm"
+                    );
+                }
+
+                ensure_eq!(
+                    session_key.len(),
+                    sym_alg.key_size(),
+                    "Unexpected session key length for {:?}",
+                    sym_alg
+                );
+
+                replace_with::replace_with(
+                    &mut self.source,
+                    || todo!(),
+                    |source| {
+                        let Source::Init(source) = source else {
+                            unreachable!("checked");
+                        };
+                        Source::BodyDecryptor(
+                            StreamDecryptor::gnupg_aead(
+                                sym_alg,
+                                aead,
+                                chunk_size,
+                                session_key,
+                                iv,
+                                source,
+                            )
+                            .unwrap(),
+                        )
+                    },
+                );
+            }
+            ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::V2 {
+                sym_alg,
+                aead,
+                chunk_size,
+                salt,
+            }) => {
+                let (sym_alg_session_key, session_key) = match session_key {
+                    PlainSessionKey::V3_4 { .. } => {
+                        bail!("v6 session keys are not allowed with SEIPD v2 edata");
+                    }
+                    PlainSessionKey::V5 { .. } => {
+                        bail!("v5 session keys are not allowed with SEIPD v2 edata");
+                    }
+                    PlainSessionKey::V6 { key } => (None, key),
+                    PlainSessionKey::Unknown { sym_alg, key } => (Some(sym_alg), key),
+                };
+                if let Some(sym_alg_session_key) = sym_alg_session_key {
+                    ensure_eq!(
+                        sym_alg,
+                        *sym_alg_session_key,
+                        "mismatching symmetric key algorithm"
+                    );
+                }
+
+                ensure_eq!(
+                    session_key.len(),
+                    sym_alg.key_size(),
+                    "Unexpected session key length for {:?}",
+                    sym_alg
+                );
+                replace_with::replace_with(
+                    &mut self.source,
+                    || todo!(),
+                    |source| {
+                        let Source::Init(source) = source else {
+                            unreachable!("checked");
+                        };
+                        Source::BodyDecryptor(
+                            StreamDecryptor::v2(
+                                sym_alg,
+                                aead,
+                                chunk_size,
+                                &salt,
+                                session_key,
+                                source,
+                            )
+                            .unwrap(),
+                        )
+                    },
+                );
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn new_done(config: ProtectedDataConfig, source: PacketBodyReader<R>) -> Self {
-        Self::Done { source, config }
-    }
-
-    pub fn config(&self) -> &ProtectedDataConfig {
-        match self {
-            Self::Init { config, .. } => config,
-            Self::Body { config, .. } => config,
-            Self::Done { config, .. } => config,
-            Self::Error => {
-                panic!("SymEncryptedProtectedDataReader errored")
-            }
+        Self {
+            source: Source::Done(source),
+            config,
         }
     }
 
+    pub fn config(&self) -> &ProtectedDataConfig {
+        &self.config
+    }
+
     pub fn is_done(&self) -> bool {
-        matches!(self, Self::Done { .. })
+        matches!(self.source, Source::Done { .. })
     }
 
     pub fn into_inner(self) -> PacketBodyReader<R> {
-        match self {
-            Self::Init { source, .. } => source,
-            Self::Body { decryptor, .. } => decryptor.into_inner(),
-            Self::Done { source, .. } => source,
-            Self::Error => {
-                panic!("SymEncryptedProtectedDataReader errored")
-            }
+        match self.source {
+            Source::Init(source) => source,
+            Source::BodyDecryptor(source) => source.into_inner(),
+            Source::BodyRaw(source) => source,
+            Source::Done(source) => source,
         }
     }
 
     pub fn get_mut(&mut self) -> &mut PacketBodyReader<R> {
-        match self {
-            Self::Init { source, .. } => source,
-            Self::Body { decryptor, .. } => decryptor.get_mut(),
-            Self::Done { source, .. } => source,
-            Self::Error => {
-                panic!("SymEncryptedProtectedDataReader errored")
-            }
+        match &mut self.source {
+            Source::Init(source) => source,
+            Source::BodyDecryptor(source) => source.get_mut(),
+            Source::BodyRaw(source) => source,
+            Source::Done(source) => source,
         }
     }
 
     pub fn packet_header(&self) -> PacketHeader {
-        match self {
-            Self::Init { source, .. } => source.packet_header(),
-            Self::Body { decryptor, .. } => decryptor.get_ref().packet_header(),
-            Self::Done { source, .. } => source.packet_header(),
-            Self::Error => {
-                panic!("SymEncryptedProtectedDataReader errored")
-            }
+        match &self.source {
+            Source::Init(source) => source.packet_header(),
+            Source::BodyDecryptor(source) => source.get_ref().packet_header(),
+            Source::BodyRaw(source) => source.packet_header(),
+            Source::Done(source) => source.packet_header(),
         }
     }
 
     fn fill_inner(&mut self) -> io::Result<()> {
-        if matches!(self, Self::Done { .. }) {
+        if matches!(self.source, Source::Done(_)) {
             return Ok(());
         }
 
         loop {
-            match std::mem::replace(self, Self::Error) {
-                Self::Init { source, config } => {
-                    *self = Self::Body {
-                        config,
-                        decryptor: MaybeDecryptor::Raw(source),
-                    }
+            let (needs_replacing, should_return) = match &mut self.source {
+                Source::Init(_) => (true, false),
+                Source::BodyRaw(source) => {
+                    let buf = source.fill_buf()?;
+                    (buf.is_empty(), true)
                 }
-                Self::Body {
-                    config,
-                    mut decryptor,
-                } => {
+                Source::BodyDecryptor(decryptor) => {
                     let buf = decryptor.fill_buf()?;
-                    if buf.is_empty() {
-                        let source = decryptor.into_inner();
+                    (buf.is_empty(), true)
+                }
+                Source::Done(_) => (false, true),
+            };
 
-                        *self = Self::Done { source, config };
-                    } else {
-                        *self = Self::Body { config, decryptor };
-                    }
-                    return Ok(());
-                }
-                Self::Done { source, config } => {
-                    *self = Self::Done { source, config };
-                    return Ok(());
-                }
-                Self::Error => {
-                    return Err(io::Error::other("SymEncryptedProtectedDataReader errored"));
-                }
+            if needs_replacing {
+                replace_with::replace_with(
+                    &mut self.source,
+                    || todo!(),
+                    |source| match source {
+                        Source::Init(source) => Source::BodyRaw(source),
+                        Source::BodyRaw(source) => Source::Done(source),
+                        Source::BodyDecryptor(source) => Source::Done(source.into_inner()),
+                        Source::Done(source) => Source::Done(source),
+                    },
+                )
+            }
+            if should_return {
+                return Ok(());
             }
         }
     }
@@ -307,23 +278,20 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
 impl<R: DebugBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
-        match self {
-            Self::Init { .. } => unreachable!("invalid state"),
-            Self::Body { decryptor, .. } => decryptor.fill_buf(),
-
-            Self::Done { .. } => Ok(&[][..]),
-            Self::Error => Err(io::Error::other("SymEncryptedProtectedDataReader errored")),
+        match &mut self.source {
+            Source::Init(..) => unreachable!("invalid state"),
+            Source::BodyDecryptor(decryptor) => decryptor.fill_buf(),
+            Source::BodyRaw(source) => source.fill_buf(),
+            Source::Done(_) => Ok(&[][..]),
         }
     }
 
     fn consume(&mut self, amt: usize) {
-        match self {
-            Self::Init { .. } => unreachable!("invalid state"),
-            Self::Body { decryptor, .. } => decryptor.consume(amt),
-            Self::Done { .. } => {}
-            Self::Error => {
-                panic!("SymEncryptedProtectedDataReader errored")
-            }
+        match &mut self.source {
+            Source::Init(..) => unreachable!("invalid state"),
+            Source::BodyDecryptor(decryptor) => decryptor.consume(amt),
+            Source::BodyRaw(source) => source.consume(amt),
+            Source::Done(_) => panic!("consume after done"),
         }
     }
 }
@@ -331,11 +299,11 @@ impl<R: DebugBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
 impl<R: DebugBufRead> Read for SymEncryptedProtectedDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
-        match self {
-            Self::Init { .. } => unreachable!("invalid state"),
-            Self::Body { decryptor, .. } => decryptor.read(buf),
-            Self::Done { .. } => Ok(0),
-            Self::Error => Err(io::Error::other("SymEncryptedProtectedDataReader errored")),
+        match &mut self.source {
+            Source::Init(..) => unreachable!("invalid state"),
+            Source::BodyDecryptor(decryptor) => decryptor.read(buf),
+            Source::BodyRaw(source) => source.read(buf),
+            Source::Done(_) => Ok(0),
         }
     }
 }

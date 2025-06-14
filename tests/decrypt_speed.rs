@@ -5,6 +5,18 @@ use pgp::{
     types::Password,
 };
 
+#[test]
+fn speed_read_file() {
+    let now = std::time::Instant::now();
+    let msg = std::fs::read("/tmp/900m.seipdv1").expect("msg");
+
+    let elapsed = now.elapsed();
+    let elapsed_milli = elapsed.as_millis();
+    let mb_per_s = 900f64 / elapsed_milli as f64 * 1000f64;
+    println!("Elapsed: {elapsed_milli} ms, MByte/s: {mb_per_s:.2?}");
+    println!("{:?}", msg.last());
+}
+
 // temporary test, requires local copy of a large encrypted message
 #[test]
 fn speed_seipdv1() {
@@ -18,9 +30,8 @@ fn speed_seipdv1() {
     )
     .unwrap();
 
-    let msg = Message::from_file("/tmp/900m.seipdv1").expect("msg");
-
     let now = std::time::Instant::now();
+    let msg = Message::from_file("/tmp/900m.seipdv1").expect("msg");
 
     let mut dec = msg.decrypt(&Password::empty(), &skey).expect("decrypt");
 
@@ -48,9 +59,8 @@ fn speed_seipdv2() {
     let (skey, _headers) =
         SignedSecretKey::from_armor_single(std::fs::File::open("/tmp/fred.tsk").unwrap()).unwrap();
 
-    let msg = Message::from_file("/tmp/900m.seipdv2").expect("msg");
-
     let now = std::time::Instant::now();
+    let msg = Message::from_file("/tmp/900m.seipdv2").expect("msg");
 
     let mut dec = msg.decrypt(&Password::empty(), &skey).expect("decrypt");
 
