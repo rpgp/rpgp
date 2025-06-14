@@ -7,7 +7,6 @@ use crate::types::SignatureBytes;
 
 pub mod aead;
 pub mod aes_kw;
-pub(crate) mod gnupg_aead;
 pub mod sym;
 
 // Encryption & Signing
