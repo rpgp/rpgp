@@ -6,7 +6,7 @@ use zeroize::Zeroizing;
 
 use crate::{
     crypto::{
-        aead::{AeadAlgorithm, ChunkSize, Error, UnsupporedAlgorithmSnafu, aead_setup_rfc9580},
+        aead::{aead_setup_rfc9580, AeadAlgorithm, ChunkSize, Error, UnsupporedAlgorithmSnafu},
         sym::SymmetricKeyAlgorithm,
     },
     types::Tag,
