@@ -64,9 +64,9 @@ where
     T::VerifyingKey: HPublicKey,
 {
     /// Create a new signer with a given public key
-    pub fn new(inner: T, created_at: DateTime<Utc>) -> Result<Self> {
+    pub fn new(inner: T, version: KeyVersion, created_at: DateTime<Utc>) -> Result<Self> {
         let public_key = PubKeyInner::new(
-            KeyVersion::V4,
+            version,
             <T as Keypair>::VerifyingKey::PGP_ALGORITHM,
             created_at,
             None,

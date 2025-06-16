@@ -12,7 +12,7 @@ use pgp::{
     helper::{EcdsaSigner, RsaSigner},
     packet::{self, PubKeyInner, PublicKey, SignatureConfig},
     types::{
-        EcdhPublicParams, Fingerprint, KeyDetails, KeyId, Mpi, Password, PkeskBytes,
+        EcdhPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes,
         PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes,
     },
 };
@@ -489,7 +489,8 @@ fn ecdsa_signer() {
     let inner =
         p256::ecdsa::SigningKey::read_pkcs8_pem_file("tests/unit-tests/hsm/p256.pem").unwrap();
 
-    let signer = EcdsaSigner::<_, p256::NistP256>::new(inner, Default::default()).unwrap();
+    let signer =
+        EcdsaSigner::<_, p256::NistP256>::new(inner, KeyVersion::V4, Default::default()).unwrap();
     const DATA: &[u8] = b"Hello World";
 
     let mut config = SignatureConfig::v4(
@@ -518,7 +519,7 @@ fn rsa_signer() {
     )
     .unwrap();
 
-    let signer = RsaSigner::new(inner, Default::default()).unwrap();
+    let signer = RsaSigner::new(inner, KeyVersion::V4, Default::default()).unwrap();
     const DATA: &[u8] = b"Hello World";
 
     let mut config = SignatureConfig::v4(
