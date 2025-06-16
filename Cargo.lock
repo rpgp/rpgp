@@ -20,15 +20,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aead-stream"
-version = "0.6.0-rc.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cc2d8c7d80cce546b635811cc9371c1db8794d36fcc160a08cb1e6824a5eab2"
-dependencies = [
- "aead",
-]
-
-[[package]]
 name = "aes"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -791,7 +782,6 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae112a25f86ae3598d4e8533ed1e65149cec6eb21918e7a6f4c06dddec370263"
 dependencies = [
- "pkcs8",
  "signature",
 ]
 
@@ -805,7 +795,6 @@ dependencies = [
  "elliptic-curve",
  "hash2curve",
  "rand_core 0.10.0",
- "serdect",
  "shake",
  "signature",
  "subtle",
@@ -939,11 +928,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "139ef39800118c7683f2fd3c98c1b23c09ae076556b435f8e9064ae108aaeeec"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi",
  "rand_core 0.10.0",
  "wasip2",
  "wasip3",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1148,7 +1139,6 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "sha2",
- "signature",
 ]
 
 [[package]]
@@ -1338,7 +1328,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b07d573bb0b2f2f4158dadc1888df3bb55ae0a2e246c99af4d2870ee3892b17"
 dependencies = [
  "aead",
- "aead-stream",
  "cipher",
  "ctr",
  "dbl",
@@ -1404,7 +1393,6 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aab41826031698d6ffcd9cff78ef56ef998e39dc7e5067cdfebe373842d4723b"
 dependencies = [
- "getrandom 0.4.1",
  "phc",
 ]
 
@@ -1475,6 +1463,7 @@ dependencies = [
  "p256",
  "p384",
  "p521",
+ "pkcs8",
  "pretty_assertions",
  "pretty_env_logger",
  "proptest",
@@ -1515,7 +1504,6 @@ checksum = "44dc769b75f93afdddd8c7fa12d685292ddeff1e66f7f0f3a234cf1818afe892"
 dependencies = [
  "base64ct",
  "ctutils",
- "getrandom 0.4.1",
 ]
 
 [[package]]
