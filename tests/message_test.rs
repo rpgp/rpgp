@@ -561,6 +561,24 @@ bhF30A+IitsxxA==
 }
 
 #[test]
+fn test_valid_partial_messages() {
+    // A test case from "Tests support for partial body encoding" in the interop suite
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    // Base case: indeterminate length
+    let (message, _) = Message::from_armor_file("./tests/indeterminate_base.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let _plain = msg.as_data_vec().expect("data");
+}
+
+#[test]
 fn test_invalid_partial_messages() {
     pretty_env_logger::try_init().ok();
 
