@@ -9,10 +9,7 @@ pub use self::{
     ecdsa::{EcdsaSigner, PgpEcdsaPublicKey},
     rsa::RsaSigner,
 };
-use crate::{
-    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    types::PublicParams,
-};
+use crate::{crypto::public_key::PublicKeyAlgorithm, types::PublicParams};
 
 /// Public key PGP parameters for a given public key
 pub trait PublicKey {
@@ -21,26 +18,4 @@ pub trait PublicKey {
 
     /// Public key encoding for a public key
     fn pgp_parameters(&self) -> PublicParams;
-}
-
-/// Equivalent PGP hash algorithm for a given digest
-pub trait PgpHash {
-    /// PGP Algorithm ID for a given digest
-    const HASH_ALGORITHM: HashAlgorithm;
-}
-
-impl PgpHash for sha1::Sha1 {
-    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Sha1;
-}
-
-impl PgpHash for sha2::Sha256 {
-    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Sha256;
-}
-
-impl PgpHash for sha2::Sha384 {
-    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Sha384;
-}
-
-impl PgpHash for sha2::Sha512 {
-    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Sha512;
 }

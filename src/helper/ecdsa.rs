@@ -10,9 +10,12 @@ use ecdsa::{
 use signature::{hazmat::PrehashSigner, Keypair};
 
 use crate::{
-    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::{bail, Result},
-    helper::{PgpHash, PublicKey as HPublicKey},
+    crypto::{
+        hash::{HashAlgorithm, KnownDigest},
+        public_key::PublicKeyAlgorithm,
+    },
+    errors::{ensure_eq, Result},
+    helper::PublicKey as HPublicKey,
     packet::{PubKeyInner, PublicKey},
     types::{
         EcdsaPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password,
@@ -93,24 +96,21 @@ where
     C: PrimeCurve + DigestPrimitive,
     SignatureSize<C>: ArrayLength<u8>,
     T: PrehashSigner<ecdsa::Signature<C>>,
-    C::Digest: PgpHash,
+    C::Digest: KnownDigest,
 {
     fn sign_prehash(&self, hash: HashAlgorithm, prehash: &[u8]) -> Result<Vec<Vec<u8>>> {
-        if C::Digest::HASH_ALGORITHM != hash {
-            bail!(
-                "Signer only support {expected:?}, found {found:?}",
-                expected = C::Digest::HASH_ALGORITHM,
-                found = hash
-            );
-        }
-
-        if <C::Digest as OutputSizeUser>::OutputSize::USIZE != prehash.len() {
-            bail!(
-                "Signer expected a hash of length ({expected} bytes), found ({found} bytes)",
-                expected = <C::Digest as OutputSizeUser>::OutputSize::USIZE,
-                found = prehash.len()
-            );
-        }
+        ensure_eq!(
+            hash,
+            C::Digest::HASH_ALGORITHM,
+            "signer only supports {}",
+            C::Digest::HASH_ALGORITHM
+        );
+        ensure_eq!(
+            prehash.len(),
+            <C::Digest as OutputSizeUser>::OutputSize::USIZE,
+            "Prehashed digest length mismatch, expected {}",
+            <C::Digest as OutputSizeUser>::OutputSize::USIZE
+        );
 
         let signature = self.inner.sign_prehash(prehash)?;
         let (r, s) = signature.split_bytes();
@@ -131,7 +131,7 @@ where
     C: PrimeCurve + DigestPrimitive,
     SignatureSize<C>: ArrayLength<u8>,
     T: PrehashSigner<ecdsa::Signature<C>>,
-    C::Digest: PgpHash,
+    C::Digest: KnownDigest,
 {
     fn create_signature(
         &self,

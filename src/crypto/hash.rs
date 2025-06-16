@@ -50,16 +50,34 @@ pub enum HashAlgorithm {
 }
 
 /// Marker trait for supported hash algorithms
-pub trait KnownDigest: Digest {}
+pub trait KnownDigest: Digest {
+    const HASH_ALGORITHM: HashAlgorithm;
+}
 
-impl KnownDigest for md5::Md5 {}
-impl KnownDigest for sha1_checked::Sha1 {}
-impl KnownDigest for Ripemd160 {}
-impl KnownDigest for sha2::Sha256 {}
-impl KnownDigest for sha2::Sha384 {}
-impl KnownDigest for sha2::Sha512 {}
-impl KnownDigest for sha3::Sha3_256 {}
-impl KnownDigest for sha3::Sha3_512 {}
+impl KnownDigest for md5::Md5 {
+    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Md5;
+}
+impl KnownDigest for sha1_checked::Sha1 {
+    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Sha1;
+}
+impl KnownDigest for Ripemd160 {
+    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Ripemd160;
+}
+impl KnownDigest for sha2::Sha256 {
+    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Sha256;
+}
+impl KnownDigest for sha2::Sha384 {
+    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Sha384;
+}
+impl KnownDigest for sha2::Sha512 {
+    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Sha512;
+}
+impl KnownDigest for sha3::Sha3_256 {
+    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Sha3_256;
+}
+impl KnownDigest for sha3::Sha3_512 {
+    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Sha3_512;
+}
 
 impl FromStr for HashAlgorithm {
     type Err = ();

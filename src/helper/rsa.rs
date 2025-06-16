@@ -10,9 +10,12 @@ use sha2::Digest;
 use signature::{hazmat::PrehashSigner, Keypair, SignatureEncoding};
 
 use crate::{
-    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    crypto::{
+        hash::{HashAlgorithm, KnownDigest},
+        public_key::PublicKeyAlgorithm,
+    },
     errors::{bail, Result},
-    helper::{PgpHash, PublicKey as HPublicKey},
+    helper::PublicKey as HPublicKey,
     packet::{PubKeyInner, PublicKey},
     types::{
         Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicKeyTrait, PublicParams,
@@ -68,7 +71,7 @@ where
 
 impl<D, T> RsaSigner<T, D>
 where
-    D: Digest + PgpHash,
+    D: Digest + KnownDigest,
     T: PrehashSigner<Signature>,
 {
     fn sign_prehash(&self, hash: HashAlgorithm, prehash: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -108,7 +111,7 @@ where
 impl<D, T> SecretKeyTrait for RsaSigner<T, D>
 where
     T: PrehashSigner<Signature>,
-    D: Digest + PgpHash,
+    D: Digest + KnownDigest,
 {
     fn create_signature(
         &self,
