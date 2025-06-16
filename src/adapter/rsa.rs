@@ -10,12 +10,12 @@ use sha2::Digest;
 use signature::{hazmat::PrehashSigner, Keypair, SignatureEncoding};
 
 use crate::{
+    adapter::PublicKey as HPublicKey,
     crypto::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
     },
     errors::{bail, Result},
-    helper::PublicKey as HPublicKey,
     packet::{PubKeyInner, PublicKey},
     types::{
         Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicKeyTrait, PublicParams,

@@ -20,12 +20,12 @@ pub use bytes;
 
 pub(crate) mod util;
 
+pub mod adapter;
 pub mod armor;
 pub mod base64;
 pub mod composed;
 pub mod crypto;
 pub mod errors;
-pub mod helper;
 pub mod line_writer;
 pub mod normalize_lines;
 pub mod packet;

@@ -4,12 +4,12 @@ use std::{fmt::Debug, fs::File};
 use chrono::{DateTime, Utc};
 use p256::pkcs8::DecodePrivateKey;
 use pgp::{
+    adapter::{EcdsaSigner, RsaSigner},
     composed::{Esk, Message, SignedPublicKey, SignedSecretKey},
     crypto::{
         checksum, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    helper::{EcdsaSigner, RsaSigner},
     packet::{self, PubKeyInner, PublicKey, SignatureConfig},
     types::{
         EcdhPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes,
