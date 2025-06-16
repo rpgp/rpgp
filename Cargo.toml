@@ -47,8 +47,8 @@ bzip2 = { version = "0.6.0", optional = true }
 
 # Crypto
 aes = "0.9.0-rc.1"
-aead = { version = "0.6.0-rc.2", features = ["bytes"] }
-argon2 = { version = "0.6.0-rc.1", features = ["alloc", "zeroize"] }
+aead = { version = "0.6.0-rc.2", default-features = false, features = ["bytes", "rand_core"] }
+argon2 = { version = "0.6.0-rc.1", default-features = false, features = ["alloc", "zeroize"] }
 block-padding = "0.4.0-rc.3"
 blowfish = "0.10.0-rc.1"
 camellia = "=0.2.0-pre"
@@ -66,20 +66,20 @@ curve25519-dalek = { version = "=5.0.0-pre.1", default-features = false, feature
 des = "0.9.0-rc.1"
 digest = "0.11.0-rc.1"
 dsa = { version = "0.7.0-rc.5", features = [ "hazmat" ] }
-ecdsa = "0.17.0-rc.6"
+ecdsa = { version =  "0.17.0-rc.6", default-features = false }
 ed25519-dalek = { version = "=3.0.0-pre.1", default-features = false, features = ["alloc", "fast", "rand_core", "zeroize"] }
 elliptic-curve = "0.14.0-rc.13"
 hybrid-array = "0.4"
 idea = "=0.6.0-pre"
 md-5 = { version = "0.11.0-rc.2", features = ["oid"] }
 num_enum = ">=0.5.7, < 0.8"
-p256 = { version = "=0.14.0-pre.10", features = ["ecdsa", "ecdh"] }
-p384 = { version = "=0.14.0-pre.10", features = ["ecdsa"] }
-p521 = { version = "=0.14.0-pre.10", features = ["ecdsa", "ecdh"] }
-k256 = { version = "=0.14.0-pre.10", features = ["ecdsa"] }
-rand = "0.9"
+p256 = { version = "=0.14.0-pre.10", default-features = false, features = ["ecdsa", "ecdh"] }
+p384 = { version = "=0.14.0-pre.10", default-features = false, features = ["ecdsa"] }
+p521 = { version = "=0.14.0-pre.10", default-features = false, features = ["ecdsa", "ecdh"] }
+k256 = { version = "=0.14.0-pre.10", default-features = false, features = ["ecdsa"] }
+rand = { version = "0.9", default-features = false }
 ripemd = { version = "0.2.0-rc.1", features = ["oid"] }
-rsa = { version = "0.10.0-rc.6" }
+rsa = { version = "0.10.0-rc.6", default-features = false }
 sha1 = { version = "0.11.0-rc.2", features = ["oid"] }
 sha1-asm = { version = "0.5.3", optional = true }
 sha1-checked = { version = "=0.11.0-pre", features = ["zeroize"] }
@@ -88,14 +88,13 @@ sha3 = { version = "0.11.0-rc.3", features = ["oid"] }
 signature = "3.0.0-rc.3"
 twofish = "=0.8.0-pre"
 zeroize = { version = "1.8", features = ["zeroize_derive"] }
-getrandom = { version = "0.3", optional = true }
 hkdf = "0.13.0-rc.1"
-aes-gcm = "0.11.0-rc.1"
-eax = "=0.6.0-pre"
-ocb3 = "=0.2.0-pre"
+aes-gcm = { version = "0.11.0-rc.1", default-features = false, features = ["aes"] }
+eax = { version = "=0.6.0-pre", default-features = false }
+ocb3 = { version = "=0.2.0-pre", default-features = false }
 aes-kw = { version = "0.3.0-rc.1" }
 ed448-goldilocks = { version = "0.14.0-pre.3" }
-x448 = { version = "=0.14.0-pre.0" }
+x448 = { version = "0.14.0-pre.0" }
 x25519-dalek = { version = "=3.0.0-pre.1", default-features = false, features = [
     "alloc",
     "precomputed-tables",
@@ -115,6 +114,7 @@ glob = "0.3"
 hex-literal = "1"
 pretty_assertions = "1"
 pretty_env_logger = "0.5"
+rand = { version = "0.9" }
 rand_chacha = "0.9"
 rand_xorshift = "0.4"
 serde = { version = "1.0.217", features = ["derive"] }
@@ -125,6 +125,9 @@ proptest = { version = "1.6.0", features = ["proptest-macro"] }
 proptest-derive = "0.5.1"
 escape_string = "0.1.2"
 testresult = "0.4.1"
+p256 = { version = "=0.14.0-pre.10" }
+pkcs8 = { version = "0.11.0-rc.6", default-features = false, features = ["std", "pem"] }
+rsa = { version = "0.10.0-rc.6", default-features = false, features = ["encoding"] }
 
 [features]
 default = ["bzip2"]
@@ -134,7 +137,7 @@ bzip2 = ["dep:bzip2"]
 # Enables assembly based optimizations
 asm = ["dep:sha1-asm"]
 # Allows building for wasm
-wasm = ["chrono/wasmbind", "getrandom"]
+wasm = ["chrono/wasmbind"]
 
 # Enables implementation of draft-ietf-openpgp-pqc-10
 # This is unstable and can have breaking changes in patch releases.
