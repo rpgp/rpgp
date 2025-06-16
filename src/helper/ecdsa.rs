@@ -1,4 +1,4 @@
-use std::{fmt, marker::PhantomData};
+use std::marker::PhantomData;
 
 use chrono::{DateTime, Utc};
 use digest::{typenum::Unsigned, OutputSizeUser};
@@ -50,6 +50,8 @@ impl PgpEcdsaPublicKey for p256::ecdsa::VerifyingKey {
 }
 
 /// [`signature::Signer`] backed signer for PGP.
+#[derive(derive_more::Debug)]
+#[debug("EcdsaSigner({public_key:?})")]
 pub struct EcdsaSigner<T, C> {
     inner: T,
     public_key: PublicKey,
@@ -115,14 +117,6 @@ where
         let signature = self.inner.sign_prehash(prehash)?;
         let (r, s) = signature.split_bytes();
         Ok(vec![r.to_vec(), s.to_vec()])
-    }
-}
-
-impl<C, T> fmt::Debug for EcdsaSigner<T, C> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("EcdsaSigner")
-            .field("public_key", &self.public_key)
-            .finish()
     }
 }
 
