@@ -767,7 +767,6 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae112a25f86ae3598d4e8533ed1e65149cec6eb21918e7a6f4c06dddec370263"
 dependencies = [
- "pkcs8",
  "signature",
 ]
 
@@ -781,7 +780,6 @@ dependencies = [
  "elliptic-curve",
  "hash2curve",
  "rand_core 0.10.1",
- "serdect",
  "shake",
  "signature",
  "subtle",
@@ -901,9 +899,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi",
  "rand_core 0.10.1",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1083,7 +1083,6 @@ dependencies = [
  "elliptic-curve",
  "primeorder",
  "sha2",
- "signature",
  "wnaf",
 ]
 
@@ -1325,7 +1324,6 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aab41826031698d6ffcd9cff78ef56ef998e39dc7e5067cdfebe373842d4723b"
 dependencies = [
- "getrandom 0.4.3",
  "phc",
 ]
 
@@ -1396,6 +1394,7 @@ dependencies = [
  "p256",
  "p384",
  "p521",
+ "pkcs8",
  "pretty_assertions",
  "pretty_env_logger",
  "proptest",
@@ -1435,7 +1434,6 @@ checksum = "44dc769b75f93afdddd8c7fa12d685292ddeff1e66f7f0f3a234cf1818afe892"
 dependencies = [
  "base64ct",
  "ctutils",
- "getrandom 0.4.3",
 ]
 
 [[package]]
