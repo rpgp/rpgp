@@ -291,7 +291,11 @@ impl<R: DebugBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
             Source::Init(..) => unreachable!("invalid state"),
             Source::BodyDecryptor(decryptor) => decryptor.consume(amt),
             Source::BodyRaw(source) => source.consume(amt),
-            Source::Done(_) => panic!("consume after done"),
+            Source::Done(_) => {
+                if amt > 0 {
+                    panic!("consume after done: {}", amt)
+                }
+            }
         }
     }
 }
