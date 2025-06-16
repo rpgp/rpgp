@@ -552,7 +552,7 @@ where
                 buffer.copy_to_slice(&mut buf[..to_write]);
                 Ok(to_write)
             }
-            Self::Error => unreachable!("error state "),
+            Self::Error => unreachable!("error state"),
         }
     }
 
