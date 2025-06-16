@@ -351,34 +351,22 @@ where
                         let to_read = buf_size - current_len;
                         let read = fill_buffer_bytes(source, buffer, buf_size)?;
                         let is_last_read = read < to_read;
+                        decryptor.decrypt(&mut buffer[current_len..]);
 
                         match protected {
-                            MaybeProtected::Protected { .. } if is_last_read => {
-                                decryptor.decrypt(&mut buffer[current_len..]);
-                                (true, true)
-                            }
+                            MaybeProtected::Protected { .. } if is_last_read => (true, true),
                             MaybeProtected::Protected { ref mut hasher } => {
                                 let start = *data_available;
                                 debug_assert!(buffer.len() >= MDC_LEN);
                                 let end = buffer.len() - MDC_LEN;
-
-                                hasher.update(&buffer[start..current_len]);
-                                for chunk in buffer[current_len..end].chunks_mut(64) {
-                                    decryptor.decrypt(chunk);
-
-                                    if start < end {
-                                        hasher.update(chunk);
-                                    }
-                                }
-                                decryptor.decrypt(&mut buffer[end..]);
                                 if start < end {
+                                    hasher.update(&buffer[start..end]);
                                     *data_available += end - start;
                                 }
 
                                 (false, true)
                             }
                             MaybeProtected::Unprotected { .. } => {
-                                decryptor.decrypt(&mut buffer[current_len..]);
                                 if is_last_read {
                                     (true, true)
                                 } else {
