@@ -1,4 +1,3 @@
-use crypto_bigint::Odd;
 use digest::{const_oid::AssociatedOid, Digest};
 use md5::Md5;
 use rand::{CryptoRng, RngCore};
@@ -52,8 +51,7 @@ impl SecretKey {
         q: Mpi,
         _u: Mpi,
     ) -> Result<Self> {
-        let n = pub_params.key.n().clone();
-        let n = Odd::new(n.get()).unwrap();
+        let n = pub_params.key.n().clone().get();
         let secret_key = RsaPrivateKey::from_components(
             n,
             pub_params.key.e().clone(),

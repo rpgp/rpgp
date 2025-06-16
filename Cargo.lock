@@ -20,14 +20,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aead-stream"
-version = "0.6.0-rc.0"
-source = "git+https://github.com/RustCrypto/AEADs.git#d8299837a5d4a5198e48cc3ca1f26e70cbd2e3a4"
-dependencies = [
- "aead",
-]
-
-[[package]]
 name = "aes"
 version = "0.9.0-rc.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1127,9 +1119,7 @@ dependencies = [
  "cfg-if",
  "ecdsa",
  "elliptic-curve",
- "once_cell",
  "sha2",
- "signature",
 ]
 
 [[package]]
@@ -1292,7 +1282,6 @@ version = "0.2.0-pre"
 source = "git+https://github.com/RustCrypto/AEADs.git#d8299837a5d4a5198e48cc3ca1f26e70cbd2e3a4"
 dependencies = [
  "aead",
- "aead-stream",
  "cipher",
  "ctr",
  "dbl",
@@ -1348,7 +1337,6 @@ dependencies = [
  "elliptic-curve",
  "primefield",
  "primeorder",
- "rand_core 0.9.3",
  "sha2",
 ]
 
@@ -1411,7 +1399,6 @@ dependencies = [
  "elliptic-curve",
  "escape_string",
  "flate2",
- "getrandom 0.3.2",
  "glob",
  "hex",
  "hex-literal",
@@ -1430,6 +1417,7 @@ dependencies = [
  "p256",
  "p384",
  "p521",
+ "pkcs8",
  "pretty_assertions",
  "pretty_env_logger",
  "proptest",
@@ -1806,9 +1794,9 @@ dependencies = [
 
 [[package]]
 name = "rsa"
-version = "0.10.0-rc.0"
+version = "0.10.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f30f0ad781aea19fe741d7a901b2ad8b4271ac3516e7045b8ecff74e201968fe"
+checksum = "a4825b570bf9949160f598b942df0d6abfa00b71a97c970fdd6e2647439634b8"
 dependencies = [
  "const-oid",
  "crypto-bigint",
