@@ -5,7 +5,7 @@ use blowfish::Blowfish;
 use bytes::{Buf, BytesMut};
 use camellia::{Camellia128, Camellia192, Camellia256};
 use cast5::Cast5;
-use cfb_mode::{BufDecryptor, cipher::KeyIvInit};
+use cfb_mode::{cipher::KeyIvInit, BufDecryptor};
 use cipher::{BlockCipher, BlockDecrypt, BlockEncryptMut, BlockSizeUser};
 use des::TdesEde3;
 use idea::Idea;
@@ -16,12 +16,11 @@ use zeroize::Zeroizing;
 
 use crate::{
     crypto::sym::SymmetricKeyAlgorithm,
-    errors::{Result, bail},
+    errors::{bail, Result},
     util::{fill_buffer, fill_buffer_bytes},
 };
 
 const MDC_LEN: usize = 22;
-const BUFFER_SIZE: usize = 512;
 
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
@@ -96,6 +95,21 @@ where
             Self::Camellia128(i) => i.read(buf),
             Self::Camellia192(i) => i.read(buf),
             Self::Camellia256(i) => i.read(buf),
+        }
+    }
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        match self {
+            Self::Idea(i) => i.read_to_end(buf),
+            Self::TripleDes(i) => i.read_to_end(buf),
+            Self::Cast5(i) => i.read_to_end(buf),
+            Self::Blowfish(i) => i.read_to_end(buf),
+            Self::Aes128(i) => i.read_to_end(buf),
+            Self::Aes192(i) => i.read_to_end(buf),
+            Self::Aes256(i) => i.read_to_end(buf),
+            Self::Twofish(i) => i.read_to_end(buf),
+            Self::Camellia128(i) => i.read_to_end(buf),
+            Self::Camellia192(i) => i.read_to_end(buf),
+            Self::Camellia256(i) => i.read_to_end(buf),
         }
     }
 }
@@ -333,26 +347,38 @@ where
                     } else {
                         // fill buffer
                         let current_len = buffer.remaining();
-                        let to_read = BUFFER_SIZE - current_len;
-                        let read = fill_buffer_bytes(source, buffer, BUFFER_SIZE)?;
-                        decryptor.decrypt(&mut buffer[current_len..]);
-
+                        let buf_size = buffer_size::<M>();
+                        let to_read = buf_size - current_len;
+                        let read = fill_buffer_bytes(source, buffer, buf_size)?;
                         let is_last_read = read < to_read;
 
                         match protected {
-                            MaybeProtected::Protected { .. } if is_last_read => (true, true),
+                            MaybeProtected::Protected { .. } if is_last_read => {
+                                decryptor.decrypt(&mut buffer[current_len..]);
+                                (true, true)
+                            }
                             MaybeProtected::Protected { ref mut hasher } => {
                                 let start = *data_available;
                                 debug_assert!(buffer.len() >= MDC_LEN);
                                 let end = buffer.len() - MDC_LEN;
 
+                                hasher.update(&buffer[start..current_len]);
+                                for chunk in buffer[current_len..end].chunks_mut(64) {
+                                    decryptor.decrypt(chunk);
+
+                                    if start < end {
+                                        hasher.update(chunk);
+                                    }
+                                }
+                                decryptor.decrypt(&mut buffer[end..]);
                                 if start < end {
-                                    hasher.update(&buffer[start..end]);
                                     *data_available += end - start;
                                 }
+
                                 (false, true)
                             }
                             MaybeProtected::Unprotected { .. } => {
+                                decryptor.decrypt(&mut buffer[current_len..]);
                                 if is_last_read {
                                     (true, true)
                                 } else {
@@ -417,7 +443,7 @@ where
                         *self = Self::Data {
                             data_available: 0,
                             decryptor: encryptor,
-                            buffer: BytesMut::with_capacity(BUFFER_SIZE),
+                            buffer: BytesMut::with_capacity(buffer_size::<M>()),
                             source,
                             protected,
                         };
@@ -541,4 +567,41 @@ where
             Self::Error => unreachable!("error state "),
         }
     }
+
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        let mut read = 0;
+
+        loop {
+            self.fill_inner()?;
+            match self {
+                Self::Prefix { .. } => panic!("invalid state"),
+                Self::Data {
+                    buffer,
+                    data_available,
+                    ..
+                } => {
+                    let to_write = *data_available;
+                    buf.extend_from_slice(&buffer[..to_write]);
+                    buffer.advance(to_write);
+                    *data_available -= to_write;
+                    read += to_write;
+                }
+                Self::Done { buffer, .. } => {
+                    let to_write = buffer.remaining();
+                    buf.extend_from_slice(&buffer);
+                    buffer.clear();
+                    read += to_write;
+                    break;
+                }
+                Self::Error => unreachable!("error state "),
+            }
+        }
+        Ok(read)
+    }
+}
+
+#[inline(always)]
+fn buffer_size<M: BlockSizeUser>() -> usize {
+    let _bs = <M as BlockSizeUser>::block_size();
+    1024 * 8
 }
