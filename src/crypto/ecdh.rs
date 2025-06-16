@@ -876,32 +876,28 @@ mod tests {
     prop_compose! {
         pub fn key_p256_gen()(seed: u64) -> p256::SecretKey {
             let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
-             let key = p256::SecretKey::generate_from_rng(&mut rng);
-             key
+             p256::SecretKey::generate_from_rng(&mut rng)
         }
     }
 
     prop_compose! {
         pub fn key_p384_gen()(seed: u64) -> p384::SecretKey {
             let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
-            let key = p384::SecretKey::generate_from_rng(&mut rng);
-            key
+            p384::SecretKey::generate_from_rng(&mut rng)
         }
     }
 
     prop_compose! {
         pub fn key_p521_gen()(seed: u64) -> p521::SecretKey {
             let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
-            let key = p521::SecretKey::generate_from_rng(&mut rng);
-            key
+            p521::SecretKey::generate_from_rng(&mut rng)
         }
     }
 
     prop_compose! {
         pub fn key_k256_gen()(seed: u64) -> k256::SecretKey {
             let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
-            let key = k256::SecretKey::generate_from_rng(&mut rng);
-            key
+            k256::SecretKey::generate_from_rng(&mut rng)
         }
     }
 
