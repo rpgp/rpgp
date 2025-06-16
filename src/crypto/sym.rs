@@ -928,6 +928,7 @@ mod tests {
 
     use rand::RngCore;
 
+    #[ignore]
     #[test]
     fn bench_aes_256_protected() {
         const SIZE: usize = 1024 * 1024 * 64;
@@ -943,7 +944,7 @@ mod tests {
             .stream_encryptor(&mut rng, &key, &data[..])
             .unwrap();
 
-        let mut output = Vec::new();
+        let mut output = Vec::with_capacity(SIZE);
         encryptor.read_to_end(&mut output).unwrap();
 
         let elapsed = now.elapsed();
@@ -956,7 +957,7 @@ mod tests {
         let mut decryptor = SymmetricKeyAlgorithm::AES256
             .stream_decryptor_protected(&key, &output[..])
             .unwrap();
-        let mut res = Vec::new();
+        let mut res = Vec::with_capacity(SIZE);
         decryptor.read_to_end(&mut res).unwrap();
         let elapsed = now.elapsed();
 
@@ -967,6 +968,7 @@ mod tests {
         println!("Decryption: {elapsed_milli} ms, MByte/s: {mb_per_s:.2?}");
     }
 
+    #[ignore]
     #[test]
     fn bench_aes_256_unprotected() {
         const SIZE: usize = 1024 * 1024 * 256;
@@ -992,7 +994,7 @@ mod tests {
         let mut decryptor = SymmetricKeyAlgorithm::AES256
             .stream_decryptor_unprotected(&key, &output[..])
             .unwrap();
-        let mut res = Vec::new();
+        let mut res = Vec::with_capacity(SIZE);
         decryptor.read_to_end(&mut res).unwrap();
         let elapsed = now.elapsed();
 

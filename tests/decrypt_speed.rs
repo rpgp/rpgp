@@ -18,6 +18,7 @@ fn speed_read_file() {
 }
 
 // temporary test, requires local copy of a large encrypted message
+#[ignore]
 #[test]
 fn speed_seipdv1() {
     // decrypt 900 mbyte of random data, seipdv1-encrypted to bob.
@@ -48,6 +49,7 @@ fn speed_seipdv1() {
 }
 
 // temporary test, requires local copy of a large encrypted message
+#[ignore]
 #[test]
 fn speed_seipdv2() {
     // decrypt 900 mbyte of random data, seipdv2-encrypted to fred.
