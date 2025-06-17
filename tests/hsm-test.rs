@@ -2,16 +2,17 @@
 use std::{fmt::Debug, fs::File};
 
 use chrono::{DateTime, Utc};
+use p256::pkcs8::DecodePrivateKey;
 use pgp::{
+    adapter::{EcdsaSigner, RsaSigner},
     composed::{Esk, Message, SignedPublicKey, SignedSecretKey},
     crypto::{
         checksum, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    packet,
-    packet::{PubKeyInner, PublicKey, SignatureConfig},
+    packet::{self, PubKeyInner, PublicKey, SignatureConfig},
     types::{
-        EcdhPublicParams, Fingerprint, KeyDetails, KeyId, Mpi, Password, PkeskBytes,
+        EcdhPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes,
         PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes,
     },
 };
@@ -481,4 +482,61 @@ fn card_sign() {
 
         signature.verify(&pubkey, DATA).expect("ok");
     }
+}
+
+#[test]
+fn ecdsa_signer() {
+    let inner =
+        p256::ecdsa::SigningKey::read_pkcs8_pem_file("tests/unit-tests/hsm/p256.pem").unwrap();
+
+    let signer =
+        EcdsaSigner::<_, p256::NistP256>::new(inner, KeyVersion::V4, Default::default()).unwrap();
+    const DATA: &[u8] = b"Hello World";
+
+    let mut config = SignatureConfig::v4(
+        packet::SignatureType::Binary,
+        signer.algorithm(),
+        HashAlgorithm::Sha256,
+    );
+
+    config.hashed_subpackets = vec![
+        packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
+            DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
+        ))
+        .unwrap(),
+        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.key_id())).unwrap(),
+    ];
+
+    let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();
+
+    signature.verify(&signer, DATA).expect("ok");
+}
+
+#[test]
+fn rsa_signer() {
+    let inner = rsa::pkcs1v15::SigningKey::<sha2::Sha256>::read_pkcs8_pem_file(
+        "tests/unit-tests/hsm/rsa.pem",
+    )
+    .unwrap();
+
+    let signer = RsaSigner::new(inner, KeyVersion::V4, Default::default()).unwrap();
+    const DATA: &[u8] = b"Hello World";
+
+    let mut config = SignatureConfig::v4(
+        packet::SignatureType::Binary,
+        signer.algorithm(),
+        HashAlgorithm::Sha256,
+    );
+
+    config.hashed_subpackets = vec![
+        packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
+            DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
+        ))
+        .unwrap(),
+        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.key_id())).unwrap(),
+    ];
+
+    let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();
+
+    signature.verify(&signer, DATA).expect("ok");
 }

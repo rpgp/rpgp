@@ -20,6 +20,7 @@ pub use bytes;
 
 pub(crate) mod util;
 
+pub mod adapter;
 pub mod armor;
 pub mod base64;
 pub mod composed;
