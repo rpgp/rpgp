@@ -327,7 +327,20 @@ pub enum PkeskVersion {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum SkeskVersion {
+    /// SKESK v4 is the default mechanism for symmetric-key encryption of a session key in
+    /// OpenPGP RFC 4880:
+    /// <https://www.rfc-editor.org/rfc/rfc4880#section-5.3>
     V4 = 4,
+
+    /// CAUTION: SKESK v5 is a GnuPG-specific format! (It is not standardized as part of OpenPGP)
+    ///
+    /// See <https://www.ietf.org/archive/id/draft-koch-librepgp-03.html#name-symmetric-key-encrypted-ses>
+    V5 = 5,
+
+    /// SKESK v6 is an AEAD-based format for symmetric-key encryption of a session key.
+    ///
+    /// It was introduced in OpenPGP RFC 9580:
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-version-6-symmetric-key-enc>
     V6 = 6,
 
     #[num_enum(catch_all)]
