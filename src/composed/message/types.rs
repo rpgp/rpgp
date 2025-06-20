@@ -13,8 +13,7 @@ use crate::{
     errors::{bail, ensure, ensure_eq, format_err, Error, Result},
     packet::{
         InnerSignature, LiteralDataHeader, OnePassSignature, Packet, PacketHeader, PacketTrait,
-        PublicKeyEncryptedSessionKey, Signature, SymEncryptedProtectedDataConfig,
-        SymKeyEncryptedSessionKey,
+        ProtectedDataConfig, PublicKeyEncryptedSessionKey, Signature, SymKeyEncryptedSessionKey,
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -205,7 +204,7 @@ pub(crate) enum MessageParts {
     Encrypted {
         packet_header: PacketHeader,
         esk: Vec<Esk>,
-        config: Option<SymEncryptedProtectedDataConfig>,
+        config: Option<ProtectedDataConfig>,
         is_nested: bool,
     },
 }
@@ -302,6 +301,20 @@ impl<'a> Message<'a> {
                     )
                 }
                 Edata::SymEncryptedProtectedData { reader } => {
+                    assert!(reader.is_done());
+                    let packet_header = reader.packet_header();
+                    let config = Some(reader.config().clone());
+                    (
+                        reader.into_inner().into_inner(),
+                        MessageParts::Encrypted {
+                            packet_header,
+                            esk,
+                            config,
+                            is_nested,
+                        },
+                    )
+                }
+                Edata::GnupgAeadData { reader } => {
                     assert!(reader.is_done());
                     let packet_header = reader.packet_header();
                     let config = Some(reader.config().clone());
@@ -493,6 +506,9 @@ pub enum Edata<'a> {
     SymEncryptedProtectedData {
         reader: SymEncryptedProtectedDataReader<MessageReader<'a>>,
     },
+    GnupgAeadData {
+        reader: SymEncryptedProtectedDataReader<MessageReader<'a>>,
+    },
 }
 
 impl<'a> Edata<'a> {
@@ -501,6 +517,10 @@ impl<'a> Edata<'a> {
             Tag::SymEncryptedData => {
                 let reader = SymEncryptedDataReader::new(reader)?;
                 Ok(Self::SymEncryptedData { reader })
+            }
+            Tag::GnupgAead => {
+                let reader = SymEncryptedProtectedDataReader::new_gnupg_aead(reader)?;
+                Ok(Self::GnupgAeadData { reader })
             }
             Tag::SymEncryptedProtectedData => {
                 let reader = SymEncryptedProtectedDataReader::new(reader)?;
@@ -516,6 +536,7 @@ impl BufRead for Edata<'_> {
         match self {
             Self::SymEncryptedData { reader } => reader.fill_buf(),
             Self::SymEncryptedProtectedData { reader } => reader.fill_buf(),
+            Self::GnupgAeadData { reader } => reader.fill_buf(),
         }
     }
 
@@ -523,6 +544,7 @@ impl BufRead for Edata<'_> {
         match self {
             Self::SymEncryptedData { reader } => reader.consume(amt),
             Self::SymEncryptedProtectedData { reader } => reader.consume(amt),
+            Self::GnupgAeadData { reader } => reader.consume(amt),
         }
     }
 }
@@ -532,6 +554,7 @@ impl Read for Edata<'_> {
         match self {
             Self::SymEncryptedData { reader } => reader.read(buf),
             Self::SymEncryptedProtectedData { reader } => reader.read(buf),
+            Self::GnupgAeadData { reader } => reader.read(buf),
         }
     }
 
@@ -539,6 +562,7 @@ impl Read for Edata<'_> {
         match self {
             Self::SymEncryptedData { reader } => reader.read_to_end(buf),
             Self::SymEncryptedProtectedData { reader } => reader.read_to_end(buf),
+            Self::GnupgAeadData { reader } => reader.read_to_end(buf),
         }
     }
 }
@@ -548,6 +572,7 @@ impl<'a> Edata<'a> {
         match self {
             Self::SymEncryptedData { reader } => reader.packet_header(),
             Self::SymEncryptedProtectedData { reader } => reader.packet_header(),
+            Self::GnupgAeadData { reader } => reader.packet_header(),
         }
     }
 
@@ -559,6 +584,7 @@ impl<'a> Edata<'a> {
         match self {
             Self::SymEncryptedData { reader } => reader.get_mut(),
             Self::SymEncryptedProtectedData { reader } => reader.get_mut(),
+            Self::GnupgAeadData { reader } => reader.get_mut(),
         }
     }
 
@@ -575,6 +601,9 @@ impl<'a> Edata<'a> {
             Self::SymEncryptedData { .. } => {
                 // SED packets are malleable, decrypting them should only be necessary for historical data
                 bail!("Decryption of SymEncryptedData is discouraged")
+            }
+            Self::GnupgAeadData { reader } => {
+                reader.decrypt(key)?;
             }
         }
 
@@ -594,6 +623,9 @@ impl<'a> Edata<'a> {
                 reader.decrypt(key)?;
             }
             Self::SymEncryptedData { reader } => {
+                reader.decrypt(key)?;
+            }
+            Self::GnupgAeadData { reader } => {
                 reader.decrypt(key)?;
             }
         }
@@ -959,6 +991,7 @@ impl<'a> Message<'a> {
             Self::Encrypted { edata, .. } => match edata {
                 Edata::SymEncryptedData { reader } => reader.into_inner(),
                 Edata::SymEncryptedProtectedData { reader } => reader.into_inner(),
+                Edata::GnupgAeadData { reader } => reader.into_inner(),
             },
         }
     }
@@ -972,6 +1005,7 @@ impl<'a> Message<'a> {
             Self::Encrypted { edata, .. } => match edata {
                 Edata::SymEncryptedData { reader } => reader.get_mut(),
                 Edata::SymEncryptedProtectedData { reader } => reader.get_mut(),
+                Edata::GnupgAeadData { reader } => reader.get_mut(),
             },
         }
     }

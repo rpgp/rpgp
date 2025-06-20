@@ -91,6 +91,7 @@ impl<R: BufRead> PacketBodyReader<R> {
                         | Tag::CompressedData
                         | Tag::SymEncryptedData
                         | Tag::SymEncryptedProtectedData
+                        | Tag::GnupgAead
                 ) {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
