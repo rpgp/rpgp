@@ -30,9 +30,11 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
   - [x] Generation
 - [x] Encryption
   - [x] PKESK v3, SKESK v4, SEIPD v1
+  - [ ] 🚫 SKESK v5 (GnuPG proprietary)
   - [x] PKESK v6, SKESK v6, SEIPD v2
 - [x] Decryption
   - [x] PKESK v3, SKESK v4, SEIPD v1
+  - [x] SKESK v5 (GnuPG proprietary)
   - [x] PKESK v6, SKESK v6, SEIPD v2
 - [x] Keys (v4)
   - [x] Generation
