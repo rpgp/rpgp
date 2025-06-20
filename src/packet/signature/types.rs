@@ -33,10 +33,42 @@ use crate::{
 
 /// Signature Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-packet-type-id-2>
-#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
+#[derive(Clone, Eq, derive_more::Debug)]
 pub struct Signature {
     packet_header: PacketHeader,
     pub inner: InnerSignature,
+}
+
+impl PartialEq for Signature {
+    /// Semantical equality on signature packets.
+    ///
+    /// This equality implementation checks that:
+    /// - the packet header version is the same, and
+    /// - the content of "inner" is the same.
+    ///
+    /// Rationale: Signature packets can be mutated in memory (esp. subpackets in the unhashed area).
+    /// This can cause the length field in packet_header to go out of sync with the length that
+    /// would be serialized, and would cause automatically derived equality comparison between
+    /// Signature packets to mistakenly show differences.
+    fn eq(&self, other: &Self) -> bool {
+        // compare header version
+        match (self.packet_header, other.packet_header) {
+            (PacketHeader::Old { header: h1, .. }, PacketHeader::Old { header: h2, .. }) => {
+                if h1 != h2 {
+                    return false;
+                }
+            }
+            (PacketHeader::New { header: h1, .. }, PacketHeader::New { header: h2, .. }) => {
+                if h1 != h2 {
+                    return false;
+                }
+            }
+            _ => return false,
+        }
+
+        // compare "inner" signature data
+        self.inner == other.inner
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
