@@ -4,13 +4,16 @@ use super::PacketBodyReader;
 use crate::{
     composed::{DebugBufRead, PlainSessionKey},
     errors::{bail, ensure, ensure_eq, unsupported_err, Result},
-    packet::{PacketHeader, StreamDecryptor, SymEncryptedProtectedDataConfig},
+    packet::{
+        GnupgAeadConfig, PacketHeader, ProtectedDataConfig, StreamDecryptor,
+        SymEncryptedProtectedDataConfig,
+    },
     types::Tag,
 };
 
 #[derive(Debug)]
 pub struct SymEncryptedProtectedDataReader<R: DebugBufRead> {
-    config: SymEncryptedProtectedDataConfig,
+    config: ProtectedDataConfig,
     source: Source<R>,
 }
 
@@ -27,7 +30,21 @@ enum Source<R: DebugBufRead> {
 impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
     pub fn new(mut source: PacketBodyReader<R>) -> Result<Self> {
         debug_assert_eq!(source.packet_header().tag(), Tag::SymEncryptedProtectedData);
-        let config = SymEncryptedProtectedDataConfig::try_from_reader(&mut source)?;
+
+        let config = ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::try_from_reader(
+            &mut source,
+        )?);
+
+        Ok(Self {
+            config,
+            source: Source::Init(source),
+        })
+    }
+
+    pub fn new_gnupg_aead(mut source: PacketBodyReader<R>) -> Result<Self> {
+        debug_assert_eq!(source.packet_header().tag(), Tag::GnupgAead);
+
+        let config = ProtectedDataConfig::GnupgAead(GnupgAeadConfig::try_from_reader(&mut source)?);
 
         Ok(Self {
             config,
@@ -42,14 +59,14 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
         );
 
         match self.config {
-            SymEncryptedProtectedDataConfig::V1 => {
+            ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::V1) => {
                 let (sym_alg, session_key) = match session_key {
                     PlainSessionKey::V3_4 { sym_alg, key } => (sym_alg, key),
                     PlainSessionKey::V5 { .. } => {
-                        unsupported_err!("v5 is not supported");
+                        unsupported_err!("v5 session keys are unsupported with SEIPD v1 edata");
                     }
                     PlainSessionKey::V6 { .. } => {
-                        bail!("mismatch between session key and edata config");
+                        bail!("v6 session keys are not allowed with SEIPD v1 edata");
                     }
                     PlainSessionKey::Unknown { sym_alg, key } => (sym_alg, key),
                 };
@@ -68,18 +85,69 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                     },
                 )?;
             }
-            SymEncryptedProtectedDataConfig::V2 {
+            ProtectedDataConfig::GnupgAead(GnupgAeadConfig {
+                sym_alg,
+                aead,
+                chunk_size,
+                ref iv,
+            }) => {
+                let (sym_alg_session_key, session_key) = match session_key {
+                    PlainSessionKey::V3_4 { sym_alg, key } => (Some(sym_alg), key),
+                    PlainSessionKey::V5 { key } => (None, key),
+                    PlainSessionKey::V6 { .. } => {
+                        bail!("v6 session keys are not allowed with GnupgAead edata")
+                    }
+                    PlainSessionKey::Unknown { sym_alg, key } => (Some(sym_alg), key),
+                };
+                if let Some(sym_alg_session_key) = sym_alg_session_key {
+                    ensure_eq!(
+                        sym_alg,
+                        *sym_alg_session_key,
+                        "Mismatching symmetric key algorithm"
+                    );
+                }
+
+                ensure_eq!(
+                    session_key.len(),
+                    sym_alg.key_size(),
+                    "Unexpected session key length for {:?}",
+                    sym_alg
+                );
+
+                replace_with::replace_with_and_return(
+                    &mut self.source,
+                    || Source::Error,
+                    |source| {
+                        let Source::Init(source) = source else {
+                            unreachable!("checked");
+                        };
+
+                        match StreamDecryptor::gnupg_aead(
+                            sym_alg,
+                            aead,
+                            chunk_size,
+                            session_key,
+                            iv,
+                            source,
+                        ) {
+                            Ok(dec) => (Ok(()), Source::BodyDecryptor(dec)),
+                            Err(err) => (Err(err), Source::Error),
+                        }
+                    },
+                )?;
+            }
+            ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::V2 {
                 sym_alg,
                 aead,
                 chunk_size,
                 salt,
-            } => {
+            }) => {
                 let (sym_alg_session_key, session_key) = match session_key {
                     PlainSessionKey::V3_4 { .. } => {
-                        bail!("mismatch between session key and edata config");
+                        bail!("v3/4 session keys are not allowed with SEIPD v2 edata");
                     }
                     PlainSessionKey::V5 { .. } => {
-                        unsupported_err!("v5 is not supported");
+                        bail!("v5 session keys are not allowed with SEIPD v2 edata");
                     }
                     PlainSessionKey::V6 { key } => (None, key),
                     PlainSessionKey::Unknown { sym_alg, key } => (Some(sym_alg), key),
@@ -123,17 +191,14 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
         Ok(())
     }
 
-    pub(crate) fn new_done(
-        config: SymEncryptedProtectedDataConfig,
-        source: PacketBodyReader<R>,
-    ) -> Self {
+    pub(crate) fn new_done(config: ProtectedDataConfig, source: PacketBodyReader<R>) -> Self {
         Self {
             source: Source::Done(source),
             config,
         }
     }
 
-    pub fn config(&self) -> &SymEncryptedProtectedDataConfig {
+    pub fn config(&self) -> &ProtectedDataConfig {
         &self.config
     }
 

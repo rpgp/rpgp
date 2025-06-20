@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 2322bc258c502266eb981261cbfb3ddc9bc6fcf75370bb367eee2eb4e252f95f # shrinks to data = GnupgAeadData { packet_header: Old { header: OldPacketHeader { padding: 1, version: 0, tag: PublicKeyEncryptedSessionKey, length_type: 0 }, length: Fixed(1) }, config: Config { sym_alg: IDEA, aead: None, chunk_size: C64B, iv: 00 }, data:  }

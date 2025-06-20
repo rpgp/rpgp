@@ -6,14 +6,48 @@ use zeroize::Zeroizing;
 
 use crate::{
     crypto::{
-        aead::{aead_setup, AeadAlgorithm, ChunkSize, Error, UnsupporedAlgorithmSnafu},
+        aead::{aead_setup_rfc9580, AeadAlgorithm, ChunkSize, Error, UnsupporedAlgorithmSnafu},
         sym::SymmetricKeyAlgorithm,
     },
+    types::Tag,
     util::fill_buffer_bytes,
 };
 
 /// Currently the tag size for all known aeads is 16.
 const AEAD_TAG_SIZE: usize = 16;
+
+#[derive(derive_more::Debug)]
+enum ModeData {
+    Rfc9580 {
+        #[debug("{}", hex::encode(nonce))]
+        nonce: Vec<u8>,
+        #[debug("{}", hex::encode(info))]
+        info: [u8; 5],
+    },
+    Gnupg {
+        #[debug("{}", hex::encode(iv))]
+        iv: Vec<u8>,
+        #[debug("{}", hex::encode(nonce))]
+        nonce: Vec<u8>,
+        #[debug("{}", hex::encode(info))]
+        info: [u8; 13],
+    },
+}
+impl ModeData {
+    fn nonce(&self) -> &[u8] {
+        match self {
+            Self::Rfc9580 { nonce, .. } => nonce,
+            Self::Gnupg { nonce, .. } => nonce,
+        }
+    }
+
+    fn info(&self) -> &[u8] {
+        match self {
+            Self::Rfc9580 { info, .. } => info,
+            Self::Gnupg { info, .. } => info,
+        }
+    }
+}
 
 #[derive(derive_more::Debug)]
 pub struct StreamDecryptor<R: BufRead> {
@@ -23,12 +57,9 @@ pub struct StreamDecryptor<R: BufRead> {
     /// how many bytes have been written
     written: u64,
     chunk_index: u64,
-    #[debug("{}", hex::encode(nonce))]
-    nonce: Vec<u8>,
+    mode_data: ModeData,
     #[debug("..")]
     message_key: Zeroizing<Vec<u8>>,
-    #[debug("{}", hex::encode(info))]
-    info: [u8; 5],
     source: R,
     /// finished reading from source?
     is_source_done: bool,
@@ -42,7 +73,7 @@ pub struct StreamDecryptor<R: BufRead> {
 }
 
 impl<R: BufRead> StreamDecryptor<R> {
-    pub fn new(
+    pub fn new_rfc9580(
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
         chunk_size: ChunkSize,
@@ -57,7 +88,7 @@ impl<R: BufRead> StreamDecryptor<R> {
             .try_into()
             .expect("chunk size is smaller");
 
-        let (info, message_key, nonce) = aead_setup(sym_alg, aead, chunk_size, &salt[..], ikm);
+        let (info, message_key, nonce) = aead_setup_rfc9580(sym_alg, aead, chunk_size, salt, ikm);
 
         // There are n chunks, n auth tags + 1 final auth tag
         let Some(aead_tag_size) = aead.tag_size() else {
@@ -72,10 +103,54 @@ impl<R: BufRead> StreamDecryptor<R> {
         Ok(Self {
             sym_alg,
             aead,
-            nonce,
+            mode_data: ModeData::Rfc9580 { nonce, info },
             written: 0,
             chunk_index: 0,
-            info,
+            message_key,
+            chunk_size_expanded,
+            source,
+            is_source_done: false,
+            buffer: BytesMut::with_capacity(2 * (chunk_size_expanded + AEAD_TAG_SIZE)),
+            in_buffer_end: 0,
+            out_buffer_start: 0,
+        })
+    }
+
+    pub fn new_gnupg(
+        sym_alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: ChunkSize,
+        key: &[u8],
+        iv: &[u8],
+        source: R,
+    ) -> Result<Self, Error> {
+        let chunk_size_expanded: usize = chunk_size
+            .as_byte_size()
+            .try_into()
+            .expect("chunk size is smaller");
+
+        let (info, message_key) = aead_setup_gnupg(sym_alg, aead, chunk_size, key);
+
+        // There are n chunks, n auth tags + 1 final auth tag
+        let Some(aead_tag_size) = aead.tag_size() else {
+            return Err(UnsupporedAlgorithmSnafu { alg: aead }.build());
+        };
+
+        debug_assert_eq!(
+            aead_tag_size, AEAD_TAG_SIZE,
+            "unexpected AEAD configuration"
+        );
+
+        Ok(Self {
+            sym_alg,
+            aead,
+            mode_data: ModeData::Gnupg {
+                iv: iv.to_vec(),
+                nonce: iv.to_vec(),
+                info,
+            },
+            written: 0,
+            chunk_index: 0,
             message_key,
             chunk_size_expanded,
             source,
@@ -109,8 +184,8 @@ impl<R: BufRead> StreamDecryptor<R> {
             .decrypt_in_place(
                 &self.sym_alg,
                 &self.message_key,
-                &self.nonce,
-                &self.info,
+                self.mode_data.nonce(),
+                self.mode_data.info(),
                 &mut out,
             )
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
@@ -120,8 +195,28 @@ impl<R: BufRead> StreamDecryptor<R> {
 
         // Update nonce to include the next chunk index
         self.chunk_index += 1;
-        let l = self.nonce.len() - 8;
-        self.nonce[l..].copy_from_slice(&self.chunk_index.to_be_bytes());
+        match self.mode_data {
+            ModeData::Rfc9580 { ref mut nonce, .. } => {
+                let l = nonce.len() - 8;
+                nonce[l..].copy_from_slice(&self.chunk_index.to_be_bytes());
+            }
+            ModeData::Gnupg {
+                ref iv,
+                ref mut nonce,
+                ref mut info,
+            } => {
+                // The nonce is computed from the initialization vector (as a big endian value),
+                // by XORing its low eight octets with the chunk index (as a big endian value).
+                nonce.copy_from_slice(iv);
+                let chunk_index = self.chunk_index.to_be_bytes();
+                for (i, value) in chunk_index.iter().enumerate() {
+                    nonce[iv.len() - 8 + i] ^= value;
+                }
+
+                // update chunk size in the associated data
+                info[5..5 + 8].copy_from_slice(&chunk_index);
+            }
+        }
 
         Ok(())
     }
@@ -148,7 +243,7 @@ impl<R: BufRead> StreamDecryptor<R> {
 
         // Associated data is extended with number of plaintext octets.
         let size = self.written;
-        let mut final_info = self.info.to_vec();
+        let mut final_info = self.mode_data.info().to_vec();
         final_info.extend_from_slice(&size.to_be_bytes());
 
         // Update final nonce
@@ -156,7 +251,7 @@ impl<R: BufRead> StreamDecryptor<R> {
             .decrypt_in_place(
                 &self.sym_alg,
                 &self.message_key,
-                &self.nonce,
+                self.mode_data.nonce(),
                 &final_info,
                 &mut final_auth_tag,
             )
@@ -231,4 +326,30 @@ impl<R: BufRead> Read for StreamDecryptor<R> {
         self.out_buffer_start += to_write;
         Ok(to_write)
     }
+}
+
+fn aead_setup_gnupg(
+    sym_alg: SymmetricKeyAlgorithm,
+    aead: AeadAlgorithm,
+    chunk_size: ChunkSize,
+    key: &[u8],
+) -> ([u8; 13], Zeroizing<Vec<u8>>) {
+    let info = [
+        Tag::GnupgAead.encode(), // packet type
+        0x01,                    // version
+        sym_alg.into(),
+        aead.into(),
+        chunk_size.into(),
+        0, // chunk index 0
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ];
+
+    let message_key = key.to_vec().into();
+    (info, message_key)
 }
