@@ -3,12 +3,15 @@ use std::io::{self, BufRead, Read};
 use bytes::{Buf, BytesMut};
 use log::debug;
 
-use super::{fill_buffer, LimitedReader};
+use super::LimitedReader;
 use crate::{
     packet::PacketHeader,
     parsing_reader::BufReadParsing,
     types::{PacketLength, Tag},
+    util::fill_buffer_bytes,
 };
+
+const BUFFER_SIZE: usize = 8 * 1024;
 
 #[derive(Debug)]
 pub struct PacketBodyReader<R: BufRead> {
@@ -118,7 +121,7 @@ impl<R: BufRead> PacketBodyReader<R> {
             packet_header,
             state: State::Body {
                 source,
-                buffer: BytesMut::with_capacity(1024),
+                buffer: BytesMut::with_capacity(BUFFER_SIZE),
             },
         })
     }
@@ -170,9 +173,7 @@ impl<R: BufRead> PacketBodyReader<R> {
                         return Ok(());
                     }
 
-                    buffer.resize(1024, 0);
-                    let read = fill_buffer(&mut source, &mut buffer, Some(1024))?;
-                    buffer.truncate(read);
+                    let read = fill_buffer_bytes(&mut source, &mut buffer, BUFFER_SIZE)?;
 
                     if read == 0 {
                         debug!("body source done: {:?}", self.packet_header);

@@ -9,7 +9,7 @@ use crate::{
         aead::{aead_setup, AeadAlgorithm, ChunkSize, Error, UnsupporedAlgorithmSnafu},
         sym::SymmetricKeyAlgorithm,
     },
-    util::fill_buffer,
+    util::fill_buffer_bytes,
 };
 
 /// Currently the tag size for all known aeads is 16.
@@ -174,13 +174,8 @@ impl<R: BufRead> StreamDecryptor<R> {
         let buf_size = 2 * (self.chunk_size_expanded + AEAD_TAG_SIZE);
         let to_read = buf_size - current_len;
 
-        self.buffer.resize(buf_size, 0);
-        let read = fill_buffer(
-            &mut self.source,
-            &mut self.buffer[current_len..],
-            Some(to_read),
-        )?;
-        self.buffer.truncate(current_len + read);
+        self.buffer.truncate(current_len);
+        let read = fill_buffer_bytes(&mut self.source, &mut self.buffer, buf_size)?;
         self.in_buffer_end += read;
         // reset out buffer
         self.out_buffer_start = 0;

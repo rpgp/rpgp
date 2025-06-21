@@ -2,11 +2,12 @@ use std::io::{self, BufRead, Read};
 
 use bytes::{Buf, BytesMut};
 
-use super::{fill_buffer, PacketBodyReader};
+use super::PacketBodyReader;
 use crate::{
     composed::DebugBufRead,
     packet::{Decompressor, PacketHeader},
     types::Tag,
+    util::fill_buffer_bytes,
 };
 
 #[derive(Debug)]
@@ -149,10 +150,7 @@ impl<R: DebugBufRead> CompressedDataReader<R> {
                     return Ok(());
                 }
 
-                buffer.resize(1024, 0);
-                let read = fill_buffer(&mut source, &mut buffer, None)?;
-                buffer.truncate(read);
-
+                let read = fill_buffer_bytes(&mut source, &mut buffer, 1024)?;
                 if read == 0 {
                     let source = source.into_inner();
 

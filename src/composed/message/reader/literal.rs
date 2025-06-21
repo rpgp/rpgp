@@ -7,8 +7,10 @@ use super::PacketBodyReader;
 use crate::{
     packet::{LiteralDataHeader, PacketHeader},
     types::Tag,
-    util::fill_buffer,
+    util::fill_buffer_bytes,
 };
+
+const BUFFER_SIZE: usize = 8 * 1024;
 
 /// Read the underlying literal data.
 #[derive(derive_more::Debug)]
@@ -35,7 +37,7 @@ impl<R: BufRead> LiteralDataReader<R> {
 
         Ok(Self::Body {
             source,
-            buffer: BytesMut::with_capacity(1024),
+            buffer: BytesMut::with_capacity(BUFFER_SIZE),
             header,
         })
     }
@@ -109,11 +111,9 @@ impl<R: BufRead> LiteralDataReader<R> {
                 }
 
                 debug!("literal packet: filling buffer");
-                buffer.resize(1024, 0);
-                let read = fill_buffer(&mut source, &mut buffer, Some(1024))?;
-                buffer.truncate(read);
+                let read = fill_buffer_bytes(&mut source, &mut buffer, BUFFER_SIZE)?;
 
-                if read < 1024 {
+                if read < BUFFER_SIZE {
                     // done reading the source
                     *self = Self::Done {
                         source,
@@ -176,5 +176,28 @@ impl<R: BufRead> Read for LiteralDataReader<R> {
             }
             Self::Error => Err(io::Error::other("LiteralDataReader errored")),
         }
+    }
+
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        let mut read = 0;
+        loop {
+            self.fill_inner()?;
+            match self {
+                Self::Body { buffer, .. } => {
+                    read += buffer.len();
+                    buf.extend_from_slice(buffer);
+                    buffer.clear();
+                }
+                Self::Done { buffer, .. } => {
+                    read += buffer.len();
+                    buf.extend_from_slice(buffer);
+                    buffer.clear();
+                    break;
+                }
+                Self::Error => return Err(io::Error::other("LiteralDataReader errored")),
+            }
+        }
+
+        Ok(read)
     }
 }
