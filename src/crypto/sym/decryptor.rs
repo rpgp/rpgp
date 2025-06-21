@@ -6,7 +6,7 @@ use bytes::{Buf, BytesMut};
 use camellia::{Camellia128, Camellia192, Camellia256};
 use cast5::Cast5;
 use cfb_mode::{cipher::KeyIvInit, BufDecryptor};
-use cipher::{BlockCipher, BlockDecrypt, BlockEncryptMut, BlockSizeUser};
+use cipher::{BlockCipherEncrypt, BlockSizeUser};
 use des::TdesEde3;
 use idea::Idea;
 use log::debug;
@@ -222,7 +222,7 @@ impl MaybeProtected {
 #[derive(derive_more::Debug)]
 pub enum StreamDecryptorInner<M, R>
 where
-    M: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    M: BlockCipherEncrypt,
     BufDecryptor<M>: KeyIvInit,
     R: BufRead,
 {
@@ -252,7 +252,7 @@ where
 
 impl<M, R> StreamDecryptorInner<M, R>
 where
-    M: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    M: BlockCipherEncrypt,
     BufDecryptor<M>: KeyIvInit,
     R: BufRead,
 {
@@ -479,7 +479,7 @@ where
 
 impl<M, R> BufRead for StreamDecryptorInner<M, R>
 where
-    M: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    M: BlockCipherEncrypt,
     BufDecryptor<M>: KeyIvInit,
     R: BufRead,
 {
@@ -518,7 +518,7 @@ where
 
 impl<M, R> Read for StreamDecryptorInner<M, R>
 where
-    M: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    M: BlockCipherEncrypt,
     BufDecryptor<M>: KeyIvInit,
     R: BufRead,
 {

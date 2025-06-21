@@ -1,7 +1,5 @@
 use std::io::{self, BufRead};
 
-use cx448::x448;
-
 use crate::{
     errors::{format_err, Result},
     parsing_reader::BufReadParsing,

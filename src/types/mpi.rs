@@ -2,7 +2,8 @@ use std::io::{self, BufRead};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::{Buf, Bytes};
-use num_bigint::BigUint;
+use crypto_bigint::{NonZero, Odd};
+use rsa::BoxedUint;
 
 use crate::{
     errors::{InvalidInputSnafu, Result},
@@ -115,21 +116,96 @@ impl Serialize for Mpi {
     }
 }
 
-impl From<BigUint> for Mpi {
-    fn from(other: BigUint) -> Self {
-        Mpi(other.to_bytes_be().into())
+impl From<BoxedUint> for Mpi {
+    fn from(other: BoxedUint) -> Self {
+        // TODO(baloo): are Mpi used for private keys?
+        //              This is only meant to be used for public keys
+        Mpi(other.to_be_bytes_trimmed_vartime().into())
     }
 }
 
-impl From<&BigUint> for Mpi {
-    fn from(other: &BigUint) -> Self {
-        Mpi(other.to_bytes_be().into())
+impl From<&BoxedUint> for Mpi {
+    fn from(other: &BoxedUint) -> Self {
+        Mpi(other.to_be_bytes().into())
     }
 }
 
-impl From<Mpi> for BigUint {
+impl From<NonZero<BoxedUint>> for Mpi {
+    fn from(other: NonZero<BoxedUint>) -> Self {
+        Mpi(other.to_be_bytes().into())
+    }
+}
+
+impl From<&NonZero<BoxedUint>> for Mpi {
+    fn from(other: &NonZero<BoxedUint>) -> Self {
+        Mpi(other.to_be_bytes().into())
+    }
+}
+
+impl From<Odd<BoxedUint>> for Mpi {
+    fn from(other: Odd<BoxedUint>) -> Self {
+        Mpi(other.to_be_bytes().into())
+    }
+}
+
+impl From<&Odd<BoxedUint>> for Mpi {
+    fn from(other: &Odd<BoxedUint>) -> Self {
+        Mpi(other.to_be_bytes().into())
+    }
+}
+
+impl From<&Mpi> for BoxedUint {
+    fn from(other: &Mpi) -> Self {
+        let bytes = other.as_ref();
+        BoxedUint::from_be_slice(
+            bytes,
+            (bytes.len() * 8)
+                .try_into()
+                .expect("invariant violated, MPI should only be MAX_EXTERN_MPI_BITS long"),
+        )
+        .expect("invariant violated, MPI should only be MAX_EXTERN_MPI_BITS long")
+    }
+}
+
+impl From<Mpi> for BoxedUint {
     fn from(other: Mpi) -> Self {
-        BigUint::from_bytes_be(other.as_ref())
+        Self::from(&other)
+    }
+}
+
+impl TryFrom<&Mpi> for NonZero<BoxedUint> {
+    type Error = signature::Error;
+
+    fn try_from(other: &Mpi) -> Result<Self, Self::Error> {
+        Self::new(BoxedUint::from(other))
+            .into_option()
+            .ok_or(signature::Error::new())
+    }
+}
+
+impl TryFrom<Mpi> for NonZero<BoxedUint> {
+    type Error = signature::Error;
+
+    fn try_from(other: Mpi) -> Result<Self, Self::Error> {
+        Self::try_from(&other)
+    }
+}
+
+impl TryFrom<&Mpi> for Odd<BoxedUint> {
+    type Error = signature::Error;
+
+    fn try_from(other: &Mpi) -> Result<Self, Self::Error> {
+        Self::new(BoxedUint::from(other))
+            .into_option()
+            .ok_or(signature::Error::new())
+    }
+}
+
+impl TryFrom<Mpi> for Odd<BoxedUint> {
+    type Error = signature::Error;
+
+    fn try_from(other: Mpi) -> Result<Self, Self::Error> {
+        Self::try_from(&other)
     }
 }
 
@@ -187,7 +263,7 @@ mod tests {
             println!("fixture {i}");
             let n = hex::decode(raw).unwrap();
 
-            let n_big = BigUint::from_bytes_be(&n);
+            let n_big = BoxedUint::from_be_slice(&n, (n.len() * 8).try_into().unwrap()).unwrap();
             let n_mpi: Mpi = n_big.clone().into();
             let mut n_encoded = Vec::new();
             n_mpi.to_writer(&mut n_encoded).unwrap();
@@ -195,7 +271,7 @@ mod tests {
             assert_eq!(&n_encoded, &hex::decode(encoded).unwrap());
 
             let n_big2 = Mpi::try_from_reader(&mut &n_encoded[..]).unwrap();
-            assert_eq!(n_big, n_big2.into());
+            assert_eq!(n_big, BoxedUint::from(n_big2));
         }
     }
 
