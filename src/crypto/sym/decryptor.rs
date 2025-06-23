@@ -443,37 +443,35 @@ where
                         protected,
                         ..
                     } => {
-                        match protected {
-                            MaybeProtected::Protected { mut hasher } => {
-                                // last read
-                                if buffer.remaining() < MDC_LEN {
-                                    return Err(io::Error::new(
-                                        io::ErrorKind::UnexpectedEof,
-                                        "missing MDC",
-                                    ));
-                                }
+                        if let MaybeProtected::Protected { mut hasher } = protected {
+                            // last read
+                            if buffer.remaining() < MDC_LEN {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::UnexpectedEof,
+                                    "missing MDC",
+                                ));
+                            }
 
-                                // grab the MDC from the end
-                                // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
-                                let mdc = buffer.split_off(buffer.len() - MDC_LEN);
+                            // grab the MDC from the end
+                            // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
+                            let mdc = buffer.split_off(buffer.len() - MDC_LEN);
 
-                                hasher.update(&buffer);
-                                hasher.update(&mdc[..2]);
+                            hasher.update(&buffer);
+                            hasher.update(&mdc[..2]);
 
-                                let sha1: [u8; 20] = hasher.finalize().into();
+                            let sha1: [u8; 20] = hasher.finalize().into();
 
-                                if mdc[0] != 0xD3 || // Invalid MDC tag
+                            if mdc[0] != 0xD3 || // Invalid MDC tag
                                 mdc[1] != 0x14 || // Invalid MDC length
                                 mdc[2..] != sha1[..]
-                                {
-                                    return Err(io::Error::new(
-                                        io::ErrorKind::InvalidInput,
-                                        "invalid MDC ",
-                                    ));
-                                }
+                            {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    "invalid MDC ",
+                                ));
                             }
-                            _ => {}
                         }
+
                         *self = Self::Done { buffer, source };
                     }
                     Self::Done { .. } => unreachable!("not changed"),
@@ -576,7 +574,7 @@ where
                 }
                 Self::Done { buffer, .. } => {
                     let to_write = buffer.remaining();
-                    buf.extend_from_slice(&buffer);
+                    buf.extend_from_slice(buffer);
                     buffer.clear();
                     read += to_write;
                     break;
