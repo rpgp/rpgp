@@ -14,6 +14,7 @@ pub struct SymEncryptedProtectedDataReader<R: DebugBufRead> {
     source: Source<R>,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 enum Source<R: DebugBufRead> {
     Init(PacketBodyReader<R>),
@@ -68,6 +69,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                             unreachable!("checked");
                         };
                         Source::BodyDecryptor(
+                            #[allow(clippy::unwrap_used)] // FIXME
                             StreamDecryptor::v1(*sym_alg, session_key, source).unwrap(),
                         )
                     },
@@ -111,6 +113,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                             unreachable!("checked");
                         };
                         Source::BodyDecryptor(
+                            #[allow(clippy::unwrap_used)] // FIXME
                             StreamDecryptor::v2(
                                 sym_alg,
                                 aead,
