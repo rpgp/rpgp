@@ -32,15 +32,16 @@ use crate::{
 };
 
 /// Signature Packet
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-packet-type-id-2>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct Signature {
     packet_header: PacketHeader,
-    pub inner: InnerSignature,
+    pub(crate) inner: InnerSignature,
 }
 
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
-pub enum InnerSignature {
+pub(crate) enum InnerSignature {
     /// V2, V3, V4 and V6
     Known {
         config: SignatureConfig,
@@ -229,6 +230,7 @@ impl Signature {
         })
     }
 
+    /// Returns the `SignatureConfig` if this is a known signature format.
     pub fn config(&self) -> Option<&SignatureConfig> {
         match self.inner {
             InnerSignature::Known { ref config, .. } => Some(config),
@@ -236,6 +238,7 @@ impl Signature {
         }
     }
 
+    /// Returns the `SignatureVersion`.
     pub fn version(&self) -> SignatureVersion {
         match self.inner {
             InnerSignature::Known { ref config, .. } => config.version(),
@@ -253,6 +256,7 @@ impl Signature {
         self.config().map(|c| c.hash_alg)
     }
 
+    /// Returns the actual byte level  signature.
     pub fn signature(&self) -> Option<&SignatureBytes> {
         match self.inner {
             InnerSignature::Known { ref signature, .. } => Some(signature),
