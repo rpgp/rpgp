@@ -26,8 +26,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PublicKeyTrait,
-        SignatureBytes, Tag,
+        self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength,
+        PublicKeyTrait, SignatureBytes, Tag,
     },
 };
 
@@ -235,6 +235,63 @@ impl Signature {
         match self.inner {
             InnerSignature::Known { ref config, .. } => Some(config),
             InnerSignature::Unknown { .. } => None,
+        }
+    }
+
+    /// Returns the `SignatureConfig` as &mut if this is a known signature format.
+    fn config_mut(&mut self) -> Option<&mut SignatureConfig> {
+        match self.inner {
+            InnerSignature::Known { ref mut config, .. } => Some(config),
+            InnerSignature::Unknown { .. } => None,
+        }
+    }
+
+    /// Appends a subpacket at the back of the unhashed area
+    pub fn push_unhashed_subpacket(&mut self, subpacket: Subpacket) -> Result<()> {
+        if let Some(config) = self.config() {
+            self.insert_unhashed_subpacket(config.unhashed_subpackets.len(), subpacket)
+        } else {
+            unimplemented!("error")
+        }
+    }
+
+    /// Insert a subpacket into the unhashed area at position `index`, shifting all subpackets
+    /// after it to the right
+    pub fn insert_unhashed_subpacket(&mut self, index: usize, subpacket: Subpacket) -> Result<()> {
+        if let Some(config) = self.config_mut() {
+            let len = subpacket.write_len();
+
+            config.unhashed_subpackets.insert(index, subpacket);
+            if let PacketLength::Fixed(packetlen) = self.packet_header.packet_length_mut() {
+                *packetlen += len as u32;
+            } else {
+                unimplemented!("error")
+            }
+
+            Ok(())
+        } else {
+            unimplemented!("error")
+        }
+    }
+
+    /// Removes and returns the unhashed subpacket at position `index`, shifting all other
+    /// unhashed subpackets to the left
+    pub fn remove_unhashed_subpacket(&mut self, index: usize) -> Result<Subpacket> {
+        ensure!(
+            matches!(self.packet_header.packet_length(), PacketLength::Fixed(_)),
+            "Packet length of a signature must be Fixed"
+        );
+
+        if let Some(config) = self.config_mut() {
+            let sp = config.unhashed_subpackets.remove(index);
+            if let PacketLength::Fixed(packetlen) = self.packet_header.packet_length_mut() {
+                *packetlen -= sp.write_len() as u32;
+                Ok(sp)
+            } else {
+                unimplemented!("error")
+            }
+        } else {
+            unimplemented!("error")
         }
     }
 

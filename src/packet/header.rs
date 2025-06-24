@@ -133,6 +133,13 @@ impl PacketHeader {
         }
     }
 
+    /// Returns the packet length as &mut.
+    pub(crate) fn packet_length_mut(&mut self) -> &mut PacketLength {
+        match self {
+            Self::Old { ref mut length, .. } | Self::New { ref mut length, .. } => length,
+        }
+    }
+
     /// Returns the packet tag.
     pub fn tag(&self) -> Tag {
         match self {
