@@ -1,4 +1,7 @@
-use std::io::{BufRead, Read};
+use std::{
+    cmp::Ordering,
+    io::{BufRead, Read},
+};
 
 use bitfields::bitfield;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
@@ -290,6 +293,20 @@ impl Signature {
             } else {
                 unimplemented!("error")
             }
+        } else {
+            unimplemented!("error")
+        }
+    }
+
+    /// Sorts the subpackets in the unhashed area with a comparison function,
+    /// preserving initial order of equal elements.
+    pub fn unhashed_area_sort_by<F>(&mut self, compare: F) -> Result<()>
+    where
+        F: FnMut(&Subpacket, &Subpacket) -> Ordering,
+    {
+        if let Some(config) = self.config_mut() {
+            config.unhashed_subpackets.sort_by(compare);
+            Ok(())
         } else {
             unimplemented!("error")
         }
