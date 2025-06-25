@@ -246,7 +246,7 @@ impl Signature {
         if let InnerSignature::Known { ref config, .. } = self.inner {
             self.insert_unhashed_subpacket(config.unhashed_subpackets.len(), subpacket)
         } else {
-            unimplemented!("error")
+            bail!("Unknown Signature type, can't add Subpacket");
         }
     }
 
@@ -254,18 +254,21 @@ impl Signature {
     /// after it to the right
     pub fn insert_unhashed_subpacket(&mut self, index: usize, subpacket: Subpacket) -> Result<()> {
         if let InnerSignature::Known { ref mut config, .. } = self.inner {
-            let len = subpacket.write_len();
-
-            config.unhashed_subpackets.insert(index, subpacket);
             if let PacketLength::Fixed(packetlen) = self.packet_header.packet_length_mut() {
+                let len = subpacket.write_len();
+
+                config.unhashed_subpackets.insert(index, subpacket);
                 *packetlen += len as u32;
             } else {
-                unimplemented!("error")
+                bail!(
+                    "Unexpected PacketLength encoding {:?}, can't modify the unhashed area",
+                    self.packet_header.packet_length()
+                );
             }
 
             Ok(())
         } else {
-            unimplemented!("error")
+            bail!("Unknown Signature type, can't add Subpacket");
         }
     }
 
@@ -278,15 +281,18 @@ impl Signature {
         );
 
         if let InnerSignature::Known { ref mut config, .. } = self.inner {
-            let sp = config.unhashed_subpackets.remove(index);
             if let PacketLength::Fixed(packetlen) = self.packet_header.packet_length_mut() {
+                let sp = config.unhashed_subpackets.remove(index);
                 *packetlen -= sp.write_len() as u32;
                 Ok(sp)
             } else {
-                unimplemented!("error")
+                bail!(
+                    "Unexpected PacketLength encoding {:?}, can't modify the unhashed area",
+                    self.packet_header.packet_length()
+                );
             }
         } else {
-            unimplemented!("error")
+            bail!("Unknown Signature type, can't remove Subpacket");
         }
     }
 
