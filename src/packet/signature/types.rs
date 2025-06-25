@@ -241,17 +241,9 @@ impl Signature {
         }
     }
 
-    /// Returns the `SignatureConfig` as &mut if this is a known signature format.
-    fn config_mut(&mut self) -> Option<&mut SignatureConfig> {
-        match self.inner {
-            InnerSignature::Known { ref mut config, .. } => Some(config),
-            InnerSignature::Unknown { .. } => None,
-        }
-    }
-
     /// Appends a subpacket at the back of the unhashed area
     pub fn push_unhashed_subpacket(&mut self, subpacket: Subpacket) -> Result<()> {
-        if let Some(config) = self.config() {
+        if let InnerSignature::Known { ref config, .. } = self.inner {
             self.insert_unhashed_subpacket(config.unhashed_subpackets.len(), subpacket)
         } else {
             unimplemented!("error")
@@ -261,7 +253,7 @@ impl Signature {
     /// Insert a subpacket into the unhashed area at position `index`, shifting all subpackets
     /// after it to the right
     pub fn insert_unhashed_subpacket(&mut self, index: usize, subpacket: Subpacket) -> Result<()> {
-        if let Some(config) = self.config_mut() {
+        if let InnerSignature::Known { ref mut config, .. } = self.inner {
             let len = subpacket.write_len();
 
             config.unhashed_subpackets.insert(index, subpacket);
@@ -285,7 +277,7 @@ impl Signature {
             "Packet length of a signature must be Fixed"
         );
 
-        if let Some(config) = self.config_mut() {
+        if let InnerSignature::Known { ref mut config, .. } = self.inner {
             let sp = config.unhashed_subpackets.remove(index);
             if let PacketLength::Fixed(packetlen) = self.packet_header.packet_length_mut() {
                 *packetlen -= sp.write_len() as u32;
@@ -300,15 +292,12 @@ impl Signature {
 
     /// Sorts the subpackets in the unhashed area with a comparison function,
     /// preserving initial order of equal elements.
-    pub fn unhashed_area_sort_by<F>(&mut self, compare: F) -> Result<()>
+    pub fn unhashed_area_sort_by<F>(&mut self, compare: F)
     where
         F: FnMut(&Subpacket, &Subpacket) -> Ordering,
     {
-        if let Some(config) = self.config_mut() {
+        if let InnerSignature::Known { ref mut config, .. } = self.inner {
             config.unhashed_subpackets.sort_by(compare);
-            Ok(())
-        } else {
-            unimplemented!("error")
         }
     }
 
