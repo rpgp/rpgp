@@ -325,7 +325,7 @@ impl Signature {
         self.config().map(|c| c.hash_alg)
     }
 
-    /// Returns the actual byte level  signature.
+    /// Returns the actual byte level signature.
     pub fn signature(&self) -> Option<&SignatureBytes> {
         match self.inner {
             InnerSignature::Known { ref signature, .. } => Some(signature),
