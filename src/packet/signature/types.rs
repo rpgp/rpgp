@@ -258,7 +258,7 @@ impl Signature {
                 let len = subpacket.write_len();
 
                 config.unhashed_subpackets.insert(index, subpacket);
-                *packetlen += len as u32;
+                *packetlen += u32::try_from(len)?;
             } else {
                 bail!(
                     "Unexpected PacketLength encoding {:?}, can't modify the unhashed area",
@@ -283,7 +283,7 @@ impl Signature {
         if let InnerSignature::Known { ref mut config, .. } = self.inner {
             if let PacketLength::Fixed(packetlen) = self.packet_header.packet_length_mut() {
                 let sp = config.unhashed_subpackets.remove(index);
-                *packetlen -= sp.write_len() as u32;
+                *packetlen -= u32::try_from(sp.write_len())?;
                 Ok(sp)
             } else {
                 bail!(
