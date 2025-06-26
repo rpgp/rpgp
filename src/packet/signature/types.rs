@@ -255,10 +255,17 @@ impl Signature {
     pub fn insert_unhashed_subpacket(&mut self, index: usize, subpacket: Subpacket) -> Result<()> {
         if let InnerSignature::Known { ref mut config, .. } = self.inner {
             if let PacketLength::Fixed(packetlen) = self.packet_header.packet_length_mut() {
-                let len = subpacket.write_len();
+                ensure!(
+                    // `<=`, because index may point to the entry *after* the last element
+                    index <= config.unhashed_subpackets.len(),
+                    "Index {} is larger than the unhashed subpacket area",
+                    index
+                );
+
+                let len = u32::try_from(subpacket.write_len())?;
 
                 config.unhashed_subpackets.insert(index, subpacket);
-                *packetlen += u32::try_from(len)?;
+                *packetlen += len;
             } else {
                 bail!(
                     "Unexpected PacketLength encoding {:?}, can't modify the unhashed area",
@@ -275,12 +282,14 @@ impl Signature {
     /// Removes and returns the unhashed subpacket at position `index`, shifting all other
     /// unhashed subpackets to the left
     pub fn remove_unhashed_subpacket(&mut self, index: usize) -> Result<Subpacket> {
-        ensure!(
-            matches!(self.packet_header.packet_length(), PacketLength::Fixed(_)),
-            "Packet length of a signature must be Fixed"
-        );
-
         if let InnerSignature::Known { ref mut config, .. } = self.inner {
+            ensure!(
+                // `<`, because index must point at an existing element
+                index < config.unhashed_subpackets.len(),
+                "Index {} is not contained in the unhashed subpacket area",
+                index
+            );
+
             if let PacketLength::Fixed(packetlen) = self.packet_header.packet_length_mut() {
                 let sp = config.unhashed_subpackets.remove(index);
                 *packetlen -= u32::try_from(sp.write_len())?;
