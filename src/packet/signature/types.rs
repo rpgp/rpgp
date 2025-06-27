@@ -242,9 +242,9 @@ impl Signature {
     }
 
     /// Appends a subpacket at the back of the unhashed area
-    pub fn push_unhashed_subpacket(&mut self, subpacket: Subpacket) -> Result<()> {
+    pub fn unhashed_subpacket_push(&mut self, subpacket: Subpacket) -> Result<()> {
         if let InnerSignature::Known { ref config, .. } = self.inner {
-            self.insert_unhashed_subpacket(config.unhashed_subpackets.len(), subpacket)
+            self.unhashed_subpacket_insert(config.unhashed_subpackets.len(), subpacket)
         } else {
             bail!("Unknown Signature type, can't add Subpacket");
         }
@@ -252,7 +252,7 @@ impl Signature {
 
     /// Insert a subpacket into the unhashed area at position `index`, shifting all subpackets
     /// after it to the right
-    pub fn insert_unhashed_subpacket(&mut self, index: usize, subpacket: Subpacket) -> Result<()> {
+    pub fn unhashed_subpacket_insert(&mut self, index: usize, subpacket: Subpacket) -> Result<()> {
         if let InnerSignature::Known { ref mut config, .. } = self.inner {
             if let PacketLength::Fixed(packetlen) = self.packet_header.packet_length_mut() {
                 ensure!(
@@ -281,7 +281,7 @@ impl Signature {
 
     /// Removes and returns the unhashed subpacket at position `index`, shifting all other
     /// unhashed subpackets to the left
-    pub fn remove_unhashed_subpacket(&mut self, index: usize) -> Result<Subpacket> {
+    pub fn unhashed_subpacket_remove(&mut self, index: usize) -> Result<Subpacket> {
         if let InnerSignature::Known { ref mut config, .. } = self.inner {
             ensure!(
                 // `<`, because index must point at45 an existing element
@@ -307,7 +307,7 @@ impl Signature {
 
     /// Sorts the subpackets in the unhashed area with a comparison function,
     /// preserving initial order of equal elements.
-    pub fn unhashed_area_sort_by<F>(&mut self, compare: F)
+    pub fn unhashed_subpackets_sort_by<F>(&mut self, compare: F)
     where
         F: FnMut(&Subpacket, &Subpacket) -> Ordering,
     {
@@ -1786,7 +1786,7 @@ pwsJtT3sJB2q5NoA
 
         assert_eq!(sig.packet_header.packet_length(), PacketLength::Fixed(154));
 
-        sig.push_unhashed_subpacket(
+        sig.unhashed_subpacket_push(
             Subpacket::regular(SubpacketData::Notation(Notation {
                 readable: true,
                 name: "foo".into(),
@@ -1801,7 +1801,7 @@ pwsJtT3sJB2q5NoA
             &[SubpacketType::Issuer, SubpacketType::Notation]
         );
 
-        sig.insert_unhashed_subpacket(
+        sig.unhashed_subpacket_insert(
             0,
             Subpacket::regular(SubpacketData::Notation(Notation {
                 readable: true,
@@ -1821,7 +1821,7 @@ pwsJtT3sJB2q5NoA
             ]
         );
 
-        sig.unhashed_area_sort_by(|a, b| {
+        sig.unhashed_subpackets_sort_by(|a, b| {
             a.typ()
                 .as_u8(a.is_critical)
                 .cmp(&b.typ().as_u8(b.is_critical))
@@ -1836,7 +1836,7 @@ pwsJtT3sJB2q5NoA
             ]
         );
 
-        sig.remove_unhashed_subpacket(0).unwrap();
+        sig.unhashed_subpacket_remove(0).unwrap();
         assert_eq!(sig.packet_header.packet_length(), PacketLength::Fixed(180));
         assert_eq!(
             &subpacket_type_list(&sig),
