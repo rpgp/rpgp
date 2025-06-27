@@ -284,7 +284,7 @@ impl Signature {
     pub fn remove_unhashed_subpacket(&mut self, index: usize) -> Result<Subpacket> {
         if let InnerSignature::Known { ref mut config, .. } = self.inner {
             ensure!(
-                // `<`, because index must point at an existing element
+                // `<`, because index must point at45 an existing element
                 index < config.unhashed_subpackets.len(),
                 "Index {} is not contained in the unhashed subpacket area",
                 index
@@ -1547,6 +1547,8 @@ pub(super) fn serialize_for_hashing<K: KeyDetails + Serialize>(
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use bytes::BytesMut;
 
     use super::*;
@@ -1742,6 +1744,8 @@ mod tests {
 
     use proptest::prelude::*;
 
+    use crate::composed::StandaloneSignature;
+
     impl Arbitrary for KeyFlags {
         type Parameters = ();
         type Strategy = BoxedStrategy<Self>;
@@ -1751,6 +1755,93 @@ mod tests {
                 .prop_map(|v| KeyFlags::try_from_reader(&mut &v[..]).unwrap())
                 .boxed()
         }
+    }
+
+    #[test]
+    fn unhashed_area_modification() {
+        fn subpacket_type_list(sig: &Signature) -> Vec<SubpacketType> {
+            sig.config()
+                .unwrap()
+                .unhashed_subpackets
+                .iter()
+                .map(Subpacket::typ)
+                .collect()
+        }
+
+        use crate::composed::Deserializable;
+
+        let mut sig = StandaloneSignature::from_armor_single(Cursor::new(
+            "-----BEGIN PGP SIGNATURE-----
+
+wpoEEBYIAEIFAmheZZEWIQT8Y2QNsPXIvVyHlK1LkdWvyoDDywIbAwIeAQQLCQgH
+BhUOCgkMCAEWDScJAggCBwIJAQgBBwECGQEACgkQS5HVr8qAw8swhAD/RFBBueDN
+ClWUWHgCj+FmHElqrUO4YVePdt2KRkniPJ4A/jtOCzD7vZJZs0yP4xQ78PEsUST0
+pwsJtT3sJB2q5NoA
+=XphF
+-----END PGP SIGNATURE-----",
+        ))
+        .unwrap()
+        .0
+        .signature;
+
+        assert_eq!(sig.packet_header.packet_length(), PacketLength::Fixed(154));
+
+        sig.push_unhashed_subpacket(
+            Subpacket::regular(SubpacketData::Notation(Notation {
+                readable: true,
+                name: "foo".into(),
+                value: "bar".into(),
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(sig.packet_header.packet_length(), PacketLength::Fixed(170));
+        assert_eq!(
+            &subpacket_type_list(&sig),
+            &[SubpacketType::Issuer, SubpacketType::Notation]
+        );
+
+        sig.insert_unhashed_subpacket(
+            0,
+            Subpacket::regular(SubpacketData::Notation(Notation {
+                readable: true,
+                name: "hello".into(),
+                value: "world".into(),
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(sig.packet_header.packet_length(), PacketLength::Fixed(190));
+        assert_eq!(
+            &subpacket_type_list(&sig),
+            &[
+                SubpacketType::Notation,
+                SubpacketType::Issuer,
+                SubpacketType::Notation
+            ]
+        );
+
+        sig.unhashed_area_sort_by(|a, b| {
+            a.typ()
+                .as_u8(a.is_critical)
+                .cmp(&b.typ().as_u8(b.is_critical))
+        });
+        assert_eq!(sig.packet_header.packet_length(), PacketLength::Fixed(190));
+        assert_eq!(
+            &subpacket_type_list(&sig),
+            &[
+                SubpacketType::Issuer,
+                SubpacketType::Notation,
+                SubpacketType::Notation
+            ]
+        );
+
+        sig.remove_unhashed_subpacket(0).unwrap();
+        assert_eq!(sig.packet_header.packet_length(), PacketLength::Fixed(180));
+        assert_eq!(
+            &subpacket_type_list(&sig),
+            &[SubpacketType::Notation, SubpacketType::Notation]
+        );
     }
 
     proptest! {
