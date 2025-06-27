@@ -1,4 +1,7 @@
-use std::io::{BufRead, Read};
+use std::{
+    cmp::Ordering,
+    io::{BufRead, Read},
+};
 
 use bitfields::bitfield;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
@@ -26,21 +29,22 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PublicKeyTrait,
-        SignatureBytes, Tag,
+        self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength,
+        PublicKeyTrait, SignatureBytes, Tag,
     },
 };
 
 /// Signature Packet
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-packet-type-id-2>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct Signature {
     packet_header: PacketHeader,
-    pub inner: InnerSignature,
+    pub(crate) inner: InnerSignature,
 }
 
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
-pub enum InnerSignature {
+pub(crate) enum InnerSignature {
     /// V2, V3, V4 and V6
     Known {
         config: SignatureConfig,
@@ -229,6 +233,7 @@ impl Signature {
         })
     }
 
+    /// Returns the `SignatureConfig` if this is a known signature format.
     pub fn config(&self) -> Option<&SignatureConfig> {
         match self.inner {
             InnerSignature::Known { ref config, .. } => Some(config),
@@ -236,6 +241,82 @@ impl Signature {
         }
     }
 
+    /// Appends a subpacket at the back of the unhashed area
+    pub fn unhashed_subpacket_push(&mut self, subpacket: Subpacket) -> Result<()> {
+        if let InnerSignature::Known { ref config, .. } = self.inner {
+            self.unhashed_subpacket_insert(config.unhashed_subpackets.len(), subpacket)
+        } else {
+            bail!("Unknown Signature type, can't add Subpacket");
+        }
+    }
+
+    /// Insert a subpacket into the unhashed area at position `index`, shifting all subpackets
+    /// after it to the right
+    pub fn unhashed_subpacket_insert(&mut self, index: usize, subpacket: Subpacket) -> Result<()> {
+        if let InnerSignature::Known { ref mut config, .. } = self.inner {
+            if let PacketLength::Fixed(packetlen) = self.packet_header.packet_length_mut() {
+                ensure!(
+                    // `<=`, because index may point to the entry *after* the last element
+                    index <= config.unhashed_subpackets.len(),
+                    "Index {} is larger than the unhashed subpacket area",
+                    index
+                );
+
+                let len = u32::try_from(subpacket.write_len())?;
+
+                config.unhashed_subpackets.insert(index, subpacket);
+                *packetlen += len;
+            } else {
+                bail!(
+                    "Unexpected PacketLength encoding {:?}, can't modify the unhashed area",
+                    self.packet_header.packet_length()
+                );
+            }
+
+            Ok(())
+        } else {
+            bail!("Unknown Signature type, can't add Subpacket");
+        }
+    }
+
+    /// Removes and returns the unhashed subpacket at position `index`, shifting all other
+    /// unhashed subpackets to the left
+    pub fn unhashed_subpacket_remove(&mut self, index: usize) -> Result<Subpacket> {
+        if let InnerSignature::Known { ref mut config, .. } = self.inner {
+            ensure!(
+                // `<`, because index must point at45 an existing element
+                index < config.unhashed_subpackets.len(),
+                "Index {} is not contained in the unhashed subpacket area",
+                index
+            );
+
+            if let PacketLength::Fixed(packetlen) = self.packet_header.packet_length_mut() {
+                let sp = config.unhashed_subpackets.remove(index);
+                *packetlen -= u32::try_from(sp.write_len())?;
+                Ok(sp)
+            } else {
+                bail!(
+                    "Unexpected PacketLength encoding {:?}, can't modify the unhashed area",
+                    self.packet_header.packet_length()
+                );
+            }
+        } else {
+            bail!("Unknown Signature type, can't remove Subpacket");
+        }
+    }
+
+    /// Sorts the subpackets in the unhashed area with a comparison function,
+    /// preserving initial order of equal elements.
+    pub fn unhashed_subpackets_sort_by<F>(&mut self, compare: F)
+    where
+        F: FnMut(&Subpacket, &Subpacket) -> Ordering,
+    {
+        if let InnerSignature::Known { ref mut config, .. } = self.inner {
+            config.unhashed_subpackets.sort_by(compare);
+        }
+    }
+
+    /// Returns the `SignatureVersion`.
     pub fn version(&self) -> SignatureVersion {
         match self.inner {
             InnerSignature::Known { ref config, .. } => config.version(),
@@ -253,6 +334,7 @@ impl Signature {
         self.config().map(|c| c.hash_alg)
     }
 
+    /// Returns the actual byte level signature.
     pub fn signature(&self) -> Option<&SignatureBytes> {
         match self.inner {
             InnerSignature::Known { ref signature, .. } => Some(signature),
@@ -1465,6 +1547,8 @@ pub(super) fn serialize_for_hashing<K: KeyDetails + Serialize>(
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use bytes::BytesMut;
 
     use super::*;
@@ -1660,6 +1744,8 @@ mod tests {
 
     use proptest::prelude::*;
 
+    use crate::composed::StandaloneSignature;
+
     impl Arbitrary for KeyFlags {
         type Parameters = ();
         type Strategy = BoxedStrategy<Self>;
@@ -1669,6 +1755,93 @@ mod tests {
                 .prop_map(|v| KeyFlags::try_from_reader(&mut &v[..]).unwrap())
                 .boxed()
         }
+    }
+
+    #[test]
+    fn unhashed_area_modification() {
+        fn subpacket_type_list(sig: &Signature) -> Vec<SubpacketType> {
+            sig.config()
+                .unwrap()
+                .unhashed_subpackets
+                .iter()
+                .map(Subpacket::typ)
+                .collect()
+        }
+
+        use crate::composed::Deserializable;
+
+        let mut sig = StandaloneSignature::from_armor_single(Cursor::new(
+            "-----BEGIN PGP SIGNATURE-----
+
+wpoEEBYIAEIFAmheZZEWIQT8Y2QNsPXIvVyHlK1LkdWvyoDDywIbAwIeAQQLCQgH
+BhUOCgkMCAEWDScJAggCBwIJAQgBBwECGQEACgkQS5HVr8qAw8swhAD/RFBBueDN
+ClWUWHgCj+FmHElqrUO4YVePdt2KRkniPJ4A/jtOCzD7vZJZs0yP4xQ78PEsUST0
+pwsJtT3sJB2q5NoA
+=XphF
+-----END PGP SIGNATURE-----",
+        ))
+        .unwrap()
+        .0
+        .signature;
+
+        assert_eq!(sig.packet_header.packet_length(), PacketLength::Fixed(154));
+
+        sig.unhashed_subpacket_push(
+            Subpacket::regular(SubpacketData::Notation(Notation {
+                readable: true,
+                name: "foo".into(),
+                value: "bar".into(),
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(sig.packet_header.packet_length(), PacketLength::Fixed(170));
+        assert_eq!(
+            &subpacket_type_list(&sig),
+            &[SubpacketType::Issuer, SubpacketType::Notation]
+        );
+
+        sig.unhashed_subpacket_insert(
+            0,
+            Subpacket::regular(SubpacketData::Notation(Notation {
+                readable: true,
+                name: "hello".into(),
+                value: "world".into(),
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(sig.packet_header.packet_length(), PacketLength::Fixed(190));
+        assert_eq!(
+            &subpacket_type_list(&sig),
+            &[
+                SubpacketType::Notation,
+                SubpacketType::Issuer,
+                SubpacketType::Notation
+            ]
+        );
+
+        sig.unhashed_subpackets_sort_by(|a, b| {
+            a.typ()
+                .as_u8(a.is_critical)
+                .cmp(&b.typ().as_u8(b.is_critical))
+        });
+        assert_eq!(sig.packet_header.packet_length(), PacketLength::Fixed(190));
+        assert_eq!(
+            &subpacket_type_list(&sig),
+            &[
+                SubpacketType::Issuer,
+                SubpacketType::Notation,
+                SubpacketType::Notation
+            ]
+        );
+
+        sig.unhashed_subpacket_remove(0).unwrap();
+        assert_eq!(sig.packet_header.packet_length(), PacketLength::Fixed(180));
+        assert_eq!(
+            &subpacket_type_list(&sig),
+            &[SubpacketType::Notation, SubpacketType::Notation]
+        );
     }
 
     proptest! {
