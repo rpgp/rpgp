@@ -3,7 +3,7 @@ use std::io::{self, BufRead, Read};
 use super::PacketBodyReader;
 use crate::{
     composed::{DebugBufRead, PlainSessionKey},
-    errors::{bail, ensure_eq, unsupported_err, Result},
+    errors::{bail, ensure, ensure_eq, unsupported_err, Result},
     packet::{PacketHeader, StreamDecryptor, SymEncryptedProtectedDataConfig},
     types::Tag,
 };
@@ -21,6 +21,7 @@ enum Source<R: DebugBufRead> {
     BodyRaw(PacketBodyReader<R>),
     BodyDecryptor(StreamDecryptor<PacketBodyReader<R>>),
     Done(PacketBodyReader<R>),
+    Error,
 }
 
 impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
@@ -35,18 +36,10 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
     }
 
     pub fn decrypt(&mut self, session_key: &PlainSessionKey) -> Result<()> {
-        match self.source {
-            Source::BodyDecryptor(_) => {
-                bail!("cannot decrypt after starting to read")
-            }
-            Source::BodyRaw(_) => {
-                bail!("cannot decrypt after starting to read")
-            }
-            Source::Done(_) => {
-                bail!("cannot decrypt after finishing to read")
-            }
-            Source::Init(_) => {}
-        }
+        ensure!(
+            matches!(self.source, Source::Init(_)),
+            "cannot decrypt after starting to read"
+        );
 
         match self.config {
             SymEncryptedProtectedDataConfig::V1 => {
@@ -61,19 +54,19 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                     PlainSessionKey::Unknown { sym_alg, key } => (sym_alg, key),
                 };
 
-                replace_with::replace_with(
+                replace_with::replace_with_and_return(
                     &mut self.source,
-                    || todo!(),
+                    || Source::Error,
                     |source| {
                         let Source::Init(source) = source else {
                             unreachable!("checked");
                         };
-                        Source::BodyDecryptor(
-                            #[allow(clippy::unwrap_used)] // FIXME
-                            StreamDecryptor::v1(*sym_alg, session_key, source).unwrap(),
-                        )
+                        match StreamDecryptor::v1(*sym_alg, session_key, source) {
+                            Ok(dec) => (Ok(()), Source::BodyDecryptor(dec)),
+                            Err(err) => (Err(err), Source::Error),
+                        }
                     },
-                );
+                )?;
             }
             SymEncryptedProtectedDataConfig::V2 {
                 sym_alg,
@@ -105,27 +98,26 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                     "Unexpected session key length for {:?}",
                     sym_alg
                 );
-                replace_with::replace_with(
+                replace_with::replace_with_and_return(
                     &mut self.source,
-                    || todo!(),
+                    || Source::Error,
                     |source| {
                         let Source::Init(source) = source else {
                             unreachable!("checked");
                         };
-                        Source::BodyDecryptor(
-                            #[allow(clippy::unwrap_used)] // FIXME
-                            StreamDecryptor::v2(
-                                sym_alg,
-                                aead,
-                                chunk_size,
-                                &salt,
-                                session_key,
-                                source,
-                            )
-                            .unwrap(),
-                        )
+                        match StreamDecryptor::v2(
+                            sym_alg,
+                            aead,
+                            chunk_size,
+                            &salt,
+                            session_key,
+                            source,
+                        ) {
+                            Ok(dec) => (Ok(()), Source::BodyDecryptor(dec)),
+                            Err(err) => (Err(err), Source::Error),
+                        }
                     },
-                );
+                )?;
             }
         }
         Ok(())
@@ -155,6 +147,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
             Source::BodyDecryptor(source) => source.into_inner(),
             Source::BodyRaw(source) => source,
             Source::Done(source) => source,
+            Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
         }
     }
 
@@ -164,6 +157,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
             Source::BodyDecryptor(source) => source.get_mut(),
             Source::BodyRaw(source) => source,
             Source::Done(source) => source,
+            Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
         }
     }
 
@@ -173,6 +167,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
             Source::BodyDecryptor(source) => source.get_ref().packet_header(),
             Source::BodyRaw(source) => source.packet_header(),
             Source::Done(source) => source.packet_header(),
+            Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
         }
     }
 
@@ -193,17 +188,19 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                     (buf.is_empty(), true)
                 }
                 Source::Done(_) => (false, true),
+                Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
             };
 
             if needs_replacing {
                 replace_with::replace_with(
                     &mut self.source,
-                    || todo!(),
+                    || Source::Error,
                     |source| match source {
                         Source::Init(source) => Source::BodyRaw(source),
                         Source::BodyRaw(source) => Source::Done(source),
                         Source::BodyDecryptor(source) => Source::Done(source.into_inner()),
                         Source::Done(source) => Source::Done(source),
+                        Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
                     },
                 )
             }
@@ -222,6 +219,7 @@ impl<R: DebugBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
             Source::BodyDecryptor(decryptor) => decryptor.fill_buf(),
             Source::BodyRaw(source) => source.fill_buf(),
             Source::Done(_) => Ok(&[][..]),
+            Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
         }
     }
 
@@ -235,6 +233,7 @@ impl<R: DebugBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
                     panic!("consume after done: {}", amt)
                 }
             }
+            Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
         }
     }
 }
@@ -247,6 +246,7 @@ impl<R: DebugBufRead> Read for SymEncryptedProtectedDataReader<R> {
             Source::BodyDecryptor(decryptor) => decryptor.read(buf),
             Source::BodyRaw(source) => source.read(buf),
             Source::Done(_) => Ok(0),
+            Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
         }
     }
 }
