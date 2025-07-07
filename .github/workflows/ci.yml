@@ -79,8 +79,7 @@ jobs:
           - stable
         target:
           - x86_64-pc-windows-gnu
-          # FIXME
-          # -  x86_64-pc-windows-msvc
+          - x86_64-pc-windows-msvc
 
     steps:
     - name: Checkout
