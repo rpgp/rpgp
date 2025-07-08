@@ -17,10 +17,7 @@ fn parse_pub_priv_fields<B: BufRead>(
     pub_len: Option<usize>,
     mut i: B,
 ) -> Result<(PublicParams, SecretParams)> {
-    debug!(
-        "KeyVersion: {:?}, alg: {:?}, len {:?}",
-        key_ver, typ, pub_len
-    );
+    debug!("KeyVersion: {key_ver:?}, alg: {typ:?}, len {pub_len:?}");
     let pub_params = match pub_len {
         Some(pub_len) => {
             // Use the pub_len hint to make sure we consume no more or less

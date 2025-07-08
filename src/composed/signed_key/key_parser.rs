@@ -79,7 +79,7 @@ where
                 } else {
                     if primary_key.version() != KeyVersion::V4 {
                         // no direct signatures on V2|V3 keys
-                        warn!("unexpected signature: {:?}", typ);
+                        warn!("unexpected signature: {typ:?}");
                     }
                     direct_signatures.push(sig);
                 }
@@ -106,7 +106,7 @@ where
         };
 
         let tag = packet.tag();
-        debug!("  user data: {:?}", tag);
+        debug!("  user data: {tag:?}");
         match tag {
             Tag::UserId => {
                 let id: UserId = err_opt!(packet.try_into());

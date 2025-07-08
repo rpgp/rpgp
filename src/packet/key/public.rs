@@ -622,7 +622,7 @@ impl crate::ser::Serialize for PubKeyInner {
             KeyVersion::V4 | KeyVersion::V6 => self.writer_len_v4_v6(),
             KeyVersion::V5 => panic!("V5 keys"),
             KeyVersion::Other(v) => {
-                panic!("Unsupported key version {}", v)
+                panic!("Unsupported key version {v}")
             }
         };
         sum

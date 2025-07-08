@@ -203,10 +203,10 @@ impl FakeHsm {
                     EcdhPublicParams::Brainpool256 { .. }
                     | EcdhPublicParams::Brainpool384 { .. }
                     | EcdhPublicParams::Brainpool512 { .. } => {
-                        panic!("unsupported params: {:?}", params);
+                        panic!("unsupported params: {params:?}");
                     }
                     EcdhPublicParams::Unsupported { .. } => {
-                        panic!("unsupported params: {:?}", params);
+                        panic!("unsupported params: {params:?}");
                     }
                 };
                 let decrypted_key: Vec<u8> = pgp::crypto::ecdh::derive_session_key(

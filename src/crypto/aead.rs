@@ -251,7 +251,7 @@ impl AeadAlgorithm {
 
 /// Get (info, message_key, nonce) for the given parameters
 #[allow(clippy::type_complexity)]
-pub(crate) fn aead_setup(
+pub(crate) fn aead_setup_rfc9580(
     sym_alg: SymmetricKeyAlgorithm,
     aead: AeadAlgorithm,
     chunk_size: ChunkSize,
@@ -375,7 +375,7 @@ mod tests {
 
                     {
                         info!("decrypt streaming");
-                        let mut decryptor = StreamDecryptor::new(
+                        let mut decryptor = StreamDecryptor::new_rfc9580(
                             $sym_alg,
                             $aead,
                             ChunkSize::default(),

@@ -71,7 +71,7 @@ fn v3_parser<B: BufRead>(
 
     // The SignatureBytes comprising the signature.
     let sig = actual_signature(&pub_alg, &mut i)?;
-    debug!("signature data {:?}", sig);
+    debug!("signature data {sig:?}");
 
     match version {
         SignatureVersion::V2 => Ok(Signature::v2(
@@ -140,7 +140,7 @@ fn v4_parser<B: BufRead>(
 
     // The SignatureBytes comprising the signature.
     let sig = actual_signature(&pub_alg, i)?;
-    debug!("signature data {:?}", sig);
+    debug!("signature data {sig:?}");
 
     Ok(Signature::v4(
         packet_header,
@@ -205,7 +205,7 @@ fn v6_parser<B: BufRead>(packet_header: PacketHeader, mut i: B) -> Result<Signat
 
     // The SignatureBytes comprising the signature.
     let sig = actual_signature(&pub_alg, i)?;
-    debug!("signature data {:?}", sig);
+    debug!("signature data {sig:?}");
     Ok(Signature::v6(
         packet_header,
         typ,
@@ -233,17 +233,14 @@ fn subpackets<B: BufRead>(
         // the subpacket type (1 octet)
         let (typ, is_critical) = i.read_u8().map(SubpacketType::from_u8)?;
         let len = packet_len.len() - 1;
-        debug!(
-            "reading subpacket {:?}: critical? {}, len: {}",
-            typ, is_critical, len
-        );
+        debug!("reading subpacket {typ:?}: critical? {is_critical}, len: {len}");
 
         let mut body = i.read_take(len);
         let packet = subpacket(typ, is_critical, packet_len, packet_version, &mut body)?;
-        debug!("found subpacket {:?}", packet);
+        debug!("found subpacket {packet:?}");
 
         if !body.rest()?.is_empty() {
-            warn!("failed to fully process subpacket: {:?}", typ);
+            warn!("failed to fully process subpacket: {typ:?}");
             if is_critical {
                 bail!("invalid subpacket: {:?}", typ);
             }
@@ -262,7 +259,7 @@ fn subpacket<B: BufRead>(
 ) -> Result<Subpacket> {
     use super::subpacket::SubpacketType::*;
 
-    debug!("parsing subpacket: {:?}", typ);
+    debug!("parsing subpacket: {typ:?}");
 
     let res = match typ {
         SignatureCreationTime => signature_creation_time(body),
@@ -303,7 +300,7 @@ fn subpacket<B: BufRead>(
     });
 
     if res.is_err() {
-        warn!("invalid subpacket: {:?} {:?}", typ, res);
+        warn!("invalid subpacket: {typ:?} {res:?}");
     }
 
     res

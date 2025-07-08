@@ -78,7 +78,7 @@ pub(crate) fn parse<B: BufRead>(
     PublicParams,
 )> {
     let key_ver = i.read_u8().map(KeyVersion::from)?;
-    debug!("public params for key version {:?}", key_ver);
+    debug!("public params for key version {key_ver:?}");
 
     let key = match key_ver {
         KeyVersion::V2 | KeyVersion::V3 => public_key_parser_v2_v3(&key_ver, i)?,

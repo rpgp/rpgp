@@ -71,7 +71,7 @@ impl fmt::Display for BlockType {
 
 impl Serialize for BlockType {
     fn to_writer<W: io::Write>(&self, w: &mut W) -> Result<()> {
-        write!(w, "{}", self)?;
+        write!(w, "{self}")?;
 
         Ok(())
     }

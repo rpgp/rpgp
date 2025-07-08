@@ -669,7 +669,7 @@ mod tests {
         use crate::composed::Message;
 
         for filename in MSGS {
-            println!("reading {}", filename);
+            println!("reading {filename}");
 
             let (msg, header) = Message::from_armor_file(filename).expect("failed to load msg");
 
@@ -723,7 +723,7 @@ mod tests {
 
         use crate::composed::Message;
 
-        println!("reading {}", filename);
+        println!("reading {filename}");
         let (msg, _header) = Message::from_armor_file(filename).expect("parse");
 
         let mut decrypted = msg

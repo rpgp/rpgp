@@ -589,7 +589,7 @@ impl PlainSecretParams {
                     "session key algorithm cannot be plaintext"
                 );
 
-                debug!("sym_alg: {:?}", sym_alg);
+                debug!("sym_alg: {sym_alg:?}");
 
                 let key_size = sym_alg.key_size();
                 ensure_eq!(

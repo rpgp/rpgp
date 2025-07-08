@@ -47,7 +47,7 @@ impl<R: BufRead> Decompressor<R> {
     }
 
     pub fn from_algorithm(alg: CompressionAlgorithm, r: R) -> io::Result<Self> {
-        debug!("creating decompressor for {:?}", alg);
+        debug!("creating decompressor for {alg:?}");
         match alg {
             CompressionAlgorithm::Uncompressed => Ok(Self::Uncompressed(r)),
             CompressionAlgorithm::ZIP => Ok(Self::Zip(BufReader::new(DeflateDecoder::new(r)))),
@@ -56,7 +56,7 @@ impl<R: BufRead> Decompressor<R> {
             CompressionAlgorithm::BZip2 => Ok(Self::Bzip2(BufReader::new(BzDecoder::new(r)))),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                format!("unsupported compression algorithm {:?}", alg),
+                format!("unsupported compression algorithm {alg:?}"),
             )),
         }
     }
@@ -375,7 +375,7 @@ impl<R: io::Read> io::Read for CompressedDataPartialGenerator<R> {
                 }
             };
 
-            debug!("read chunk {} bytes", buf_size);
+            debug!("read chunk {buf_size} bytes");
             debug_assert!(buf_size <= u32::MAX as usize);
 
             if buf_size == 0 && self.is_fixed_emitted {
@@ -422,14 +422,14 @@ impl<R: io::Read> io::Read for CompressedDataPartialGenerator<R> {
 
                 writer.write_u8(self.source.algorithm().into())?;
 
-                debug!("first partial packet {:?}", packet_header);
+                debug!("first partial packet {packet_header:?}");
                 self.is_first = false;
             } else {
                 // only length
                 packet_length
                     .to_writer_new(&mut writer)
                     .map_err(io::Error::other)?;
-                debug!("partial packet {:?}", packet_length);
+                debug!("partial packet {packet_length:?}");
             };
 
             let mut packet_ser = writer.into_inner();
@@ -538,7 +538,7 @@ mod tests {
 
             assert_eq!(packet_back.packet_header().tag(), Tag::CompressedData);
             let Packet::CompressedData(data) = packet_back else {
-                panic!("invalid packet: {:?}", packet_back);
+                panic!("invalid packet: {packet_back:?}");
             };
 
             // only works for packets less than chunk_size - header (1)

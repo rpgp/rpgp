@@ -5,9 +5,9 @@ use log::warn;
 use crate::{
     errors::{format_err, Error, Result, UnsupportedSnafu},
     packet::{
-        CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, Packet,
-        PacketHeader, Padding, PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey,
-        SecretSubkey, Signature, SymEncryptedData, SymEncryptedProtectedData,
+        CompressedData, GnupgAeadData, LiteralData, Marker, ModDetectionCode, OnePassSignature,
+        Packet, PacketHeader, Padding, PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey,
+        SecretKey, SecretSubkey, Signature, SymEncryptedData, SymEncryptedProtectedData,
         SymKeyEncryptedSessionKey, Trust, UserAttribute, UserId,
     },
     parsing_reader::BufReadParsing,
@@ -62,10 +62,9 @@ impl Packet {
                 ModDetectionCode::try_from_reader(packet_header, &mut body).map(Into::into)
             }
             Tag::Padding => Padding::try_from_reader(packet_header, &mut body).map(Into::into),
-            Tag::Other(20) => Err(UnsupportedSnafu {
-                message: "GnuPG-proprietary 'OCB Encrypted Data Packet' is unsupported".to_string(),
+            Tag::GnupgAead => {
+                GnupgAeadData::try_from_reader(packet_header, &mut body).map(Into::into)
             }
-            .build()),
             Tag::Other(22..=39) => {
                 // a "hard" error that will bubble up and interrupt processing of compositions
                 Err(Error::InvalidPacketContent {
@@ -83,13 +82,13 @@ impl Packet {
                 .build())
             }
             Tag::Other(other) => Err(UnsupportedSnafu {
-                message: format!("Unknown packet type: {}", other),
+                message: format!("Unknown packet type: {other}"),
             }
             .build()),
         };
 
         if let Err(ref err) = res {
-            log::info!("error {:#?}", err);
+            log::info!("error {err:#?}");
         }
 
         // always drain the body to makes sure all data has been consumed
@@ -97,7 +96,7 @@ impl Packet {
         match res {
             Ok(res) => {
                 if drained_bytes > 0 {
-                    warn!("failed to consume data: {} bytes too many", drained_bytes);
+                    warn!("failed to consume data: {drained_bytes} bytes too many");
                     return Err(Error::PacketTooLarge {
                         size: drained_bytes,
                     });

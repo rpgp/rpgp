@@ -60,7 +60,7 @@ impl PacketHeader {
             }
             _ => Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("unknown packet header version {:b}", header),
+                format!("unknown packet header version {header:b}"),
             )),
         }
     }
@@ -160,7 +160,7 @@ impl PacketHeader {
 
 impl Serialize for PacketHeader {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        debug!("writing packet header {:?}", self);
+        debug!("writing packet header {self:?}");
 
         match self {
             Self::New { header, length } => {

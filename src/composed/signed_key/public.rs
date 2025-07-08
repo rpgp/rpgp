@@ -419,7 +419,7 @@ I8kWVkXU6vFOi+HWvv/ira7ofJu16NnoUkhclkUrk0mXubZvyl4GBg==
 
         let (spk, _) = SignedPublicKey::from_armor_single(io::Cursor::new(c))?;
 
-        eprintln!("spk: {:#02x?}", spk);
+        eprintln!("spk: {spk:#02x?}");
 
         spk.verify()?;
 

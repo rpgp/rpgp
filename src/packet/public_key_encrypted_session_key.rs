@@ -389,7 +389,7 @@ fn write_len_v6(values: &PkeskBytes, fingerprint: &Option<Fingerprint>) -> usize
                     sum += 1;
                 }
                 None => {
-                    panic!("Fingerprint without version information {:?}", fingerprint)
+                    panic!("Fingerprint without version information {fingerprint:?}")
                 }
             }
 

@@ -331,10 +331,7 @@ impl SignatureConfig {
             self.version(),
             signer.version()
         );
-        debug!(
-            "signing subkey binding: {:#?} - {:#?} - {:#?}",
-            self, signer, signee
-        );
+        debug!("signing subkey binding: {self:#?} - {signer:#?} - {signee:#?}");
 
         let mut hasher = self.hash_alg.new_hasher()?;
 
@@ -380,10 +377,7 @@ impl SignatureConfig {
             self.version(),
             signer.version()
         );
-        debug!(
-            "signing primary key binding: {:#?} - {:#?} - {:#?}",
-            self, signer, signee
-        );
+        debug!("signing primary key binding: {self:#?} - {signer:#?} - {signee:#?}");
 
         let mut hasher = self.hash_alg.new_hasher()?;
 
@@ -418,7 +412,7 @@ impl SignatureConfig {
             self.version(),
             signing_key.version()
         );
-        debug!("signing key (revocation): {:#?} - {:#?}", self, key);
+        debug!("signing key (revocation): {self:#?} - {key:#?}");
 
         let mut hasher = self.hash_alg.new_hasher()?;
 
@@ -483,7 +477,7 @@ impl SignatureConfig {
                 // hashed subpackets
                 let mut hashed_subpackets = Vec::new();
                 for packet in &self.hashed_subpackets {
-                    debug!("hashing {:#?}", packet);
+                    debug!("hashing {packet:#?}");
 
                     // If a subpacket is encountered that is marked critical but is unknown to the
                     // evaluating implementation, the evaluator SHOULD consider the signature to be

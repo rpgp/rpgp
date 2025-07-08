@@ -132,20 +132,17 @@ impl SecretKeyParamsBuilder {
         if let Some(key_type) = &key_type {
             if can_sign == Some(true) && !key_type.can_sign() {
                 return Err(format!(
-                    "KeyType {:?} can not be used for signing keys",
-                    key_type
+                    "KeyType {key_type:?} can not be used for signing keys"
                 ));
             }
             if can_encrypt == Some(true) && !key_type.can_encrypt() {
                 return Err(format!(
-                    "KeyType {:?} can not be used for encryption keys",
-                    key_type
+                    "KeyType {key_type:?} can not be used for encryption keys"
                 ));
             }
             if can_authenticate == Some(true) && !key_type.can_sign() {
                 return Err(format!(
-                    "KeyType {:?} can not be used for authentication keys",
-                    key_type
+                    "KeyType {key_type:?} can not be used for authentication keys"
                 ));
             }
 
@@ -864,7 +861,7 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         for key_version in [KeyVersion::V4, KeyVersion::V6] {
-            println!("key version {:?}", key_version);
+            println!("key version {key_version:?}");
 
             for i in 0..10_000 {
                 println!("round {i}");
@@ -878,7 +875,7 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         for key_version in [KeyVersion::V4, KeyVersion::V6] {
-            println!("key version {:?}", key_version);
+            println!("key version {key_version:?}");
 
             for _ in 0..10 {
                 gen_25519_rfc9580(&mut rng, key_version);
@@ -1240,7 +1237,7 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         for key_version in [KeyVersion::V4, KeyVersion::V6] {
-            println!("key version {:?}", key_version);
+            println!("key version {key_version:?}");
 
             for i in 0..100 {
                 println!("round {i}");
@@ -1254,7 +1251,7 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         for key_version in [KeyVersion::V4, KeyVersion::V6] {
-            println!("key version {:?}", key_version);
+            println!("key version {key_version:?}");
 
             for _ in 0..10 {
                 gen_448_rfc9580(&mut rng, key_version);

@@ -524,7 +524,7 @@ impl Signature {
             unsupported_err!("signature version {:?}", self.version());
         };
         let key_id = signee.key_id();
-        debug!("verifying certification {:?} {:#?}", key_id, self);
+        debug!("verifying certification {key_id:?} {self:#?}");
 
         Self::check_signature_key_version_alignment(&signer, config)?;
         Self::check_signature_hash_strength(config)?;
@@ -602,10 +602,7 @@ impl Signature {
         P: PublicKeyTrait + Serialize,
         K: PublicKeyTrait + Serialize,
     {
-        debug!(
-            "verifying subkey binding: {:#?} - {:#?} - {:#?}",
-            self, signer, signee,
-        );
+        debug!("verifying subkey binding: {self:#?} - {signer:#?} - {signee:#?}",);
 
         let InnerSignature::Known {
             ref config,
@@ -651,10 +648,7 @@ impl Signature {
         P: PublicKeyTrait + Serialize,
         K: PublicKeyTrait + Serialize,
     {
-        debug!(
-            "verifying primary key binding: {:#?} - {:#?} - {:#?}",
-            self, signer, signee
-        );
+        debug!("verifying primary key binding: {self:#?} - {signer:#?} - {signee:#?}");
 
         let InnerSignature::Known {
             ref config,
@@ -695,7 +689,7 @@ impl Signature {
     where
         P: PublicKeyTrait + Serialize,
     {
-        debug!("verifying key (revocation): {:#?} - {:#?}", self, key);
+        debug!("verifying key (revocation): {self:#?} - {key:#?}");
 
         let InnerSignature::Known {
             ref config,
@@ -1558,7 +1552,7 @@ mod tests {
     #[test]
     fn test_keyflags_crazy_versions() {
         for i in 0..1024 {
-            println!("size {}", i);
+            println!("size {i}");
             // I write this with pain...
             let source = BytesMut::zeroed(i).freeze();
             let flags = KeyFlags::try_from_reader(&source[..]).unwrap();

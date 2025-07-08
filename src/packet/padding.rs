@@ -99,7 +99,7 @@ mod tests {
         let full_packet = Packet::from_reader(header, &mut to_parse).expect("body parse");
 
         let Packet::Padding(ref packet) = full_packet else {
-            panic!("invalid packet: {:?}", full_packet);
+            panic!("invalid packet: {full_packet:?}");
         };
         assert_eq!(
             packet.data,
