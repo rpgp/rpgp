@@ -55,7 +55,7 @@ impl<R: BufRead> Iterator for PacketParser<R> {
                 match Packet::from_reader(header, &mut body) {
                     Ok(packet) => Ok(packet),
                     Err(Error::PacketParsing { source }) if source.is_incomplete() => {
-                        debug!("incomplete packet for: {:?}", source);
+                        debug!("incomplete packet for: {source:?}");
                         // not bailing, we are just skipping incomplete bodies
                         Err(Error::PacketIncomplete { source })
                     }
@@ -245,7 +245,7 @@ mod tests {
                     "19047047",
                 ];
                 if list.contains(&offset.as_str()) {
-                    warn!("skipping {}", offset);
+                    warn!("skipping {offset}");
                     false
                 } else {
                     true
@@ -255,7 +255,7 @@ mod tests {
         let actual_tags = PacketParser::new(file).filter(|p| {
             p.as_ref()
                 .inspect_err(|e| {
-                    warn!("failed to parse packet: {:?}", e);
+                    warn!("failed to parse packet: {e:?}");
                 })
                 .is_ok()
         });
@@ -283,7 +283,7 @@ mod tests {
             match p {
                 Ok(pp) => Some(pp),
                 Err(err) => {
-                    log::warn!("skipping packet: {:?}", err);
+                    log::warn!("skipping packet: {err:?}");
                     None
                 }
             }

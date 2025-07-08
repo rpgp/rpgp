@@ -37,11 +37,11 @@ fn libre_v5_skesk() {
     let mut pp = PacketParser::new(BufReader::new(&*skesk5));
     let p = match pp.next() {
         Some(Ok(p)) => p,
-        Some(Err(e)) => panic!("could not parse skesk {:?}", e),
+        Some(Err(e)) => panic!("could not parse skesk {e:?}"),
         None => panic!("no result"),
     };
 
-    eprintln!("{:02x?}", p);
+    eprintln!("{p:02x?}");
 
     let Packet::SymKeyEncryptedSessionKey(skesk) = &p else {
         panic!("expect skesk");
@@ -123,7 +123,7 @@ fn libre_ocb_message() {
 
     let msg = Message::from_bytes(BufReader::new(&*message)).expect("message from bytes");
 
-    eprintln!("msg {:#?}", msg);
+    eprintln!("msg {msg:#?}");
 
     let pw = Password::from("password");
     let mut dec = msg.decrypt_with_password(&pw).expect("decrypt");
@@ -145,12 +145,12 @@ fn libre_ocb_msg_to_bob() {
 
     let (msg, _) = Message::from_armor_file("./tests/libre/msg_to_bob.asc").expect("msg");
 
-    eprintln!("msg {:#?}", msg);
+    eprintln!("msg {msg:#?}");
 
     let dec = msg.decrypt(&Password::empty(), &skey).expect("decrypt");
     let mut plain = dec.decompress().expect("decompress");
 
-    eprintln!("dec {:#?}", plain);
+    eprintln!("dec {plain:#?}");
 
     let decrypted = plain.as_data_string().unwrap();
     assert_eq!(&decrypted, "foo\n");

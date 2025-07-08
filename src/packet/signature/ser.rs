@@ -144,7 +144,7 @@ impl Subpacket {
 
 impl Serialize for SubpacketData {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        debug!("writing subpacket: {:?}", self);
+        debug!("writing subpacket: {self:?}");
         match &self {
             SubpacketData::SignatureCreationTime(t) => {
                 writer.write_u32::<BigEndian>(t.timestamp().try_into()?)?;
@@ -416,7 +416,7 @@ impl SignatureConfig {
             SignatureVersion::V6 => {
                 sum += 4;
             }
-            v => panic!("signature version {:?}", v),
+            v => panic!("signature version {v:?}"),
         }
 
         // unhashed subpackets
@@ -428,7 +428,7 @@ impl SignatureConfig {
             SignatureVersion::V6 => {
                 sum += 4;
             }
-            v => panic!("signature version {:?}", v),
+            v => panic!("signature version {v:?}"),
         }
 
         sum

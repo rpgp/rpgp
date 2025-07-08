@@ -464,14 +464,13 @@ fn pad(plain: &[u8]) -> Vec<u8> {
     // We produce "short padding" (between 1 and 8 bytes)
     let remainder = len % 8; // (e.g. 3 for len==19)
     let padded_len = len + 8 - remainder; // (e.g. "8 + 8 - 0 => 16", or "19 + 8 - 3 => 24")
-    debug_assert!(padded_len % 8 == 0, "Unexpected padded_len {}", padded_len);
+    debug_assert!(padded_len % 8 == 0, "Unexpected padded_len {padded_len}");
 
     // The value we'll use for padding (must not be zero, and fit into a u8)
     let padding = padded_len - len;
     debug_assert!(
         padding > 0 && u8::try_from(padding).is_ok(),
-        "Unexpected padding value {}",
-        padding
+        "Unexpected padding value {padding}"
     );
     let padding = padding as u8;
 

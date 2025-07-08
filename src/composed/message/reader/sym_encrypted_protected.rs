@@ -295,7 +295,7 @@ impl<R: DebugBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
             Source::BodyRaw(source) => source.consume(amt),
             Source::Done(_) => {
                 if amt > 0 {
-                    panic!("consume after done: {}", amt)
+                    panic!("consume after done: {amt}")
                 }
             }
             Source::Error => panic!("SymEncryptedProtectedDataReader errored"),

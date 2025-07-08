@@ -72,7 +72,7 @@ impl<R: BufRead> PacketBodyReader<R> {
     pub fn new(packet_header: PacketHeader, source: R) -> io::Result<Self> {
         let source = match packet_header.packet_length() {
             PacketLength::Fixed(len) => {
-                debug!("fixed packet {}", len);
+                debug!("fixed packet {len}");
                 LimitedReader::fixed(len as u64, source)
             }
             PacketLength::Indeterminate => {
@@ -80,7 +80,7 @@ impl<R: BufRead> PacketBodyReader<R> {
                 LimitedReader::Indeterminate(source)
             }
             PacketLength::Partial(len) => {
-                debug!("partial packet start {}", len);
+                debug!("partial packet start {len}");
                 // https://www.rfc-editor.org/rfc/rfc9580.html#name-partial-body-lengths
                 // "An implementation MAY use Partial Body Lengths for data packets, be
                 // they literal, compressed, or encrypted [...]
@@ -107,10 +107,7 @@ impl<R: BufRead> PacketBodyReader<R> {
                 if len < 512 {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
-                        format!(
-                            "Illegal first partial body length {} (shorter than 512 bytes)",
-                            len
-                        ),
+                        format!("Illegal first partial body length {len} (shorter than 512 bytes)"),
                     ));
                 }
 
@@ -204,12 +201,12 @@ impl<R: BufRead> PacketBodyReader<R> {
                                 let source = match packet_length {
                                     PacketLength::Fixed(len) => {
                                         // the last one
-                                        debug!("fixed partial packet {}", len);
+                                        debug!("fixed partial packet {len}");
                                         LimitedReader::fixed(len as u64, source)
                                     }
                                     PacketLength::Partial(len) => {
                                         // another one
-                                        debug!("intermediary partial packet {}", len);
+                                        debug!("intermediary partial packet {len}");
                                         LimitedReader::Partial(source.take(len as u64))
                                     }
                                     PacketLength::Indeterminate => {

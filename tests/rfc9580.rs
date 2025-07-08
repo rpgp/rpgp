@@ -59,8 +59,8 @@ fn try_decrypt(keyfile: &str, msg_file: &str) {
 fn rfc9580_decrypt_seipdv1_msg() {
     for case in CASES_9580 {
         try_decrypt(
-            &format!("{}/tsk.asc", case),
-            &format!("{}/enc-seipdv1.msg", case),
+            &format!("{case}/tsk.asc"),
+            &format!("{case}/enc-seipdv1.msg"),
         );
     }
 }
@@ -69,8 +69,8 @@ fn rfc9580_decrypt_seipdv1_msg() {
 fn rfc9580_decrypt_seipdv2_msg() {
     for case in CASES_9580.iter().chain(CASES_PRE_9580.iter()) {
         try_decrypt(
-            &format!("{}/tsk.asc", case),
-            &format!("{}/enc-seipdv2.msg", case),
+            &format!("{case}/tsk.asc"),
+            &format!("{case}/enc-seipdv2.msg"),
         );
     }
 }
@@ -78,8 +78,8 @@ fn rfc9580_decrypt_seipdv2_msg() {
 #[test]
 fn rfc9580_verify_csf() {
     for case in CASES_9580 {
-        let keyfile = format!("{}/tsk.asc", case);
-        let csffile = format!("{}/csf.msg", case);
+        let keyfile = format!("{case}/tsk.asc");
+        let csffile = format!("{case}/csf.msg");
 
         let ssk = load_ssk(&keyfile);
         let spk = SignedPublicKey::from(ssk.clone());
@@ -99,7 +99,7 @@ fn rfc9580_seipdv1_roundtrip() {
     let mut rng = ChaCha8Rng::seed_from_u64(0);
 
     for case in CASES_9580 {
-        let keyfile = format!("{}/tsk.asc", case);
+        let keyfile = format!("{case}/tsk.asc");
         let ssk = load_ssk(&keyfile);
 
         let spk = SignedPublicKey::from(ssk.clone());
@@ -124,7 +124,7 @@ fn rfc9580_seipdv2_roundtrip() {
     let mut rng = ChaCha8Rng::seed_from_u64(0);
 
     for case in CASES_9580.iter().chain(CASES_PRE_9580.iter()) {
-        let keyfile = format!("{}/tsk.asc", case);
+        let keyfile = format!("{case}/tsk.asc");
         let ssk = load_ssk(&keyfile);
 
         let spk = SignedPublicKey::from(ssk.clone());
@@ -153,7 +153,7 @@ fn rfc9580_roundtrip_csf() {
     let mut rng = ChaCha8Rng::seed_from_u64(0);
 
     for case in CASES_9580 {
-        let keyfile = format!("{}/tsk.asc", case);
+        let keyfile = format!("{case}/tsk.asc");
         let ssk = load_ssk(&keyfile);
 
         let spk = SignedPublicKey::from(ssk.clone());
@@ -169,7 +169,7 @@ fn rfc9580_roundtrip_sign_verify_inline_msg() {
     let mut rng = ChaCha8Rng::seed_from_u64(0);
 
     for case in CASES_9580 {
-        let keyfile = format!("{}/tsk.asc", case);
+        let keyfile = format!("{case}/tsk.asc");
         let ssk = load_ssk(&keyfile);
 
         let spk = SignedPublicKey::from(ssk.clone());

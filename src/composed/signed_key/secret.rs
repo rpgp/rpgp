@@ -450,7 +450,7 @@ k0mXubZvyl4GBg==
         builder.sign(pri, Password::empty(), HashAlgorithm::Sha256);
         let signed = builder.to_armored_string(&mut rng, ArmorOptions::default())?;
 
-        eprintln!("{}", signed);
+        eprintln!("{signed}");
 
         let (mut message, _) = Message::from_armor(signed.as_bytes())?;
         message.verify_read(&pri.public_key())?;

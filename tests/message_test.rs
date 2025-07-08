@@ -598,8 +598,7 @@ fn test_invalid_partial_messages() {
 
     assert!(
         err.to_string().contains("unexpected trailing"),
-        "found error: {}",
-        err
+        "found error: {err}"
     );
 
     // 512 bytes, p512 f0 f0
@@ -614,8 +613,7 @@ fn test_invalid_partial_messages() {
 
     assert!(
         err.to_string().contains("unexpected trailing"),
-        "found error: {}",
-        err
+        "found error: {err}"
     );
 
     // 512 bytes, p512 f1
@@ -631,8 +629,7 @@ fn test_invalid_partial_messages() {
     assert!(
         err.to_string()
             .contains("Fixed chunk was shorter than expected"),
-        "found error: {}",
-        err
+        "found error: {err}"
     );
 }
 
@@ -657,8 +654,7 @@ fn test_invalid_multi_message() {
     let err_string = err.to_string();
     assert!(
         err_string.contains("unexpected trailing") && err_string.contains("LiteralData"),
-        "found error: {}",
-        err_string
+        "found error: {err_string}"
     );
 }
 
@@ -710,8 +706,7 @@ fn test_two_messages() {
     let err = res.unwrap_err();
     assert!(
         err.to_string().contains("unexpected trailing"),
-        "found error: {}",
-        err
+        "found error: {err}"
     );
 }
 
@@ -736,8 +731,7 @@ fn test_two_literals_first_compressed_no_decompression() {
 
     assert!(
         err.to_string().contains("unexpected trailing"),
-        "found error: {}",
-        err
+        "found error: {err}"
     );
 }
 
@@ -763,8 +757,7 @@ fn test_two_literals_first_compressed_two_times() {
 
     assert!(
         err.to_string().contains("unexpected trailing"),
-        "found error: {}",
-        err
+        "found error: {err}"
     );
 }
 
@@ -794,8 +787,7 @@ fn test_two_literals_first_compressed_explicit_decompression() {
 
     assert!(
         err.to_string().contains("unexpected trailing"),
-        "found error: {}",
-        err
+        "found error: {err}"
     );
 }
 
@@ -830,8 +822,7 @@ fn test_two_literals_first_compressed_two_times_explicit_decompression() {
     let err = res.unwrap_err();
     assert!(
         err.to_string().contains("unexpected trailing"),
-        "found error: {}",
-        err
+        "found error: {err}"
     );
 }
 
@@ -857,8 +848,7 @@ fn test_literal_eating_mdc() {
     assert!(
         err.to_string()
             .contains("Fixed chunk was shorter than expected"),
-        "found error: {}",
-        err
+        "found error: {err}"
     );
 }
 

@@ -405,7 +405,7 @@ mod tests {
             rng.fill_bytes(&mut message);
 
             for aead in [AeadAlgorithm::Ocb, AeadAlgorithm::Eax, AeadAlgorithm::Gcm] {
-                println!("{} bytes: {:?}", size, aead);
+                println!("{size} bytes: {aead:?}");
                 let enc = SymEncryptedProtectedData::encrypt_seipdv2(
                     &mut rng,
                     SYM_ALG,
