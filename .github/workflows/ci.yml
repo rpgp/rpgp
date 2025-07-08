@@ -104,16 +104,16 @@ jobs:
         tool: nextest@0.9.80
 
     - name: tests
-      run: cargo nextest run --lib --bins --tests --all
+      run: cargo nextest run --target ${{ matrix.target }} --lib --bins --tests --all
 
     - name: tests - pqc
-      run: cargo nextest run --lib --bins --tests --all --features draft-pqc
+      run: cargo nextest run --target ${{ matrix.target }} --lib --bins --tests --all --features draft-pqc
 
     - name: tests ignored
-      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
+      run: cargo nextest run --target ${{ matrix.target }} --lib --bins --tests --all --run-ignored ignored-only --release
 
     - name: tests ignored - pqc
-      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-pqc
+      run: cargo nextest run --target ${{ matrix.target }} --lib --bins --tests --all --run-ignored ignored-only --release --features draft-pqc
 
   cross:
     name: Cross compile
