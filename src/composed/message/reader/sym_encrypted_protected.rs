@@ -114,26 +114,27 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                     sym_alg
                 );
 
-                replace_with::replace_with(
+                replace_with::replace_with_and_return(
                     &mut self.source,
-                    || todo!(),
+                    || Source::Error,
                     |source| {
                         let Source::Init(source) = source else {
                             unreachable!("checked");
                         };
-                        Source::BodyDecryptor(
-                            StreamDecryptor::gnupg_aead(
-                                sym_alg,
-                                aead,
-                                chunk_size,
-                                session_key,
-                                iv,
-                                source,
-                            )
-                            .unwrap(),
-                        )
+
+                        match StreamDecryptor::gnupg_aead(
+                            sym_alg,
+                            aead,
+                            chunk_size,
+                            session_key,
+                            iv,
+                            source,
+                        ) {
+                            Ok(dec) => (Ok(()), Source::BodyDecryptor(dec)),
+                            Err(err) => (Err(err), Source::Error),
+                        }
                     },
-                );
+                )?;
             }
             ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::V2 {
                 sym_alg,
