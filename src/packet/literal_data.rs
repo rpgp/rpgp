@@ -182,19 +182,14 @@ impl LiteralData {
     #[inline]
     /// Extracts data as string, returning raw bytes as Err if not valid utf-8 string
     pub fn try_into_string(self) -> Result<String, Bytes> {
+        let Self { data, .. } = self;
         match self.header.mode {
-            DataMode::Binary => Err(self.data),
-            _ => match std::str::from_utf8(&self.data) {
-                Ok(data) => Ok(data.to_string()),
-                Err(_error) => Err(self.data),
+            DataMode::Binary => Err(data),
+            _ => match std::string::String::from_utf8(Vec::from(data)) {
+                Ok(data) => Ok(data),
+                Err(error) => Err(error.into_bytes().into()),
             },
         }
-    }
-
-    /// Convert the data to a UTF-8 string, if appropriate for the type.
-    /// Returns `None` if `mode` is `Binary`, or the data is not valid UTF-8.
-    pub fn to_string(&self) -> Option<String> {
-        self.as_str().map(str::to_owned)
     }
 
     /// Convert the data to a UTF-8 string, if appropriate for the type.
@@ -671,7 +666,7 @@ mod tests {
 
             assert_eq!(data.header, header);
             let normalized_s = normalize_lines(&s, LineBreak::Crlf);
-            check_strings(data.to_string().unwrap(), normalized_s);
+            check_strings(data.as_str().unwrap(), normalized_s);
         }
     }
 
