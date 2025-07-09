@@ -40,10 +40,15 @@ pub enum EcdsaPublicParams {
 }
 
 impl EcdsaPublicParams {
+    /// Is this key based on a curve that we know how to parse?
+    ///
+    /// Unsupported curves are modeled as [`Self::Unsupported`].
+    /// Key packets that use such curves are handled as opaque blobs.
     pub fn is_supported(&self) -> bool {
         !matches!(self, Self::Unsupported { .. })
     }
 
+    /// Get the `ECCCurve` that this key is based on
     pub fn curve(&self) -> ECCCurve {
         match self {
             Self::P256 { .. } => ECCCurve::P256,
