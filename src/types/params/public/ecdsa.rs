@@ -40,6 +40,25 @@ pub enum EcdsaPublicParams {
 }
 
 impl EcdsaPublicParams {
+    /// Is this key based on a curve that we know how to parse?
+    ///
+    /// Unsupported curves are modeled as [`Self::Unsupported`].
+    /// Key packets that use such curves are handled as opaque blobs.
+    pub fn is_supported(&self) -> bool {
+        !matches!(self, Self::Unsupported { .. })
+    }
+
+    /// Get the `ECCCurve` that this key is based on
+    pub fn curve(&self) -> ECCCurve {
+        match self {
+            Self::P256 { .. } => ECCCurve::P256,
+            Self::P384 { .. } => ECCCurve::P384,
+            Self::P521 { .. } => ECCCurve::P521,
+            Self::Secp256k1 { .. } => ECCCurve::Secp256k1,
+            Self::Unsupported { curve, .. } => curve.clone(),
+        }
+    }
+
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ec>
     pub fn try_from_reader<B: BufRead>(mut i: B, len: Option<usize>) -> Result<Self> {
         // a one-octet size of the following field
