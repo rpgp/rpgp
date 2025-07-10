@@ -75,12 +75,8 @@ jobs:
       matrix:
         os: [windows-latest]
         rust:
-          - nightly-2025-04-02
-          - stable
-        target:
-          - x86_64-pc-windows-gnu
-          # FIXME
-          # -  x86_64-pc-windows-msvc
+          - stable-x86_64-pc-windows-msvc
+          - stable-x86_64-pc-windows-gnu
 
     steps:
     - name: Checkout
@@ -92,11 +88,7 @@ jobs:
       run: git submodule update --checkout
 
     - name: Install ${{ matrix.rust }}
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ matrix.rust }}
-        target: ${{ matrix.target }}
-        override: true
+      run: rustup default ${{ matrix.rust }}
 
     - name: Install cargo-nextest
       uses: taiki-e/install-action@v2
@@ -104,16 +96,16 @@ jobs:
         tool: nextest@0.9.80
 
     - name: tests
-      run: cargo nextest run --target ${{ matrix.target }} --lib --bins --tests --all
+      run: cargo nextest run --lib --bins --tests --all
 
     - name: tests - pqc
-      run: cargo nextest run --target ${{ matrix.target }} --lib --bins --tests --all --features draft-pqc
+      run: cargo nextest run --lib --bins --tests --all --features draft-pqc
 
     - name: tests ignored
-      run: cargo nextest run --target ${{ matrix.target }} --lib --bins --tests --all --run-ignored ignored-only --release
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
 
     - name: tests ignored - pqc
-      run: cargo nextest run --target ${{ matrix.target }} --lib --bins --tests --all --run-ignored ignored-only --release --features draft-pqc
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-pqc
 
   cross:
     name: Cross compile
