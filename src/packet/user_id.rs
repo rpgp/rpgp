@@ -73,7 +73,24 @@ impl UserId {
         &self.id
     }
 
-    /// Convert the id to a UTF-8 string, if possible.
+    #[inline]
+    /// Extracts the raw ID.
+    pub fn into_bytes(self) -> Bytes {
+        self.id
+    }
+
+    #[inline]
+    /// Tries to convert the ID as a UTF-8 string, returning raw bytes as Err if not
+    /// valid UTF-8 string.
+    pub fn try_into_string(self) -> Result<String, Bytes> {
+        let Self { id, .. } = self;
+        match std::string::String::from_utf8(Vec::from(id)) {
+            Ok(data) => Ok(data),
+            Err(error) => Err(error.into_bytes().into()),
+        }
+    }
+
+    /// Tries to convert the ID as a UTF-8 string.
     /// Returns `None` if the data is not valid UTF-8.
     pub fn as_str(&self) -> Option<&str> {
         std::str::from_utf8(&self.id).ok()
