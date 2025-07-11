@@ -21,6 +21,7 @@ use crate::{
 };
 
 const MDC_LEN: usize = 22;
+const BUFFER_SIZE: usize = 1024 * 8;
 
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
@@ -347,7 +348,7 @@ where
                     } else {
                         // fill buffer
                         let current_len = buffer.remaining();
-                        let buf_size = buffer_size::<M>();
+                        let buf_size = BUFFER_SIZE;
                         let to_read = buf_size - current_len;
                         let read = fill_buffer_bytes(source, buffer, buf_size)?;
                         let is_last_read = read < to_read;
@@ -431,7 +432,7 @@ where
                         *self = Self::Data {
                             data_available: 0,
                             decryptor: encryptor,
-                            buffer: BytesMut::with_capacity(buffer_size::<M>()),
+                            buffer: BytesMut::with_capacity(BUFFER_SIZE),
                             source,
                             protected,
                         };
@@ -584,10 +585,4 @@ where
         }
         Ok(read)
     }
-}
-
-#[inline(always)]
-fn buffer_size<M: BlockSizeUser>() -> usize {
-    let _bs = <M as BlockSizeUser>::block_size();
-    1024 * 8
 }
