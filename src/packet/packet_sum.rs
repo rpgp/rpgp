@@ -137,9 +137,7 @@ pub trait PacketTrait: Serialize {
 
                 if len != write_len {
                     warn!(
-                        "packet header mismatch between reading and writing: original: {:?}, generated: {:?}",
-                        original_header,
-                        header
+                        "packet header mismatch between reading and writing: original: {original_header:?}, generated: {header:?}"
                     );
                 }
                 header.to_writer(writer)?;

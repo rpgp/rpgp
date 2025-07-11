@@ -140,7 +140,7 @@ impl From<crate::crypto::hash::Error> for Error {
     fn from(err: crate::crypto::hash::Error) -> Self {
         match err {
             crate::crypto::hash::Error::Unsupported { alg } => UnsupportedSnafu {
-                message: format!("hash algorithm: {:?}", alg),
+                message: format!("hash algorithm: {alg:?}"),
             }
             .build(),
             crate::crypto::hash::Error::Sha1HashCollision { source } => source.into(),

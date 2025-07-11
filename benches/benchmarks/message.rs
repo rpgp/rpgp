@@ -156,10 +156,7 @@ fn bench_message(c: &mut Criterion) {
         for size in &sizes {
             g.throughput(Throughput::BytesDecimal(*size as u64));
             g.bench_with_input(
-                BenchmarkId::new(
-                    format!("{}_encrypt_key_{}_seipdv1", asym_name, sym_name),
-                    size,
-                ),
+                BenchmarkId::new(format!("{asym_name}_encrypt_key_{sym_name}_seipdv1"), size),
                 size,
                 |b, &size| {
                     let mut bytes = vec![0u8; size];
@@ -189,10 +186,7 @@ fn bench_message(c: &mut Criterion) {
         for size in &sizes {
             g.throughput(Throughput::BytesDecimal(*size as u64));
             g.bench_with_input(
-                BenchmarkId::new(
-                    format!("{}_decrypt_key_{}_seipdv1", asym_name, sym_name),
-                    size,
-                ),
+                BenchmarkId::new(format!("{asym_name}_decrypt_key_{sym_name}_seipdv1"), size),
                 size,
                 |b, &size| {
                     let mut bytes = vec![0u8; size];

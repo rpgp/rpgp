@@ -153,7 +153,7 @@ mod tests {
                         }
                     }
                 }
-                println!("testing: \n{}", encoded_data);
+                println!("testing: \n{encoded_data}");
                 let mut r = Base64Decoder::new(Base64Reader::new(
                     std::io::BufReader::with_capacity(cap, encoded_data.as_bytes()),
                 ));
@@ -161,7 +161,7 @@ mod tests {
                 r.read_to_end(&mut out).unwrap();
                 assert_eq!(data, out);
             } else {
-                println!("testing: \n{}", encoded_data);
+                println!("testing: \n{encoded_data}");
                 let mut r = Base64Decoder::new(std::io::BufReader::with_capacity(
                     cap,
                     encoded_data.as_bytes(),

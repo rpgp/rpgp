@@ -215,7 +215,7 @@ pub enum PacketHeaderVersion {
 
 impl PacketHeaderVersion {
     pub fn write_header(self, writer: &mut impl io::Write, tag: Tag, len: usize) -> Result<()> {
-        debug!("write_header {:?} {:?} {}", self, tag, len);
+        debug!("write_header {self:?} {tag:?} {len}");
         let tag: u8 = tag.into();
         match self {
             PacketHeaderVersion::Old => {

@@ -40,7 +40,7 @@ impl SignedUser {
     where
         P: PublicKeyTrait + Serialize,
     {
-        debug!("verify signed user {:#?}", self);
+        debug!("verify signed user {self:#?}");
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
         for signature in &self.signatures {
@@ -56,7 +56,7 @@ impl SignedUser {
         P: PublicKeyTrait + Serialize,
         K: PublicKeyTrait + Serialize,
     {
-        debug!("verify signed user {:#?} with signer {:#?}", self, signer);
+        debug!("verify signed user {self:#?} with signer {signer:#?}");
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
         for signature in &self.signatures {
@@ -120,7 +120,7 @@ impl SignedUserAttribute {
     where
         P: PublicKeyTrait + Serialize,
     {
-        debug!("verify signed attribute {:?}", self);
+        debug!("verify signed attribute {self:?}");
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
         for signature in &self.signatures {
@@ -136,10 +136,7 @@ impl SignedUserAttribute {
         P: PublicKeyTrait + Serialize,
         K: PublicKeyTrait + Serialize,
     {
-        debug!(
-            "verify signed attribute {:#?} with signer {:#?}",
-            self, signer
-        );
+        debug!("verify signed attribute {self:#?} with signer {signer:#?}");
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
         for signature in &self.signatures {

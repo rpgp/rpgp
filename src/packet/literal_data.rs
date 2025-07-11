@@ -449,7 +449,7 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
                 }
             };
 
-            debug!("read chunk {} bytes", buf_size);
+            debug!("read chunk {buf_size} bytes");
             debug_assert!(buf_size <= u32::MAX as usize);
 
             if buf_size == 0 && self.is_fixed_emitted {
@@ -498,14 +498,14 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
                     .to_writer(&mut writer)
                     .map_err(io::Error::other)?;
 
-                debug!("first partial packet {:?}", packet_header);
+                debug!("first partial packet {packet_header:?}");
                 self.is_first = false;
             } else {
                 // only length
                 packet_length
                     .to_writer_new(&mut writer)
                     .map_err(io::Error::other)?;
-                debug!("partial packet {:?}", packet_length);
+                debug!("partial packet {packet_length:?}");
             };
 
             let mut packet_ser = writer.into_inner();
@@ -594,7 +594,7 @@ mod tests {
         let max_file_size = chunk_size * 5 + 100;
 
         for file_size in 1..=max_file_size {
-            println!("size {}", file_size);
+            println!("size {file_size}");
             let mut buf = vec![0u8; file_size];
             rng.fill(&mut buf[..]);
 
@@ -617,7 +617,7 @@ mod tests {
 
             assert_eq!(packet.packet_header().tag(), Tag::LiteralData);
             let Packet::LiteralData(data) = packet else {
-                panic!("invalid packet: {:?}", packet);
+                panic!("invalid packet: {packet:?}");
             };
 
             assert_eq!(data.header, header);
@@ -635,7 +635,7 @@ mod tests {
         let max_file_size = chunk_size * 5 + 100;
 
         for file_size in 1..=max_file_size {
-            println!("size {}", file_size);
+            println!("size {file_size}");
 
             let header = LiteralDataHeader {
                 file_name: "hello.txt".into(),
@@ -661,7 +661,7 @@ mod tests {
 
             assert_eq!(packet.packet_header().tag(), Tag::LiteralData);
             let Packet::LiteralData(data) = packet else {
-                panic!("invalid packet: {:?}", packet);
+                panic!("invalid packet: {packet:?}");
             };
 
             assert_eq!(data.header, header);

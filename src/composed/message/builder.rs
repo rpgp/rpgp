@@ -925,10 +925,7 @@ fn encrypt_write<R: std::io::Read, W: std::io::Write>(
     mut encrypted: R,
     mut out: W,
 ) -> Result<()> {
-    debug!(
-        "encrypt {:?}: at {} chunks, total len: {:?}",
-        tag, partial_chunk_size, len
-    );
+    debug!("encrypt {tag:?}: at {partial_chunk_size} chunks, total len: {len:?}");
     match len {
         None => {
             let config_len = config.write_len();
@@ -948,7 +945,7 @@ fn encrypt_write<R: std::io::Read, W: std::io::Write>(
                     if read < first_chunk_size {
                         // finished reading, all data fits into a single chunk
                         let size = (read + config_len).try_into()?;
-                        debug!("single chunk of size {}", size);
+                        debug!("single chunk of size {size}");
                         (PacketLength::Fixed(size), &buffer[..read])
                     } else {
                         (
@@ -972,13 +969,13 @@ fn encrypt_write<R: std::io::Read, W: std::io::Write>(
                 if is_first {
                     let packet_header =
                         PacketHeader::from_parts(PacketHeaderVersion::New, tag, length)?;
-                    debug!("first packet {:?}", packet_header);
+                    debug!("first packet {packet_header:?}");
 
                     packet_header.to_writer(&mut out)?;
                     config.to_writer(&mut out)?;
                     is_first = false;
                 } else {
-                    debug!("partial packet {:?}", length);
+                    debug!("partial packet {length:?}");
                     length.to_writer_new(&mut out)?;
                 }
 
@@ -1273,7 +1270,7 @@ mod tests {
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("Size {}", file_size); // Generate a file
+            println!("Size {file_size}"); // Generate a file
 
             let mut buf = vec![0u8; file_size];
             rng.fill(&mut buf[..]);
@@ -1319,7 +1316,7 @@ mod tests {
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("Size {}", file_size); // Generate a file
+            println!("Size {file_size}"); // Generate a file
 
             let mut buf = vec![0u8; file_size];
             rng.fill(&mut buf[..]);
@@ -1358,7 +1355,7 @@ mod tests {
 
         for chunk_size in [Some(512u32), None] {
             for file_size in [1, 100, 512, 513, 512 * 1024, 1024 * 1024] {
-                println!("Size {}", file_size); // Generate a file
+                println!("Size {file_size}"); // Generate a file
 
                 let mut buf = vec![0u8; file_size];
                 rng.fill(&mut buf[..]);
@@ -1402,7 +1399,7 @@ mod tests {
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("Size {}", file_size);
+            println!("Size {file_size}");
 
             // Generate data
             let mut buf = vec![0u8; file_size];
@@ -1442,7 +1439,7 @@ mod tests {
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("Size {}", file_size);
+            println!("Size {file_size}");
 
             // Generate data
             let mut buf = vec![0u8; file_size];
@@ -1479,7 +1476,7 @@ mod tests {
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("Size {}", file_size);
+            println!("Size {file_size}");
 
             // Generate data
             let mut buf = vec![0u8; file_size];
@@ -1522,7 +1519,7 @@ mod tests {
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("Size {}", file_size);
+            println!("Size {file_size}");
 
             // Generate data
             let mut buf = vec![0u8; file_size];
@@ -1577,7 +1574,7 @@ mod tests {
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("Size {}", file_size);
+            println!("Size {file_size}");
 
             // Generate data
             let buf = random_string(&mut rng, file_size);
@@ -1618,7 +1615,7 @@ mod tests {
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("Size {}", file_size);
+            println!("Size {file_size}");
 
             // Generate data
             let buf = random_string(&mut rng, file_size);
@@ -1662,7 +1659,7 @@ mod tests {
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("Size {}", file_size);
+            println!("Size {file_size}");
 
             // Generate data
             let buf = random_string(&mut rng, file_size);
@@ -1714,7 +1711,7 @@ mod tests {
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("-- Size {}", file_size);
+            println!("-- Size {file_size}");
 
             // Generate data
             let buf = random_string(&mut rng, file_size);
@@ -1761,7 +1758,7 @@ mod tests {
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("-- Size {}", file_size);
+            println!("-- Size {file_size}");
 
             // Generate data
             let buf = random_string(&mut rng, file_size);
@@ -1817,7 +1814,7 @@ mod tests {
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("Size {}", file_size);
+            println!("Size {file_size}");
 
             // Generate data
             let mut buf = vec![0u8; file_size];
@@ -1870,7 +1867,7 @@ mod tests {
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("Size {}", file_size);
+            println!("Size {file_size}");
 
             // Generate data
             let buf = random_string(&mut rng, file_size);
@@ -1955,7 +1952,7 @@ mod tests {
                     include_checksum: false,
                 }),
             ] {
-                println!("-- Size: {} encoding: {:?}", file_size, encoding);
+                println!("-- Size: {file_size} encoding: {encoding:?}");
 
                 // Generate data
                 let buf = random_string(&mut rng, file_size);
@@ -1981,7 +1978,7 @@ mod tests {
                     Encoding::Armor(opts) => {
                         let encrypted = builder.to_armored_string(&mut rng, opts)?;
 
-                        println!("{}", encrypted);
+                        println!("{encrypted}");
 
                         let (message, _) = Message::from_armor(std::io::Cursor::new(encrypted))?;
                         message
@@ -2047,7 +2044,7 @@ mod tests {
                     include_checksum: false,
                 }),
             ] {
-                println!("-- Size: {} encoding: {:?}", file_size, encoding);
+                println!("-- Size: {file_size} encoding: {encoding:?}");
 
                 // Generate data
                 let buf = random_string(&mut rng, file_size);
@@ -2065,7 +2062,7 @@ mod tests {
                     Encoding::Armor(opts) => {
                         let encrypted = builder.to_armored_string(&mut rng, opts)?;
 
-                        println!("{}", encrypted);
+                        println!("{encrypted}");
 
                         let (message, _) = Message::from_armor(std::io::Cursor::new(encrypted))?;
                         message
