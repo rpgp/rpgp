@@ -75,12 +75,8 @@ jobs:
       matrix:
         os: [windows-latest]
         rust:
-          - nightly-2025-04-02
-          - stable
-        target:
-          - x86_64-pc-windows-gnu
-          # FIXME
-          # -  x86_64-pc-windows-msvc
+          - stable-x86_64-pc-windows-msvc
+          - stable-x86_64-pc-windows-gnu
 
     steps:
     - name: Checkout
@@ -92,11 +88,7 @@ jobs:
       run: git submodule update --checkout
 
     - name: Install ${{ matrix.rust }}
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ matrix.rust }}
-        target: ${{ matrix.target }}
-        override: true
+      run: rustup default ${{ matrix.rust }}
 
     - name: Install cargo-nextest
       uses: taiki-e/install-action@v2
