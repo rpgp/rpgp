@@ -20,9 +20,10 @@
 //! # use pgp::packet::{self, KeyFlags, UserAttribute, SignatureVersionSpecific, UserId};
 //! # use pgp::crypto::{self, sym::SymmetricKeyAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm};
 //! # use pgp::types::{self, PublicKeyTrait, SecretKeyTrait, CompressionAlgorithm, Password};
-//! # use rand::thread_rng;
+//! # use rand::rng;
 //! # use smallvec::*;
 //! #
+//! # let mut rng = rng();
 //! # let mut key_params = SecretKeyParamsBuilder::default();
 //! # key_params
 //! # .key_type(KeyType::Rsa(2048))
@@ -39,9 +40,9 @@
 //! #     CompressionAlgorithm::ZLIB,
 //! # ]);
 //! # let secret_key_params = key_params.build().expect("Must be able to create secret key params");
-//! # let secret_key = secret_key_params.generate(thread_rng()).expect("Failed to generate a plain key.");
+//! # let secret_key = secret_key_params.generate(&mut rng).expect("Failed to generate a plain key.");
 //! # let passwd_fn = Password::empty();
-//! # let signed_secret_key = secret_key.sign(&mut thread_rng(), &passwd_fn).expect("Must be able to sign its own metadata");
+//! # let signed_secret_key = secret_key.sign(&mut rng, &passwd_fn).expect("Must be able to sign its own metadata");
 //! # let public_key = signed_secret_key.public_key();
 //! let signing_key = signed_secret_key;
 //! let verification_key = public_key;

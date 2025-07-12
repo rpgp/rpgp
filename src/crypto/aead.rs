@@ -1,14 +1,14 @@
 use aes::{Aes128, Aes192, Aes256};
 use aes_gcm::{
-    aead::{consts::U12, AeadInPlace, KeyInit},
+    aead::{consts::U12, AeadInOut, KeyInit},
     Aes128Gcm, Aes256Gcm, AesGcm, Key as GcmKey, Nonce as GcmNonce,
 };
 use bytes::BytesMut;
-use eax::{Eax, Key as EaxKey, Nonce as EaxNonce};
-use generic_array::{
+use cipher::{
+    array::Array,
     typenum::{U15, U16},
-    GenericArray,
 };
+use eax::{Eax, Key as EaxKey, Nonce as EaxNonce};
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 use ocb3::{Nonce as Ocb3Nonce, Ocb3};
 use sha2::Sha256;
@@ -44,6 +44,8 @@ pub enum Error {
     Decrypt { alg: AeadAlgorithm },
     #[snafu(display("encryption failed: {:?}", alg))]
     Encrypt { alg: AeadAlgorithm },
+    #[snafu(display("invalid nonce size"))]
+    InvalidNonce,
 }
 
 /// Available AEAD algorithms.
@@ -116,58 +118,58 @@ impl AeadAlgorithm {
     ) -> Result<(), Error> {
         let res = match (sym_algorithm, self) {
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Gcm) => {
-                let key = GcmKey::<Aes128Gcm>::from_slice(&key[..16]);
-                let cipher = Aes128Gcm::new(key);
-                let nonce = GcmNonce::from_slice(nonce);
-                cipher.decrypt_in_place(nonce, associated_data, buffer)
+                let key = GcmKey::<Aes128Gcm>::try_from(&key[..16]).expect("Invariant violation");
+                let cipher = Aes128Gcm::new(&key);
+                let nonce = GcmNonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                cipher.decrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Gcm) => {
-                let key = GcmKey::<Aes192Gcm>::from_slice(&key[..24]);
-                let cipher = Aes192Gcm::new(key);
-                let nonce = GcmNonce::from_slice(nonce);
-                cipher.decrypt_in_place(nonce, associated_data, buffer)
+                let key = GcmKey::<Aes192Gcm>::try_from(&key[..24]).expect("Invariant violation");
+                let cipher = Aes192Gcm::new(&key);
+                let nonce = GcmNonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                cipher.decrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Gcm) => {
-                let key = GcmKey::<Aes256Gcm>::from_slice(&key[..32]);
-                let cipher = Aes256Gcm::new(key);
-                let nonce = GcmNonce::from_slice(nonce);
-                cipher.decrypt_in_place(nonce, associated_data, buffer)
+                let key = GcmKey::<Aes256Gcm>::try_from(&key[..32]).expect("Invariant violation");
+                let cipher = Aes256Gcm::new(&key);
+                let nonce = GcmNonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                cipher.decrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Eax) => {
-                let key = EaxKey::<Aes128>::from_slice(&key[..16]);
-                let cipher = Eax::<Aes128>::new(key);
-                let nonce = EaxNonce::from_slice(nonce);
-                cipher.decrypt_in_place(nonce, associated_data, buffer)
+                let key = EaxKey::<Aes128>::try_from(&key[..16]).expect("Invariant violation");
+                let cipher = Eax::<Aes128>::new(&key);
+                let nonce = EaxNonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                cipher.decrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Eax) => {
-                let key = EaxKey::<Aes192>::from_slice(&key[..24]);
-                let cipher = Eax::<Aes192>::new(key);
-                let nonce = EaxNonce::from_slice(nonce);
-                cipher.decrypt_in_place(nonce, associated_data, buffer)
+                let key = EaxKey::<Aes192>::try_from(&key[..24]).expect("Invariant violation");
+                let cipher = Eax::<Aes192>::new(&key);
+                let nonce = EaxNonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                cipher.decrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Eax) => {
-                let key = EaxKey::<Aes256>::from_slice(&key[..32]);
-                let cipher = Eax::<Aes256>::new(key);
-                let nonce = EaxNonce::from_slice(nonce);
-                cipher.decrypt_in_place(nonce, associated_data, buffer)
+                let key = EaxKey::<Aes256>::try_from(&key[..32]).expect("Invariant violation");
+                let cipher = Eax::<Aes256>::new(&key);
+                let nonce = EaxNonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                cipher.decrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..16]);
-                let nonce = Ocb3Nonce::from_slice(nonce);
-                let cipher = Aes128Ocb3::new(key);
-                cipher.decrypt_in_place(nonce, associated_data, buffer)
+                let key = Array::try_from(&key[..16]).expect("Invariant violation");
+                let nonce = Ocb3Nonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                let cipher = Aes128Ocb3::new(&key);
+                cipher.decrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..24]);
-                let nonce = Ocb3Nonce::from_slice(nonce);
-                let cipher = Aes192Ocb3::new(key);
-                cipher.decrypt_in_place(nonce, associated_data, buffer)
+                let key = Array::try_from(&key[..24]).expect("Invariant violation");
+                let nonce = Ocb3Nonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                let cipher = Aes192Ocb3::new(&key);
+                cipher.decrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..32]);
-                let nonce = Ocb3Nonce::from_slice(nonce);
-                let cipher = Aes256Ocb3::new(key);
-                cipher.decrypt_in_place(nonce, associated_data, buffer)
+                let key = Array::try_from(&key[..32]).expect("Invariant violation");
+                let nonce = Ocb3Nonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                let cipher = Aes256Ocb3::new(&key);
+                cipher.decrypt_in_place(&nonce, associated_data, buffer)
             }
             _ => {
                 return Err(UnsupporedAlgorithmSnafu { alg: *self }.build());
@@ -187,58 +189,58 @@ impl AeadAlgorithm {
     ) -> Result<(), Error> {
         let res = match (sym_algorithm, self) {
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Gcm) => {
-                let key = GcmKey::<Aes128Gcm>::from_slice(&key[..16]);
-                let cipher = Aes128Gcm::new(key);
-                let nonce = GcmNonce::from_slice(nonce);
-                cipher.encrypt_in_place(nonce, associated_data, buffer)
+                let key = GcmKey::<Aes128Gcm>::try_from(&key[..16]).expect("Invariant violation");
+                let cipher = Aes128Gcm::new(&key);
+                let nonce = GcmNonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                cipher.encrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Gcm) => {
-                let key = GcmKey::<Aes192Gcm>::from_slice(&key[..24]);
-                let cipher = Aes192Gcm::new(key);
-                let nonce = GcmNonce::from_slice(nonce);
-                cipher.encrypt_in_place(nonce, associated_data, buffer)
+                let key = GcmKey::<Aes192Gcm>::try_from(&key[..24]).expect("Invariant violation");
+                let cipher = Aes192Gcm::new(&key);
+                let nonce = GcmNonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                cipher.encrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Gcm) => {
-                let key = GcmKey::<Aes256Gcm>::from_slice(&key[..32]);
-                let cipher = Aes256Gcm::new(key);
-                let nonce = GcmNonce::from_slice(nonce);
-                cipher.encrypt_in_place(nonce, associated_data, buffer)
+                let key = GcmKey::<Aes256Gcm>::try_from(&key[..32]).expect("Invariant violation");
+                let cipher = Aes256Gcm::new(&key);
+                let nonce = GcmNonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                cipher.encrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Eax) => {
-                let key = EaxKey::<Aes128>::from_slice(&key[..16]);
-                let cipher = Eax::<Aes128>::new(key);
-                let nonce = EaxNonce::from_slice(nonce);
-                cipher.encrypt_in_place(nonce, associated_data, buffer)
+                let key = EaxKey::<Aes128>::try_from(&key[..16]).expect("Invariant violation");
+                let cipher = Eax::<Aes128>::new(&key);
+                let nonce = EaxNonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                cipher.encrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Eax) => {
-                let key = EaxKey::<Aes192>::from_slice(&key[..24]);
-                let cipher = Eax::<Aes192>::new(key);
-                let nonce = EaxNonce::from_slice(nonce);
-                cipher.encrypt_in_place(nonce, associated_data, buffer)
+                let key = EaxKey::<Aes192>::try_from(&key[..24]).expect("Invariant violation");
+                let cipher = Eax::<Aes192>::new(&key);
+                let nonce = EaxNonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                cipher.encrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Eax) => {
-                let key = EaxKey::<Aes256>::from_slice(&key[..32]);
-                let cipher = Eax::<Aes256>::new(key);
-                let nonce = EaxNonce::from_slice(nonce);
-                cipher.encrypt_in_place(nonce, associated_data, buffer)
+                let key = EaxKey::<Aes256>::try_from(&key[..32]).expect("Invariant violation");
+                let cipher = Eax::<Aes256>::new(&key);
+                let nonce = EaxNonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                cipher.encrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..16]);
-                let nonce = Ocb3Nonce::from_slice(nonce);
-                let cipher = Aes128Ocb3::new(key);
-                cipher.encrypt_in_place(nonce, associated_data, buffer)
+                let key = Array::try_from(&key[..16]).expect("Invariant violation");
+                let nonce = Ocb3Nonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                let cipher = Aes128Ocb3::new(&key);
+                cipher.encrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..24]);
-                let nonce = Ocb3Nonce::from_slice(nonce);
-                let cipher = Aes192Ocb3::new(key);
-                cipher.encrypt_in_place(nonce, associated_data, buffer)
+                let key = Array::try_from(&key[..24]).expect("Invariant violation");
+                let nonce = Ocb3Nonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                let cipher = Aes192Ocb3::new(&key);
+                cipher.encrypt_in_place(&nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..32]);
-                let nonce = Ocb3Nonce::from_slice(nonce);
-                let cipher = Aes256Ocb3::new(key);
-                cipher.encrypt_in_place(nonce, associated_data, buffer)
+                let key = Array::try_from(&key[..32]).expect("Invariant violation");
+                let nonce = Ocb3Nonce::try_from(nonce).map_err(|_| Error::InvalidNonce)?;
+                let cipher = Aes256Ocb3::new(&key);
+                cipher.encrypt_in_place(&nonce, associated_data, buffer)
             }
             _ => {
                 return Err(UnsupporedAlgorithmSnafu { alg: *self }.build());

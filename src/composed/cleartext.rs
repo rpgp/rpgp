@@ -62,9 +62,14 @@ where {
     }
 
     /// Sign the given text.
-    pub fn sign<R>(rng: R, text: &str, key: &impl SecretKeyTrait, key_pw: &Password) -> Result<Self>
+    pub fn sign<R>(
+        rng: &mut R,
+        text: &str,
+        key: &impl SecretKeyTrait,
+        key_pw: &Password,
+    ) -> Result<Self>
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: rand::RngCore + rand::CryptoRng + ?Sized,
     {
         let hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
