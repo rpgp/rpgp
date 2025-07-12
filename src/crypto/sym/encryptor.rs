@@ -198,8 +198,6 @@ where
     }
 
     fn buffer_size() -> usize {
-        // let block_size = <M as BlockSizeUser>::block_size();
-        // block_size * 128
         8 * 1024
     }
 

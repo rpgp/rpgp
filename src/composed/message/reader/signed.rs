@@ -11,6 +11,8 @@ use crate::{
     util::{fill_buffer_bytes, NormalizingHasher},
 };
 
+const BUFFER_SIZE: usize = 8 * 1024;
+
 #[derive(derive_more::Debug)]
 pub enum SignatureBodyReader<'a> {
     Init {
@@ -132,8 +134,8 @@ impl<'a> SignatureBodyReader<'a> {
                     signature,
                 } => {
                     debug!("SignatureReader init");
-                    let mut buffer = BytesMut::with_capacity(1024);
-                    let read = fill_buffer_bytes(&mut source, &mut buffer, 1024)?;
+                    let mut buffer = BytesMut::with_capacity(BUFFER_SIZE);
+                    let read = fill_buffer_bytes(&mut source, &mut buffer, BUFFER_SIZE)?;
 
                     if read == 0 {
                         return Err(io::Error::new(
@@ -171,7 +173,7 @@ impl<'a> SignatureBodyReader<'a> {
                         return Ok(());
                     }
 
-                    let read = fill_buffer_bytes(&mut source, &mut buffer, 1024)?;
+                    let read = fill_buffer_bytes(&mut source, &mut buffer, BUFFER_SIZE)?;
 
                     if let Some(ref mut hasher) = norm_hasher {
                         hasher.hash_buf(&buffer);

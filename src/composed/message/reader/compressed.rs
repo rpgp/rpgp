@@ -10,6 +10,8 @@ use crate::{
     util::fill_buffer_bytes,
 };
 
+const BUFFER_SIZE: usize = 8 * 1024;
+
 #[derive(Debug)]
 pub enum CompressedDataReader<R: DebugBufRead> {
     Body {
@@ -35,7 +37,7 @@ impl<R: DebugBufRead> CompressedDataReader<R> {
 
         Ok(Self::Body {
             source,
-            buffer: BytesMut::with_capacity(1024),
+            buffer: BytesMut::with_capacity(BUFFER_SIZE),
         })
     }
 
@@ -150,7 +152,7 @@ impl<R: DebugBufRead> CompressedDataReader<R> {
                     return Ok(());
                 }
 
-                let read = fill_buffer_bytes(&mut source, &mut buffer, 1024)?;
+                let read = fill_buffer_bytes(&mut source, &mut buffer, BUFFER_SIZE)?;
                 if read == 0 {
                     let source = source.into_inner();
 
