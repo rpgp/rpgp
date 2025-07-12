@@ -129,6 +129,7 @@ impl UserId {
             Utc::now().trunc_subsecs(0),
         ))?];
 
+        // FIXME: CertPositive if self-sig
         let mut config = SignatureConfig::from_key(&mut rng, signer, SignatureType::CertGeneric)?;
 
         config.hashed_subpackets = hashed_subpackets;
