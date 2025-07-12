@@ -192,7 +192,7 @@ where {
     ) -> Result<(Self, Headers)> {
         let hashes = validate_headers(headers)?;
 
-        debug!("Found Hash headers: {:?}", hashes);
+        debug!("Found Hash headers: {hashes:?}");
 
         // Cleartext Body
         let (csf_encoded_text, prefix) = read_cleartext_body(&mut b)?;
@@ -504,7 +504,7 @@ mod tests {
         if let Any::Cleartext(msg2) = any {
             assert_eq!(msg, msg2);
         } else {
-            panic!("got unexpected type of any: {:?}", any);
+            panic!("got unexpected type of any: {any:?}");
         }
     }
 

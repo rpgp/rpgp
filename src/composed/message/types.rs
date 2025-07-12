@@ -52,7 +52,7 @@ impl MessageReader<'_> {
                     let tag = packet.packet_header().tag();
                     match tag {
                         Tag::Padding | Tag::Marker => {
-                            debug!("ignoring trailing packet: {:?}", tag);
+                            debug!("ignoring trailing packet: {tag:?}");
                         }
                         _ => {
                             return Err(io::Error::new(
@@ -66,7 +66,7 @@ impl MessageReader<'_> {
                     }
                 }
                 Some(Err(err)) => {
-                    warn!("failed to parse trailing data: {:?}", err);
+                    warn!("failed to parse trailing data: {err:?}");
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "unexpected trailing bytes found",
@@ -559,7 +559,7 @@ impl<'a> Edata<'a> {
     /// (this avoids decrypting malleable ciphertext)
     pub fn decrypt(&mut self, key: &PlainSessionKey) -> Result<()> {
         let protected = self.tag() == Tag::SymEncryptedProtectedData;
-        debug!("decrypt_protected: protected = {:?}", protected);
+        debug!("decrypt_protected: protected = {protected:?}");
 
         match self {
             Self::SymEncryptedProtectedData { reader } => {
@@ -580,7 +580,7 @@ impl<'a> Edata<'a> {
     /// HAZMAT: Decrypts SEIPD (v1 or v2) and SED packets.
     pub fn decrypt_legacy(&mut self, key: &PlainSessionKey) -> Result<()> {
         let protected = self.tag() == Tag::SymEncryptedProtectedData;
-        debug!("decrypt_any: protected = {:?}", protected);
+        debug!("decrypt_any: protected = {protected:?}");
 
         match self {
             Self::SymEncryptedProtectedData { reader } => {
@@ -1114,7 +1114,7 @@ impl TheRing<'_> {
                     PkeskVersion::V3 => EskType::V3_4,
                     PkeskVersion::V6 => EskType::V6,
                     PkeskVersion::Other(v) => {
-                        warn!("unexpected PKESK version {}", v);
+                        warn!("unexpected PKESK version {v}");
                         continue;
                     }
                 };

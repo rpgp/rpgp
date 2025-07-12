@@ -83,13 +83,13 @@ impl Packet {
                 .build())
             }
             Tag::Other(other) => Err(UnsupportedSnafu {
-                message: format!("Unknown packet type: {}", other),
+                message: format!("Unknown packet type: {other}"),
             }
             .build()),
         };
 
         if let Err(ref err) = res {
-            log::info!("error {:#?}", err);
+            log::info!("error {err:#?}");
         }
 
         // always drain the body to makes sure all data has been consumed
@@ -97,7 +97,7 @@ impl Packet {
         match res {
             Ok(res) => {
                 if drained_bytes > 0 {
-                    warn!("failed to consume data: {} bytes too many", drained_bytes);
+                    warn!("failed to consume data: {drained_bytes} bytes too many");
                     return Err(Error::PacketTooLarge {
                         size: drained_bytes,
                     });

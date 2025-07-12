@@ -64,13 +64,13 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
 
     for (j, key) in SignedPublicKey::from_file_many(f).unwrap().enumerate() {
         if j % 1000 == 0 {
-            warn!("key {}: {}", i, j);
+            warn!("key {i}: {j}");
         }
         actual.total_count += 1;
         let key = match key {
             Ok(ref key) => key,
             Err(err) => {
-                warn!("parsing failed: {}:{}: {:?}", i, j, err);
+                warn!("parsing failed: {i}:{j}: {err:?}");
                 actual.err_count += 1;
                 continue;
             }
@@ -80,7 +80,7 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
             match err {
                 // Skip these for now
                 Error::Unimplemented { message, .. } => {
-                    warn!("unimplemented: {}:{} {:?}", i, j, message);
+                    warn!("unimplemented: {i}:{j} {message:?}");
                     actual.unimpl_count += 1;
                 }
                 _ => {
@@ -262,7 +262,7 @@ fn test_parse_gnupg_v1() {
         match pk.verify() {
             // Skip these for now
             Err(Error::Unimplemented { message, .. }) => {
-                warn!("verification failed: {:?}", message);
+                warn!("verification failed: {message:?}");
             }
             Err(err) => panic!("{err:?}"),
             // all good
@@ -656,7 +656,7 @@ fn encrypted_private_key() {
         SecretParams::Plain(_) => panic!("should be encrypted"),
         SecretParams::Encrypted(ref pp) => {
             let S2kParams::Cfb { sym_alg, s2k, iv } = pp.string_to_key_params() else {
-                panic!("unexpected s2k param: {:?}", pp);
+                panic!("unexpected s2k param: {pp:?}");
             };
             assert_eq!(
                 iv,
@@ -673,7 +673,7 @@ fn encrypted_private_key() {
                     assert_eq!(salt, &hex::decode("CB18E77884F2F055").unwrap()[..]);
                     assert_eq!(*count, 96u8); // This is an encoded iteration count
                 }
-                s => panic!("unexpected s2k type {:?}", s),
+                s => panic!("unexpected s2k type {s:?}"),
             }
 
             assert_eq!(sym_alg, &SymmetricKeyAlgorithm::AES128);
@@ -683,7 +683,7 @@ fn encrypted_private_key() {
     key.unlock(
         &"test".into(),
         |_pub_params, k| {
-            info!("{:?}", k);
+            info!("{k:?}");
             match k {
                 PlainSecretParams::RSA(k) => {
                     let (d, p, q, _u) = k.to_bytes();
@@ -1310,10 +1310,10 @@ fn load_adsk_pub() {
 
     let public: SignedPublicKey = match iter.next().expect("result") {
         Ok(pos) => {
-            eprintln!("{:#?}", pos);
+            eprintln!("{pos:#?}");
             pos.try_into().expect("public")
         }
-        Err(e) => panic!("error: {:?}", e),
+        Err(e) => panic!("error: {e:?}"),
     };
 
     let adsk_subkey = public
@@ -1333,7 +1333,7 @@ fn load_adsk_pub() {
     let sig = &adsk_subkey.signatures[0];
 
     let key_flags = sig.key_flags();
-    println!("key_flags {:?}", key_flags);
+    println!("key_flags {key_flags:?}");
     assert_eq!(key_flags.to_bytes().unwrap(), vec![0x0, 0x04]);
 }
 
@@ -1349,10 +1349,10 @@ fn load_adsk_sec() {
 
     let sec: SignedSecretKey = match iter.next().expect("result") {
         Ok(pos) => {
-            eprintln!("{:#?}", pos);
+            eprintln!("{pos:#?}");
             pos.try_into().expect("secret")
         }
-        Err(e) => panic!("error: {:?}", e),
+        Err(e) => panic!("error: {e:?}"),
     };
 
     assert_eq!(sec.secret_subkeys.len(), 2);
@@ -1360,7 +1360,7 @@ fn load_adsk_sec() {
     let sig = &adsk_subkey.signatures[0];
 
     let key_flags = sig.key_flags();
-    println!("key_flags {:?}", key_flags);
+    println!("key_flags {key_flags:?}");
     assert_eq!(key_flags.to_bytes().unwrap(), vec![0x0, 0x04]);
 }
 
