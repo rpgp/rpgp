@@ -8,8 +8,10 @@ use crate::{
     composed::{Message, MessageReader, RingResult, TheRing},
     errors::{bail, ensure_eq, Result},
     packet::{Signature, SignatureType, SignatureVersionSpecific},
-    util::{fill_buffer, NormalizingHasher},
+    util::{fill_buffer_bytes, NormalizingHasher},
 };
+
+const BUFFER_SIZE: usize = 8 * 1024;
 
 #[derive(derive_more::Debug)]
 pub enum SignatureBodyReader<'a> {
@@ -132,9 +134,8 @@ impl<'a> SignatureBodyReader<'a> {
                     signature,
                 } => {
                     debug!("SignatureReader init");
-                    let mut buffer = BytesMut::zeroed(1024);
-                    let read = fill_buffer(&mut source, &mut buffer, None)?;
-                    buffer.truncate(read);
+                    let mut buffer = BytesMut::with_capacity(BUFFER_SIZE);
+                    let read = fill_buffer_bytes(&mut source, &mut buffer, BUFFER_SIZE)?;
 
                     if read == 0 {
                         return Err(io::Error::new(
@@ -172,9 +173,7 @@ impl<'a> SignatureBodyReader<'a> {
                         return Ok(());
                     }
 
-                    buffer.resize(1024, 0);
-                    let read = fill_buffer(&mut source, &mut buffer, None)?;
-                    buffer.truncate(read);
+                    let read = fill_buffer_bytes(&mut source, &mut buffer, BUFFER_SIZE)?;
 
                     if let Some(ref mut hasher) = norm_hasher {
                         hasher.hash_buf(&buffer);
