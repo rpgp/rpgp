@@ -1,5 +1,3 @@
-use crate::util::fill_buffer;
-
 mod compressed;
 mod limited;
 mod literal;

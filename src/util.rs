@@ -2,6 +2,7 @@
 
 use std::{hash, io};
 
+use bytes::{Buf, BufMut, BytesMut};
 use digest::DynDigest;
 use nom::Input;
 
@@ -21,6 +22,26 @@ pub(crate) fn fill_buffer<R: std::io::Read>(
         }
     }
     Ok(offset)
+}
+
+pub(crate) fn fill_buffer_bytes<R: std::io::BufRead>(
+    mut source: R,
+    buffer: &mut BytesMut,
+    len: usize,
+) -> std::io::Result<usize> {
+    let mut read_total = 0;
+    while buffer.remaining() < len {
+        let source_buffer = source.fill_buf()?;
+        let read = source_buffer.len().min(len - buffer.remaining());
+        buffer.put_slice(&source_buffer[..read]);
+        read_total += read;
+        source.consume(read);
+
+        if read == 0 {
+            break;
+        }
+    }
+    Ok(read_total)
 }
 
 macro_rules! impl_try_from_into {
