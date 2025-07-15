@@ -30,9 +30,11 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
   - [x] Generation
 - [x] Encryption
   - [x] PKESK v3, SKESK v4, SEIPD v1
+  - [ ] 🚫 SKESK v5, OCBED (GnuPG proprietary)
   - [x] PKESK v6, SKESK v6, SEIPD v2
 - [x] Decryption
   - [x] PKESK v3, SKESK v4, SEIPD v1
+  - [x] SKESK v5, OCBED (GnuPG proprietary)
   - [x] PKESK v6, SKESK v6, SEIPD v2
 - [x] Keys (v4)
   - [x] Generation
@@ -86,7 +88,9 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
   - [x] ZIP
   - [x] ZLIB
   - [x] BZip2
-- [x] AEAD Algorithms
+- [x] OCBED (GnuPG AEAD) Algorithms (Decrypt only)
+  - [x] OCB
+- [x] SEIPD v2 AEAD Algorithms
   - [x] OCB
   - [x] EAX
   - [x] GCM

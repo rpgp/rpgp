@@ -5,10 +5,10 @@ use log::warn;
 use crate::{
     errors::Result,
     packet::{
-        CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, PacketHeader,
-        Padding, PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey, SecretSubkey,
-        Signature, SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust,
-        UserAttribute, UserId,
+        CompressedData, GnupgAeadData, LiteralData, Marker, ModDetectionCode, OnePassSignature,
+        PacketHeader, Padding, PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey,
+        SecretSubkey, Signature, SymEncryptedData, SymEncryptedProtectedData,
+        SymKeyEncryptedSessionKey, Trust, UserAttribute, UserId,
     },
     ser::Serialize,
     types::{PacketHeaderVersion, PacketLength, Tag},
@@ -38,6 +38,7 @@ pub enum Packet {
     UserAttribute(UserAttribute),
     UserId(UserId),
     Padding(Padding),
+    GnupgAeadData(GnupgAeadData),
 }
 
 impl_try_from_into!(
@@ -59,7 +60,8 @@ impl_try_from_into!(
     Trust => Trust,
     UserAttribute => UserAttribute,
     UserId => UserId,
-    Padding => Padding
+    Padding => Padding,
+    GnupgAeadData => GnupgAeadData
 );
 
 impl Serialize for Packet {
@@ -83,6 +85,7 @@ impl Serialize for Packet {
             Self::UserAttribute(p) => p.to_writer_with_header(writer),
             Self::UserId(p) => p.to_writer_with_header(writer),
             Self::Padding(p) => p.to_writer_with_header(writer),
+            Self::GnupgAeadData(p) => p.to_writer_with_header(writer),
         }
     }
 
@@ -106,6 +109,7 @@ impl Serialize for Packet {
             Self::UserAttribute(p) => p.write_len_with_header(),
             Self::UserId(p) => p.write_len_with_header(),
             Self::Padding(p) => p.write_len_with_header(),
+            Self::GnupgAeadData(p) => p.write_len_with_header(),
         }
     }
 }
@@ -183,6 +187,7 @@ impl PacketTrait for Packet {
             Self::UserAttribute(p) => p.packet_header(),
             Self::UserId(p) => p.packet_header(),
             Self::Padding(p) => p.packet_header(),
+            Self::GnupgAeadData(p) => p.packet_header(),
         }
     }
 }

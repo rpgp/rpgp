@@ -20,7 +20,7 @@ a multi-stakeholder community-driven specification for automated e-mail encrypti
 
 ### Is rPGP considering support for LibrePGP? 
 
-No, at least not soon. 
+rPGP is not currently planning comprehensive support for the LibrePGP draft.
 
 While we might not agree with, or not praise every detail of the V6 crypto refresh,
 we highly appreciate the work of the IETF OpenPGP WG and the contributors and stakeholders around it. 
@@ -28,9 +28,7 @@ we highly appreciate the work of the IETF OpenPGP WG and the contributors and st
 If [LibrePGP](https://librepgp.org/) evolves towards a multi-stakeholder community-driven specification, 
 we might consider partially supporting LibrePGP keys and formats. 
 
-Helping to smoothly and securely move the many [Delta Chat](https://delta.chat) users of rPGP
-to V6 keys is sufficiently challenging for us without considering LibrePGP. 
-
+However, rPGP currently allows decryption of the LibrePGP-specific ["OCB encrypted data"](https://www.ietf.org/archive/id/draft-koch-librepgp-03.html#name-ocb-encrypted-data-packet-t) format, to support users who have inadvertently received messages in that format.
 
 ### How is rPGP different from Sequoia?
 

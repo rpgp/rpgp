@@ -13,6 +13,7 @@ use crate::{
     armor::BlockType,
     composed::{message::Message, shared::is_binary, Edata, Esk},
     errors::{bail, format_err, unimplemented_err, Result},
+    packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
     parsing_reader::BufReadParsing,
     types::{PkeskVersion, SkeskVersion, Tag},
 };
@@ -56,24 +57,41 @@ pub(super) fn next(
                             esks.push(esk);
                             packets = crate::packet::PacketParser::new(packet.into_inner());
                         }
-                        Tag::SymEncryptedData | Tag::SymEncryptedProtectedData => {
+                        Tag::SymEncryptedData | Tag::SymEncryptedProtectedData | Tag::GnupgAead => {
                             let edata = Edata::try_from_reader(packet)?;
                             let esk = match edata {
                                 Edata::SymEncryptedData { .. } => {
-                                    esk_filter(esks, PkeskVersion::V3, SkeskVersion::V4)
+                                    esk_filter(esks, PkeskVersion::V3, &[SkeskVersion::V4])
                                 }
                                 Edata::SymEncryptedProtectedData { ref reader } => {
                                     match reader.config() {
-                                        crate::packet::SymEncryptedProtectedDataConfig::V1 => {
-                                            esk_filter(esks, PkeskVersion::V3, SkeskVersion::V4)
+                                        ProtectedDataConfig::Seipd(
+                                            SymEncryptedProtectedDataConfig::V1,
+                                        ) => {
+                                            esk_filter(esks, PkeskVersion::V3, &[SkeskVersion::V4])
                                         }
-                                        crate::packet::SymEncryptedProtectedDataConfig::V2 {
-                                            ..
-                                        } => esk_filter(esks, PkeskVersion::V6, SkeskVersion::V6),
+
+                                        ProtectedDataConfig::Seipd(
+                                            SymEncryptedProtectedDataConfig::V2 { .. },
+                                        ) => {
+                                            esk_filter(esks, PkeskVersion::V6, &[SkeskVersion::V6])
+                                        }
+                                        ProtectedDataConfig::GnupgAead { .. } => {
+                                            bail!("GnupgAead config not allowed in SymEncryptedProtectedData")
+                                        }
                                     }
                                 }
+                                Edata::GnupgAeadData { ref reader, .. } => match reader.config() {
+                                    ProtectedDataConfig::Seipd(_) => {
+                                        bail!("Seipd config not allowed in GnupgAeadData");
+                                    }
+                                    ProtectedDataConfig::GnupgAead { .. } => esk_filter(
+                                        esks,
+                                        PkeskVersion::V3,
+                                        &[SkeskVersion::V4, SkeskVersion::V5],
+                                    ),
+                                },
                             };
-
                             return Ok(Some(Message::Encrypted {
                                 esk,
                                 edata,
@@ -171,11 +189,15 @@ pub(super) fn next(
 /// preceding ESK packet with a version that does not align with the
 /// version of the payload.
 /// See <https://www.rfc-editor.org/rfc/rfc9580.html#section-10.3.2.1-7>
-fn esk_filter(esk: Vec<Esk>, pkesk_allowed: PkeskVersion, skesk_allowed: SkeskVersion) -> Vec<Esk> {
+fn esk_filter(
+    esk: Vec<Esk>,
+    pkesk_allowed: PkeskVersion,
+    skesk_allowed: &[SkeskVersion],
+) -> Vec<Esk> {
     esk.into_iter()
         .filter(|esk| match esk {
             Esk::PublicKeyEncryptedSessionKey(pkesk) => pkesk.version() == pkesk_allowed,
-            Esk::SymKeyEncryptedSessionKey(skesk) => skesk.version() == skesk_allowed,
+            Esk::SymKeyEncryptedSessionKey(skesk) => skesk_allowed.contains(&skesk.version()),
         })
         .collect()
 }

@@ -13,12 +13,14 @@ use crate::{
     errors::{bail, ensure, ensure_eq, format_err, Error, Result},
     packet::{
         InnerSignature, LiteralDataHeader, OnePassSignature, Packet, PacketHeader, PacketTrait,
-        PublicKeyEncryptedSessionKey, Signature, SymEncryptedProtectedDataConfig,
-        SymKeyEncryptedSessionKey,
+        ProtectedDataConfig, PublicKeyEncryptedSessionKey, Signature, SymKeyEncryptedSessionKey,
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::{EskType, KeyDetails, Password, PkeskVersion, PublicKeyTrait, SecretParams, Tag},
+    types::{
+        EskType, KeyDetails, Password, PkeskVersion, PublicKeyTrait, SecretParams, SkeskVersion,
+        Tag,
+    },
     util::impl_try_from_into,
 };
 
@@ -205,7 +207,7 @@ pub(crate) enum MessageParts {
     Encrypted {
         packet_header: PacketHeader,
         esk: Vec<Esk>,
-        config: Option<SymEncryptedProtectedDataConfig>,
+        config: Option<ProtectedDataConfig>,
         is_nested: bool,
     },
 }
@@ -302,6 +304,20 @@ impl<'a> Message<'a> {
                     )
                 }
                 Edata::SymEncryptedProtectedData { reader } => {
+                    assert!(reader.is_done());
+                    let packet_header = reader.packet_header();
+                    let config = Some(reader.config().clone());
+                    (
+                        reader.into_inner().into_inner(),
+                        MessageParts::Encrypted {
+                            packet_header,
+                            esk,
+                            config,
+                            is_nested,
+                        },
+                    )
+                }
+                Edata::GnupgAeadData { reader } => {
                     assert!(reader.is_done());
                     let packet_header = reader.packet_header();
                     let config = Some(reader.config().clone());
@@ -493,6 +509,49 @@ pub enum Edata<'a> {
     SymEncryptedProtectedData {
         reader: SymEncryptedProtectedDataReader<MessageReader<'a>>,
     },
+    GnupgAeadData {
+        reader: SymEncryptedProtectedDataReader<MessageReader<'a>>,
+    },
+}
+
+/// Configure which encryption container types to decrypt, besides the standard "SEIPD" (v1 or v2).
+///
+/// Used to configure allowed packet types in `Edata::decrypt_permissive`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct DecryptionOptions {
+    legacy: bool,
+    gnupg_aead: bool,
+}
+
+impl DecryptionOptions {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Enable handling of legacy Symmetrically Encrypted Data (SED) packets (packet type 9).
+    ///
+    /// These are malleable and present a potential security hazard,
+    /// also see <https://www.rfc-editor.org/rfc/rfc9580.html#name-avoiding-ciphertext-malleab>
+    ///
+    /// This packet type is historical! (RFC 4880 from 11/2007 discourages emitting this format).
+    /// Decrypting it should not be necessary in most contexts, except for historical data.
+    pub fn enable_legacy(mut self) -> Self {
+        self.legacy = true;
+        self
+    }
+
+    /// Enable handling GnuPG's proprietary AEAD format
+    /// (packet type 20, aka "OCB encrypted data" or "OCBED").
+    ///
+    /// This also enables support for GnuPG's proprietary v5 SKESK (which as an AEAD-based
+    /// mechanism for password-protected session keys, and will typically occur in combination with
+    /// "OCB encrypted data").
+    ///
+    /// This format is not part of the IETF-specified OpenPGP standard!
+    pub fn enable_gnupg_aead(mut self) -> Self {
+        self.gnupg_aead = true;
+        self
+    }
 }
 
 impl<'a> Edata<'a> {
@@ -501,6 +560,10 @@ impl<'a> Edata<'a> {
             Tag::SymEncryptedData => {
                 let reader = SymEncryptedDataReader::new(reader)?;
                 Ok(Self::SymEncryptedData { reader })
+            }
+            Tag::GnupgAead => {
+                let reader = SymEncryptedProtectedDataReader::new_gnupg_aead(reader)?;
+                Ok(Self::GnupgAeadData { reader })
             }
             Tag::SymEncryptedProtectedData => {
                 let reader = SymEncryptedProtectedDataReader::new(reader)?;
@@ -516,6 +579,7 @@ impl BufRead for Edata<'_> {
         match self {
             Self::SymEncryptedData { reader } => reader.fill_buf(),
             Self::SymEncryptedProtectedData { reader } => reader.fill_buf(),
+            Self::GnupgAeadData { reader } => reader.fill_buf(),
         }
     }
 
@@ -523,6 +587,7 @@ impl BufRead for Edata<'_> {
         match self {
             Self::SymEncryptedData { reader } => reader.consume(amt),
             Self::SymEncryptedProtectedData { reader } => reader.consume(amt),
+            Self::GnupgAeadData { reader } => reader.consume(amt),
         }
     }
 }
@@ -532,6 +597,7 @@ impl Read for Edata<'_> {
         match self {
             Self::SymEncryptedData { reader } => reader.read(buf),
             Self::SymEncryptedProtectedData { reader } => reader.read(buf),
+            Self::GnupgAeadData { reader } => reader.read(buf),
         }
     }
 
@@ -539,6 +605,7 @@ impl Read for Edata<'_> {
         match self {
             Self::SymEncryptedData { reader } => reader.read_to_end(buf),
             Self::SymEncryptedProtectedData { reader } => reader.read_to_end(buf),
+            Self::GnupgAeadData { reader } => reader.read_to_end(buf),
         }
     }
 }
@@ -548,6 +615,7 @@ impl<'a> Edata<'a> {
         match self {
             Self::SymEncryptedData { reader } => reader.packet_header(),
             Self::SymEncryptedProtectedData { reader } => reader.packet_header(),
+            Self::GnupgAeadData { reader } => reader.packet_header(),
         }
     }
 
@@ -559,42 +627,52 @@ impl<'a> Edata<'a> {
         match self {
             Self::SymEncryptedData { reader } => reader.get_mut(),
             Self::SymEncryptedProtectedData { reader } => reader.get_mut(),
+            Self::GnupgAeadData { reader } => reader.get_mut(),
         }
     }
 
-    /// Decrypts only SEIPD (v1 or v2), errors for SED packets
-    /// (this avoids decrypting malleable ciphertext)
-    pub fn decrypt(&mut self, key: &PlainSessionKey) -> Result<()> {
-        let protected = self.tag() == Tag::SymEncryptedProtectedData;
-        debug!("decrypt_protected: protected = {protected:?}");
-
-        match self {
-            Self::SymEncryptedProtectedData { reader } => {
-                reader.decrypt(key)?;
-            }
-            Self::SymEncryptedData { .. } => {
-                // SED packets are malleable, decrypting them should only be necessary for historical data
-                bail!("Decryption of SymEncryptedData is discouraged")
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Decrypting (malleable) SED packets is not necessary for most use cases, except for
-    /// historical data.
+    /// Decrypts only SEIPD (v1 or v2) packets.
     ///
-    /// HAZMAT: Decrypts SEIPD (v1 or v2) and SED packets.
-    pub fn decrypt_legacy(&mut self, key: &PlainSessionKey) -> Result<()> {
+    /// Throws errors if any other encryption containers are encountered in the message
+    /// (also see [Self::decrypt_permissive])
+    pub fn decrypt(&mut self, key: &PlainSessionKey) -> Result<()> {
+        debug!("Edata::decrypt");
+        self.decrypt_permissive(key, DecryptionOptions::default())
+    }
+
+    /// Decrypt encryption packets, including (optionally) non-standard ones.
+    ///
+    /// This always decrypts SEIPDv1 and SEIPDv2 containers.
+    /// In addition, decryption of legacy SED packets and GnuPG AEAD (packet type 20) can be opted
+    /// into via `options`.
+    ///
+    /// HAZMAT: Depending on the `options` settings, this decrypts malleable SED packets.
+    /// Also see <https://www.rfc-editor.org/rfc/rfc9580.html#name-avoiding-ciphertext-malleab>
+    pub fn decrypt_permissive(
+        &mut self,
+        key: &PlainSessionKey,
+        options: DecryptionOptions,
+    ) -> Result<()> {
         let protected = self.tag() == Tag::SymEncryptedProtectedData;
-        debug!("decrypt_any: protected = {protected:?}");
+        debug!("decrypt_permissive {options:?}: protected = {protected:?}");
 
         match self {
             Self::SymEncryptedProtectedData { reader } => {
                 reader.decrypt(key)?;
             }
             Self::SymEncryptedData { reader } => {
-                reader.decrypt(key)?;
+                if options.legacy {
+                    reader.decrypt(key)?;
+                } else {
+                    bail!("Decryption of SymEncryptedData is discouraged, 'DecryptionOptions' allows opting into it")
+                }
+            }
+            Self::GnupgAeadData { reader } => {
+                if options.gnupg_aead {
+                    reader.decrypt(key)?;
+                } else {
+                    bail!("GnuPG's AEAD packet (type 20) is non-standard, 'DecryptionOptions' allows opting into it")
+                }
             }
         }
 
@@ -806,7 +884,7 @@ impl<'a> Message<'a> {
     /// HAZMAT: Decrypts (malleable) SED packets.
     pub fn decrypt_legacy(self, key_pw: &Password, key: &SignedSecretKey) -> Result<Message<'a>> {
         let ring = TheRing {
-            allow_legacy: true,
+            decrypt_options: DecryptionOptions::new().enable_legacy(),
             secret_keys: vec![key],
             key_passwords: vec![key_pw],
             ..Default::default()
@@ -875,14 +953,14 @@ impl<'a> Message<'a> {
                 is_nested,
             } => {
                 // Lets go and find things, with which we can decrypt
-                let allow_legacy = ring.allow_legacy;
+                let decrypt_options = ring.decrypt_options;
                 let (session_key, result) = ring.find_session_key(&esk, abort_early)?;
                 let Some(session_key) = session_key else {
                     return Err(Error::MissingKey);
                 };
 
-                if allow_legacy {
-                    edata.decrypt_legacy(&session_key)?;
+                if decrypt_options.legacy || decrypt_options.gnupg_aead {
+                    edata.decrypt_permissive(&session_key, decrypt_options)?;
                 } else {
                     edata.decrypt(&session_key)?;
                 }
@@ -959,6 +1037,7 @@ impl<'a> Message<'a> {
             Self::Encrypted { edata, .. } => match edata {
                 Edata::SymEncryptedData { reader } => reader.into_inner(),
                 Edata::SymEncryptedProtectedData { reader } => reader.into_inner(),
+                Edata::GnupgAeadData { reader } => reader.into_inner(),
             },
         }
     }
@@ -972,6 +1051,7 @@ impl<'a> Message<'a> {
             Self::Encrypted { edata, .. } => match edata {
                 Edata::SymEncryptedData { reader } => reader.get_mut(),
                 Edata::SymEncryptedProtectedData { reader } => reader.get_mut(),
+                Edata::GnupgAeadData { reader } => reader.get_mut(),
             },
         }
     }
@@ -1076,10 +1156,8 @@ pub struct TheRing<'a> {
     pub key_passwords: Vec<&'a Password>,
     pub message_password: Vec<&'a Password>,
     pub session_keys: Vec<PlainSessionKey>,
-    /// If this is `true` (malleable) SED packets are also decrypted.
-    ///
-    /// Defaults to `false`.
-    pub allow_legacy: bool,
+
+    pub decrypt_options: DecryptionOptions,
 }
 
 impl TheRing<'_> {
@@ -1208,6 +1286,12 @@ impl TheRing<'_> {
 
         for esk in skesks {
             for (i, pw) in self.message_password.iter().enumerate() {
+                // Skip v5 SKESK unless gnupg_aead is enabled
+                if !self.decrypt_options.gnupg_aead && esk.version() == SkeskVersion::V5 {
+                    debug!("skipping v5 SKESK because allow_gnupg_aead is not enabled: {esk:?}");
+                    continue;
+                }
+
                 match decrypt_session_key_with_password(esk, pw) {
                     Ok(session_key) => {
                         skesk_session_keys.push((i, session_key));
@@ -1352,7 +1436,6 @@ impl<'a> From<Option<&'a armor::Headers>> for ArmorOptions<'a> {
 
 #[cfg(test)]
 mod tests {
-
     use std::{fs, io::BufReader};
 
     use rand::SeedableRng;
