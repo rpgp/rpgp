@@ -128,6 +128,7 @@ impl KeyDetails for Box<&dyn SigningKey> {
 ///
 /// Contains private data.
 pub trait SigningKey: KeyDetails {
+    /// Create a raw cryptographic signature over `data`
     fn sign(
         &self,
         key_pw: &Password,
