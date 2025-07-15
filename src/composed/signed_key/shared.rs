@@ -67,6 +67,8 @@ impl SignedKeyDetails {
     /// self-signed signatures) and converts it into a duration.
     /// The function returns `None` if the key has an infinite
     /// validity.
+    ///
+    /// TODO: this is pretty high level/semantics-related, should this be in rPGP at all?
     pub fn key_expiration_time(&self) -> Option<Duration> {
         // Find the maximum key_expiration_time in all signatures of all user ids.
         self.users

@@ -736,6 +736,10 @@ impl Signature {
             .unwrap_or_default()
     }
 
+    /// If the hashed area contains any KeyExpirationTime subpacket, then this
+    /// returns `Some(duration)` of the first KeyExpirationTime subpacket encountered.
+    ///
+    /// If the hashed area contains no KeyExpirationTime subpacket, this returns `None`
     pub fn key_expiration_time(&self) -> Option<&Duration> {
         self.config().and_then(|h| {
             h.hashed_subpackets().find_map(|p| match &p.data {
