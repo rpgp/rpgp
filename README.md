@@ -59,49 +59,78 @@ Additionally, it fully supports all functionality required by the [Autocrypt 1.1
 
 ```rust no_run
 use std::fs;
-use pgp::composed::{SignedPublicKey, Message, Deserializable};
 
-let pub_key_file = "key.asc";
-let msg_file = "msg.asc";
+use pgp::composed::{Deserializable, Message, SignedPublicKey};
 
-let key_string = fs::read_to_string(pub_key_file).unwrap();
-let (public_key, _headers_public) = SignedPublicKey::from_string(&key_string).unwrap();
+fn main() {
+   let pub_key_file = "key.asc";
+   let msg_file = "msg.asc";
 
-let msg_string = fs::read_to_string(msg_file).unwrap();
-let (mut msg, _headers_msg) = Message::from_string(&msg_string).unwrap();
+   let key_string = fs::read_to_string(pub_key_file).unwrap();
+   let (public_key, _headers_public) = SignedPublicKey::from_string(&key_string).unwrap();
 
-// Verify this message
-// NOTE: This assumes that the primary serves as the signing key, which is not always the case!
-msg.verify(&public_key).unwrap();
+   let msg_string = fs::read_to_string(msg_file).unwrap();
+   let (mut msg, _headers_msg) = Message::from_string(&msg_string).unwrap();
 
-let msg_string = msg.as_data_string().unwrap(); // actual message content
-println!("Signed message: {:?}", msg_string);
+   // Verify this message
+   // NOTE: This assumes that the primary serves as the signing key, which is not always the case!
+   msg.verify(&public_key).unwrap();
+
+   let msg_string = msg.as_data_string().unwrap(); // actual message content
+   println!("Signed message: {msg_string:?}");
+}
 ```
 
 ### Generate and verify a detached signature with an OpenPGP keypair
 
 ```rust no_run
-use std::fs;
+use std::time::SystemTime;
+
 use pgp::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
-use pgp::types::{Password, PublicKeyTrait, SecretKeyTrait};
-use pgp::crypto::hash::HashAlgorithm;
+use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
+use pgp::types::{KeyDetails, Password};
 
-let priv_key_file = "key.sec.asc";
-let pub_key_file = "key.asc";
+fn main() -> pgp::errors::Result<()> {
+   let priv_key_file = "key.sec.asc";
 
-let data = b"Hello world!";
+   let data = b"Hello world!";
 
-// Create a new signature using the private key
-let secret_key_string = fs::read_to_string(priv_key_file).expect("Failed to load secret key");
-let signed_secret_key = SignedSecretKey::from_string(&secret_key_string).unwrap().0;
+   // -- Create a new signature using the private key --
+   let signed_secret_key = SignedSecretKey::from_armor_file(priv_key_file)?.0;
 
-let new_signature = signed_secret_key.create_signature(&Password::empty(), HashAlgorithm::default(), &data[..]).unwrap();
+   // Set up a signature configuration to create a binary data signature
+   let mut config = SignatureConfig::from_key(
+      rand::thread_rng(),
+      &signed_secret_key.primary_key,
+      SignatureType::Binary,
+   )?;
+   config.hashed_subpackets = vec![
+      Subpacket::regular(SubpacketData::IssuerFingerprint(
+         signed_secret_key.fingerprint(),
+      ))?,
+      Subpacket::critical(SubpacketData::SignatureCreationTime(
+         SystemTime::now().into(),
+      ))?,
+   ];
+   config.unhashed_subpackets =
+           vec![Subpacket::regular(SubpacketData::Issuer(signed_secret_key.key_id()))?];
 
-// Verify the signature using the public key
-let key_string = fs::read_to_string(pub_key_file).expect("Failed to load public key");
-let public_key = SignedPublicKey::from_string(&key_string).unwrap().0;
+   // Generate an OpenPGP signature packet (which is used as a "detached signature", in this context)
+   let signature = config
+           .sign(
+              &signed_secret_key.primary_key,
+              &Password::empty(),
+              &data[..],
+           )?;
 
-public_key.verify_signature(HashAlgorithm::default(), &data[..], &new_signature).unwrap();
+   // -- Verify the signature using the public key --
+   let pub_key_file = "key.asc";
+   let public_key = SignedPublicKey::from_armor_file(pub_key_file)?.0;
+
+   signature.verify(&public_key, &data[..])?;
+
+   Ok(())
+}
 ```
 
 ## Current Status
