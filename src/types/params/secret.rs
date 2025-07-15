@@ -19,6 +19,7 @@ pub enum SecretParams {
 }
 
 impl SecretParams {
+    /// `true`, if the secret key material is password-locked
     pub fn is_encrypted(&self) -> bool {
         match self {
             SecretParams::Plain(_) => false,
