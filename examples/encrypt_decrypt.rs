@@ -26,7 +26,7 @@ fn unpack_msg(mut msg: Message) -> Vec<u8> {
 }
 
 fn encrypt(spk: &SignedPublicKey, msg: &[u8]) -> Vec<u8> {
-    // Seacrhing for encryption subkey
+    // Searching for encryption subkey
     for sub in spk.public_subkeys.iter() {
         if sub.is_encryption_key() {
             let mut builder = MessageBuilder::from_bytes("", msg.to_vec())
@@ -41,17 +41,17 @@ fn encrypt(spk: &SignedPublicKey, msg: &[u8]) -> Vec<u8> {
 
 fn decrypt(ssk: &SignedSecretKey, msg: &[u8]) -> Vec<u8> {
     unpack_msg(
-        Message::from_bytes(&msg[..])
+        Message::from_bytes(msg)
             .unwrap()
-            .decrypt(&"".into(), &ssk)
+            .decrypt(&"".into(), ssk)
             .unwrap(),
     )
 }
 
-/// Simple helper funtion to read secret key from both armor and binary formats
+/// Simple helper function to read secret key from both armor and binary formats
 pub fn read_secret_key(input: &[u8]) -> SignedSecretKey {
     // Try to interpret as UTF‑8 text first
-    if let Ok(s) = std::str::from_utf8(&input) {
+    if let Ok(s) = std::str::from_utf8(input) {
         let (key, _headers) = SignedSecretKey::from_string(s).unwrap();
         key.verify().unwrap();
         return key;
@@ -62,10 +62,10 @@ pub fn read_secret_key(input: &[u8]) -> SignedSecretKey {
     key
 }
 
-/// Simple helper funtion to read public key from both armor and binary formats
+/// Simple helper function to read public key from both armor and binary formats
 pub fn read_public_key(input: &[u8]) -> SignedPublicKey {
     // Try to interpret as UTF‑8 text first
-    if let Ok(s) = std::str::from_utf8(&input) {
+    if let Ok(s) = std::str::from_utf8(input) {
         let (key, _headers) = SignedPublicKey::from_string(s).unwrap();
         key.verify().unwrap();
         return key;
