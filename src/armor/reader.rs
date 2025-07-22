@@ -363,12 +363,13 @@ pub struct Dearmor<R: BufRead> {
     pub typ: Option<BlockType>,
     /// The headers found in the armored file.
     pub headers: Headers,
-    /// Optional crc checksum
+    /// Optional crc checksum from the armor footer
     pub checksum: Option<u64>,
     /// Current state
     current_part: Part<R>,
-    #[debug("Crc24Hasher")]
-    crc: crc24::Crc24Hasher,
+    /// (Optional) crc24 hasher
+    #[debug("Crc24Hasher")] // FIXME: show if Some or None?
+    crc: Option<crc24::Crc24Hasher>,
     /// Maximum buffer limit
     max_buffer_limit: usize,
 }
@@ -397,7 +398,25 @@ impl<R: BufRead> Dearmor<R> {
             headers: BTreeMap::new(),
             checksum: None,
             current_part: Part::Header(input),
-            crc: Default::default(),
+            crc: None,
+            max_buffer_limit: limit,
+        }
+    }
+
+    /// Creates a new `Dearmor` with CRC24 checking (and the provided maximum buffer size).
+    ///
+    /// Calculating and checking the CRC24 is heavily discouraged by RFC 9580:
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-optional-checksum>
+    ///
+    /// This function allows opting into the check for special-purpose use cases, on legacy OpenPGP
+    /// data.
+    pub fn with_crc24(input: R, limit: usize) -> Self {
+        Dearmor {
+            typ: None,
+            headers: BTreeMap::new(),
+            checksum: None,
+            current_part: Part::Header(input),
+            crc: Some(Default::default()),
             max_buffer_limit: limit,
         }
     }
@@ -469,9 +488,11 @@ impl<R: BufRead> Dearmor<R> {
         base_decoder: &mut Base64Decoder<Base64Reader<R>>,
     ) -> io::Result<usize> {
         let size = base_decoder.read(into)?;
-        if size > 0 {
-            // update the hash
-            self.crc.write(&into[0..size]);
+        if let Some(mut crc) = self.crc {
+            if size > 0 {
+                // update the hash
+                crc.write(&into[0..size]);
+            }
         }
 
         Ok(size)
@@ -493,11 +514,13 @@ impl<R: BufRead> Dearmor<R> {
         self.checksum = checksum;
         self.current_part = Part::Done(b);
 
-        // check checksum if there is one
-        if let Some(expected) = self.checksum {
-            let actual = self.crc.finish();
-            if expected != actual {
-                bail!("invalid crc24 checksum");
+        // validate checksum if we calculated one and the armor footer had one
+        if let Some(crc) = self.crc {
+            if let Some(expected) = self.checksum {
+                let actual = crc.finish();
+                if expected != actual {
+                    bail!("invalid crc24 checksum");
+                }
             }
         }
 
