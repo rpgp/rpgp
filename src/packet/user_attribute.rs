@@ -11,7 +11,7 @@ use crate::{
     errors::{ensure, ensure_eq, Result},
     packet::{
         PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
-        SubpacketData, SubpacketLength,
+        SubpacketData, SubpacketLength, CERTIFICATION_SIGNATURE_TYPES,
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -232,7 +232,15 @@ impl UserAttribute {
         P: SecretKeyTrait,
         K: PublicKeyTrait + Serialize,
     {
-        self.sign_third_party(rng, signer_sec_key, key_pw, signer_pub_key)
+        // Self-signatures use CertPositive, see
+        // <https://www.ietf.org/archive/id/draft-gallagher-openpgp-signatures-01.html#name-certification-signature-typ>
+        self.sign_third_party(
+            rng,
+            signer_sec_key,
+            key_pw,
+            signer_pub_key,
+            SignatureType::CertPositive,
+        )
     }
 
     /// Create a third-party signature
@@ -242,17 +250,23 @@ impl UserAttribute {
         signer: &P,
         signer_pw: &Password,
         signee: &K,
+        typ: SignatureType,
     ) -> Result<SignedUserAttribute>
     where
         R: CryptoRng + Rng,
         P: SecretKeyTrait,
         K: PublicKeyTrait + Serialize,
     {
+        ensure!(
+            CERTIFICATION_SIGNATURE_TYPES.contains(&typ),
+            "typ must be a certifying signature type"
+        );
+
         let hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
             Utc::now().trunc_subsecs(0),
         ))?];
 
-        let mut config = SignatureConfig::from_key(&mut rng, signer, SignatureType::CertGeneric)?;
+        let mut config = SignatureConfig::from_key(&mut rng, signer, typ)?;
 
         config.hashed_subpackets = hashed_subpackets;
         if signer.version() <= KeyVersion::V4 {

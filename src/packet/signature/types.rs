@@ -1113,6 +1113,13 @@ pub enum SignatureType {
     Other(#[cfg_attr(test, proptest(strategy = "0x51u8.."))] u8),
 }
 
+pub const CERTIFICATION_SIGNATURE_TYPES: &[SignatureType] = &[
+    SignatureType::CertPositive,
+    SignatureType::CertGeneric,
+    SignatureType::CertPositive,
+    SignatureType::CertPersona,
+];
+
 /// Key flags by default are only 1 byte large, but there are reserved
 /// extensions making them 2 bytes large.
 /// In addition the spec defines them to be arbitrarily large, but this is
