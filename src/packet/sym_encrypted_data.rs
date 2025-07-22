@@ -50,3 +50,52 @@ impl PacketTrait for SymEncryptedData {
         &self.packet_header
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use prop::collection::vec;
+    use proptest::prelude::*;
+
+    use super::*;
+    use crate::types::{PacketHeaderVersion, PacketLength, Tag};
+
+    impl Arbitrary for SymEncryptedData {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            let len = 1u32; // unused
+            let packet_header = PacketHeader::from_parts(
+                PacketHeaderVersion::New,
+                Tag::SymEncryptedData,
+                PacketLength::Fixed(len),
+            )
+            .unwrap();
+
+            vec(0u8..=255u8, 0..=2048)
+                .prop_map(move |data| SymEncryptedData {
+                    packet_header,
+                    data: data.into(),
+                })
+                .boxed()
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn write_len(data: SymEncryptedData) {
+            let mut buf = Vec::new();
+            data.to_writer(&mut buf).unwrap();
+            prop_assert_eq!(buf.len(), data.write_len());
+        }
+
+
+        #[test]
+        fn packet_roundtrip(data: SymEncryptedData) {
+            let mut buf = Vec::new();
+            data.to_writer(&mut buf).unwrap();
+            let new_data = SymEncryptedData::try_from_reader(data.packet_header, &mut &buf[..]).unwrap();
+            prop_assert_eq!(data, new_data);
+        }
+    }
+}
