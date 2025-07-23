@@ -1010,7 +1010,7 @@ RrvW21RoMfltDA==
         assert!(dec.checksum.is_some());
         assert_eq!(dec.crc24_status(), ArmorCrc24Status::Unchecked);
 
-        // A "with_crc24" Dearmor should accept the bad CRC24 without complaint
+        // A "with_crc24" Dearmor should error for the bad CRC24
         let mut dec = Dearmor::with_crc24(BufReader::new(MSG_BAD_CRC24.as_bytes()), 1_000_000);
 
         let mut res = Vec::new();
