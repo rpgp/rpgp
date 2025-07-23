@@ -64,18 +64,24 @@ mod tests {
         type Strategy = BoxedStrategy<Self>;
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
-            let len = 1u32; // unused
-            let packet_header = PacketHeader::from_parts(
-                PacketHeaderVersion::New,
-                Tag::SymEncryptedData,
-                PacketLength::Fixed(len),
-            )
-            .unwrap();
+            any::<PacketHeaderVersion>()
+                .prop_flat_map(move |packet_header_version| {
+                    (Just(packet_header_version), vec(0u8..=255u8, 0..=2048))
+                })
+                .prop_map(move |(packet_header_version, data)| {
+                    let len = 1u32; // unused
 
-            vec(0u8..=255u8, 0..=2048)
-                .prop_map(move |data| SymEncryptedData {
-                    packet_header,
-                    data: data.into(),
+                    let packet_header = PacketHeader::from_parts(
+                        packet_header_version,
+                        Tag::SymEncryptedData,
+                        PacketLength::Fixed(len),
+                    )
+                    .unwrap();
+
+                    SymEncryptedData {
+                        packet_header,
+                        data: data.into(),
+                    }
                 })
                 .boxed()
         }
