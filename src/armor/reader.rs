@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt, hash::Hasher, io, io::prelude::*, str};
+use std::{cmp::PartialEq, collections::BTreeMap, fmt, hash::Hasher, io, io::prelude::*, str};
 
 use base64::engine::{general_purpose::STANDARD, Engine as _};
 use buffer_redux::BufReader;
@@ -356,6 +356,22 @@ fn armor_footer_line(i: &[u8]) -> IResult<&[u8], BlockType> {
     .parse(i)
 }
 
+/// Status of the CRC24 in an armor footer
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum ArmorCrc24Status {
+    /// No CRC24 was present in the footer of the armored data
+    NoCrc24,
+
+    /// A CRC24 was present, and it matches the correct checksum of the armored data
+    CheckedOk,
+
+    /// A CRC24 was present, it does not match the correct checksum of the armored data
+    CheckedInvalid,
+
+    /// A CRC24 was present, but not checked (it's unknown if it matches the armored data)
+    Unchecked,
+}
+
 /// Streaming based ascii armor parsing.
 #[derive(derive_more::Debug)]
 pub struct Dearmor<R: BufRead> {
@@ -515,16 +531,26 @@ impl<R: BufRead> Dearmor<R> {
         self.current_part = Part::Done(b);
 
         // validate checksum if we calculated one and the armor footer had one
-        if let Some(crc) = self.crc {
-            if let Some(expected) = self.checksum {
-                let actual = crc.finish();
-                if expected != actual {
-                    bail!("invalid crc24 checksum");
-                }
-            }
+        if self.crc24_status() == ArmorCrc24Status::CheckedInvalid {
+            bail!("invalid crc24 checksum");
         }
 
         Ok(())
+    }
+
+    /// Returns the status of the armor's CRC24 checksum
+    pub fn crc24_status(&self) -> ArmorCrc24Status {
+        match (self.checksum, self.crc) {
+            (None, _) => ArmorCrc24Status::NoCrc24,
+            (_, None) => ArmorCrc24Status::Unchecked,
+            (Some(expected), Some(actual)) => {
+                if expected == actual.finish() {
+                    ArmorCrc24Status::CheckedOk
+                } else {
+                    ArmorCrc24Status::CheckedInvalid
+                }
+            }
+        }
     }
 }
 
@@ -946,6 +972,7 @@ RrvW21RoMfltDA==
         assert_eq!(res.len(), 154);
 
         assert!(dec.checksum.is_none());
+        assert_eq!(dec.crc24_status(), ArmorCrc24Status::NoCrc24);
 
         // A "with_crc24" Dearmor should accept the missing CRC24 without complaint
         let mut dec = Dearmor::with_crc24(BufReader::new(MSG_NO_CRC24.as_bytes()), 1_000_000);
@@ -957,6 +984,7 @@ RrvW21RoMfltDA==
         assert_eq!(res.len(), 154);
 
         assert!(dec.checksum.is_none());
+        assert_eq!(dec.crc24_status(), ArmorCrc24Status::NoCrc24);
     }
 
     #[test]
@@ -980,6 +1008,7 @@ RrvW21RoMfltDA==
         assert_eq!(res.len(), 154);
 
         assert!(dec.checksum.is_some());
+        assert_eq!(dec.crc24_status(), ArmorCrc24Status::Unchecked);
 
         // A "with_crc24" Dearmor should accept the bad CRC24 without complaint
         let mut dec = Dearmor::with_crc24(BufReader::new(MSG_BAD_CRC24.as_bytes()), 1_000_000);
@@ -991,8 +1020,7 @@ RrvW21RoMfltDA==
         assert!(res.is_err());
 
         assert!(dec.checksum.is_some());
-
-        // FIXME: add and use a query function that shows that the checksum was wrong?
+        assert_eq!(dec.crc24_status(), ArmorCrc24Status::CheckedInvalid);
     }
 
     #[test]
