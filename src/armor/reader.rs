@@ -927,6 +927,75 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
     }
 
     #[test]
+    fn test_dearmor_no_crc24() {
+        const MSG_NO_CRC24: &str = "-----BEGIN PGP MESSAGE-----
+
+xA0DAAgWRbTg0QA4pREByxJiAAAAAABoZWxsbyB3b3JsZArCdQQAFggAHRYhBI+6
+y7JaHukErbi530W04NEAOKURBQJogLxNAAoJEEW04NEAOKURQFoBAP858lgyrKmy
+6QHKz3Zs52+3eGSDMgvWEgsealcZnIl9AQDEgKglQQlUoss5opqRRgWPbMBkeQ4E
+RrvW21RoMfltDA==
+-----END PGP MESSAGE-----";
+
+        // A regular Dearmor should accept the missing CRC24 without complaint
+        let mut dec = Dearmor::new(BufReader::new(MSG_NO_CRC24.as_bytes()));
+
+        let mut res = Vec::new();
+        let _read = dec.read_to_end(&mut res).unwrap();
+
+        assert_eq!(dec.typ, Some(BlockType::Message));
+        assert_eq!(res.len(), 154);
+
+        assert!(dec.checksum.is_none());
+
+        // A "with_crc24" Dearmor should accept the missing CRC24 without complaint
+        let mut dec = Dearmor::with_crc24(BufReader::new(MSG_NO_CRC24.as_bytes()), 1_000_000);
+
+        let mut res = Vec::new();
+        let _read = dec.read_to_end(&mut res).unwrap();
+
+        assert_eq!(dec.typ, Some(BlockType::Message));
+        assert_eq!(res.len(), 154);
+
+        assert!(dec.checksum.is_none());
+    }
+
+    #[test]
+    fn test_dearmor_bad_crc24() {
+        const MSG_BAD_CRC24: &str = "-----BEGIN PGP MESSAGE-----
+
+xA0DAAgWRbTg0QA4pREByxJiAAAAAABoZWxsbyB3b3JsZArCdQQAFggAHRYhBI+6
+y7JaHukErbi530W04NEAOKURBQJogLxNAAoJEEW04NEAOKURQFoBAP858lgyrKmy
+6QHKz3Zs52+3eGSDMgvWEgsealcZnIl9AQDEgKglQQlUoss5opqRRgWPbMBkeQ4E
+RrvW21RoMfltDA==
+=aaaa
+-----END PGP MESSAGE-----";
+
+        // A regular Dearmor should accept the bad CRC24 without complaint
+        let mut dec = Dearmor::new(BufReader::new(MSG_BAD_CRC24.as_bytes()));
+
+        let mut res = Vec::new();
+        let _read = dec.read_to_end(&mut res).unwrap();
+
+        assert_eq!(dec.typ, Some(BlockType::Message));
+        assert_eq!(res.len(), 154);
+
+        assert!(dec.checksum.is_some());
+
+        // A "with_crc24" Dearmor should accept the bad CRC24 without complaint
+        let mut dec = Dearmor::with_crc24(BufReader::new(MSG_BAD_CRC24.as_bytes()), 1_000_000);
+
+        let mut res = Vec::new();
+        let res = dec.read_to_end(&mut res);
+
+        // We expect to get an Error::Message with "invalid crc24 checksum"
+        assert!(res.is_err());
+
+        assert!(dec.checksum.is_some());
+
+        // FIXME: add and use a query function that shows that the checksum was wrong?
+    }
+
+    #[test]
     fn test_key_value_pair_single() {
         assert_eq!(
             key_value_pair(&b"hello: world\n"[..]).unwrap(),
