@@ -2,7 +2,7 @@
 
 ## Known Issues
 
-The used [`rsa`](https://crates.io/crates/rsa) crate is vulnerable to the Marvin attack and potentitally other side channel attacks. This is being tracked and worked on actively:
+The used [`rsa`](https://crates.io/crates/rsa) crate is vulnerable to the Marvin attack and potentially other side channel attacks. This is being tracked and worked on actively:
 
 - https://github.com/RustCrypto/RSA/issues/19
 - https://github.com/RustCrypto/RSA/pull/394
