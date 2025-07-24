@@ -139,12 +139,6 @@ mod tests {
     use super::*;
     use crate::types::{PacketHeaderVersion, PacketLength};
 
-    proptest::prop_compose! {
-        pub fn data_gen()(source: Vec<u8>) -> Bytes {
-            source.into()
-        }
-    }
-
     impl Arbitrary for Config {
         type Parameters = ();
         type Strategy = BoxedStrategy<Self>;

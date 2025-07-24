@@ -71,7 +71,7 @@ pub enum AeadAlgorithm {
     Private110 = 110,
 
     #[num_enum(catch_all)]
-    Other(#[cfg_attr(test, proptest(strategy = "110u8.."))] u8),
+    Other(#[cfg_attr(test, proptest(strategy = "111u8.."))] u8),
 }
 
 impl AeadAlgorithm {

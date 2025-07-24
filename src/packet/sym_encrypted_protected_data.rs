@@ -382,10 +382,15 @@ impl<R: BufRead> StreamDecryptor<R> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use proptest::{collection::vec, prelude::*};
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
+    use crate::{
+        packet::sym_encrypted_protected_data::Config,
+        types::{PacketHeaderVersion, PacketLength},
+    };
 
     #[test]
     fn test_aead_message_sizes() {
@@ -429,6 +434,76 @@ mod tests {
                         .unwrap();
                 assert_eq!(enc, back);
             }
+        }
+    }
+
+    impl Arbitrary for Config {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            prop_oneof![
+                Just(Config::V1),
+                any::<(SymmetricKeyAlgorithm, AeadAlgorithm, ChunkSize)>()
+                    .prop_flat_map(move |(sym_alg, aead, chunk_size)| {
+                        (
+                            Just(sym_alg),
+                            Just(aead),
+                            Just(chunk_size),
+                            vec(0u8..=255u8, 32),
+                        )
+                    })
+                    .prop_map(move |(sym_alg, aead, chunk_size, salt)| Config::V2 {
+                        sym_alg,
+                        aead,
+                        chunk_size,
+                        salt: salt.try_into().unwrap(),
+                    })
+            ]
+            .boxed()
+        }
+    }
+
+    impl Arbitrary for SymEncryptedProtectedData {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<Config>()
+                .prop_flat_map(move |config| (Just(config), vec(0u8..=255u8, 0..=2048)))
+                .prop_map(move |(config, data)| {
+                    let len = 1u32; // unused
+                    let packet_header = PacketHeader::from_parts(
+                        PacketHeaderVersion::New,
+                        Tag::SymEncryptedProtectedData,
+                        PacketLength::Fixed(len),
+                    )
+                    .unwrap();
+                    SymEncryptedProtectedData {
+                        config,
+                        packet_header,
+                        data: data.into(),
+                    }
+                })
+                .boxed()
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn write_len(data: SymEncryptedProtectedData) {
+            let mut buf = Vec::new();
+            data.to_writer(&mut buf).unwrap();
+            prop_assert_eq!(buf.len(), data.write_len());
+        }
+
+
+        #[test]
+        fn packet_roundtrip(data: SymEncryptedProtectedData) {
+            let mut buf = Vec::new();
+            data.to_writer(&mut buf).unwrap();
+            let new_data = SymEncryptedProtectedData::try_from_reader(data.packet_header, &mut &buf[..]).unwrap();
+            prop_assert_eq!(data, new_data);
         }
     }
 }

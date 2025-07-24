@@ -63,6 +63,11 @@ where
             _digest: PhantomData,
         })
     }
+
+    /// Return the public key
+    pub fn public_key(&self) -> &PublicKey {
+        &self.public_key
+    }
 }
 
 impl<D, T> RsaSigner<T, D>
