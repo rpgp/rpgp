@@ -28,7 +28,7 @@ pub trait Imprint {
     ///
     /// NOTE: Imprints are a special purpose tool! For most use cases, the OpenPGP fingerprint is
     /// the most appropriate identifier for a certificate or a component key.
-    fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>>;
+    fn imprint<D: KnownDigest>(&self) -> Result<hybrid_array::Array<u8, D::OutputSize>>;
 }
 
 pub trait PublicKeyTrait: KeyDetails + std::fmt::Debug {

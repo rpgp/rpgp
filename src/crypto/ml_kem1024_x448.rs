@@ -1,13 +1,13 @@
 use std::cmp::PartialEq;
 
-use cx448::x448::{PublicKey, Secret};
 use log::debug;
 use ml_kem::{
     kem::{Decapsulate, DecapsulationKey, Encapsulate, EncapsulationKey},
     KemCore, MlKem1024, MlKem1024Params,
 };
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use sha3::{Digest, Sha3_256};
+use x448::{PublicKey, Secret};
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::{
@@ -69,8 +69,8 @@ impl Serialize for SecretKey {
 
 impl SecretKey {
     /// Generate a `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
-        let x448 = Secret::new(&mut rng);
+    pub fn generate<R: RngCore + CryptoRng + ?Sized>(rng: &mut R) -> Self {
+        let x448 = Secret::new(rng);
 
         let mut d = Zeroizing::new([0u8; 32]);
         let mut z = Zeroizing::new([0u8; 32]);
@@ -220,8 +220,8 @@ fn multi_key_combine(
 /// - ecdh_ciphertext
 /// - ml_kem_ciphertext
 /// - encrypted data
-pub fn encrypt<R: CryptoRng + Rng>(
-    mut rng: R,
+pub fn encrypt<R: CryptoRng + RngCore + ?Sized>(
+    rng: &mut R,
     ecdh_public_key: &PublicKey,
     ml_kem_public_key: &EncapsulationKey<MlKem1024Params>,
     plain: &[u8],
@@ -235,9 +235,9 @@ pub fn encrypt<R: CryptoRng + Rng>(
     );
 
     // Compute (ecdhCipherText, ecdhKeyShare) := ECDH-KEM.Encaps(ecdhPublicKey)
-    let (ecdh_ciphertext, ecdh_key_share) = x448_kem_encaps(&mut rng, ecdh_public_key);
+    let (ecdh_ciphertext, ecdh_key_share) = x448_kem_encaps(rng, ecdh_public_key);
     // Compute (mlkemCipherText, mlkemKeyShare) := ML-KEM.Encaps(mlkemPublicKey)
-    let (ml_kem_ciphertext, ml_kem_key_share) = ml_kem_encaps(&mut rng, ml_kem_public_key);
+    let (ml_kem_ciphertext, ml_kem_key_share) = ml_kem_encaps(rng, ml_kem_public_key);
     // Compute KEK := multiKeyCombine(mlkemKeyShare, mlkemCipherText, mlkemPublicKey, ecdhKeyShare,
     //                        ecdhCipherText, ecdhPublicKey, algId, 256)
 
@@ -256,12 +256,12 @@ pub fn encrypt<R: CryptoRng + Rng>(
 }
 
 /// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-x448-kem>
-fn x448_kem_encaps<R: CryptoRng + Rng>(
-    mut rng: R,
+fn x448_kem_encaps<R: CryptoRng + ?Sized>(
+    rng: &mut R,
     public_key: &PublicKey,
 ) -> (PublicKey, [u8; 56]) {
     // Generate an ephemeral key pair {v, V} via V = X448(v,U(P)) where v is a randomly generated octet string with a length of 56 octets
-    let our_secret = Secret::new(&mut rng);
+    let our_secret = Secret::new(rng);
 
     // Compute the shared coordinate X = X448(v, R) where R is the recipient's public key ecdhPublicKey
     let shared_secret = our_secret.as_diffie_hellman(public_key).expect("checked");
@@ -270,11 +270,11 @@ fn x448_kem_encaps<R: CryptoRng + Rng>(
     (ephemeral_public, *shared_secret.as_bytes())
 }
 
-fn ml_kem_encaps<R: CryptoRng + Rng>(
-    mut rng: R,
+fn ml_kem_encaps<R: CryptoRng + RngCore + ?Sized>(
+    rng: &mut R,
     public_key: &EncapsulationKey<MlKem1024Params>,
 ) -> (Box<[u8; 1568]>, [u8; 32]) {
-    let (ciphertext, share) = public_key.encapsulate(&mut rng).expect("infallible");
+    let (ciphertext, share) = public_key.encapsulate(rng).expect("infallible");
     (Box::new(ciphertext.into()), share.into())
 }
 

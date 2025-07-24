@@ -7,12 +7,12 @@ use pgp::{
     ser::Serialize,
     types::Password,
 };
-use rand::thread_rng;
+use rand::rng;
 
 use super::build_key;
 
 fn bench_key(c: &mut Criterion) {
-    let mut rng = thread_rng();
+    let mut rng = rng();
 
     let mut g = c.benchmark_group("secret_key");
 
