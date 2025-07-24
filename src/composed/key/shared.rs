@@ -121,7 +121,9 @@ impl KeyDetails {
         let mut users = vec![];
 
         if let Some(primary_user_id) = self.primary_user_id {
-            let mut config = SignatureConfig::from_key(&mut rng, key, SignatureType::CertGeneric)?;
+            // Self-signatures use CertPositive, see
+            // <https://www.ietf.org/archive/id/draft-gallagher-openpgp-signatures-01.html#name-certification-signature-typ>
+            let mut config = SignatureConfig::from_key(&mut rng, key, SignatureType::CertPositive)?;
             config.hashed_subpackets = match key.version() {
                 KeyVersion::V6 => basic_subpackets()?,
                 _ => subpackets_with_metadata()?,
@@ -152,8 +154,10 @@ impl KeyDetails {
             self.non_primary_user_ids
                 .into_iter()
                 .map(|id| {
+                    // Self-signatures use CertPositive, see
+                    // <https://www.ietf.org/archive/id/draft-gallagher-openpgp-signatures-01.html#name-certification-signature-typ>
                     let mut config =
-                        SignatureConfig::from_key(&mut rng, key, SignatureType::CertGeneric)?;
+                        SignatureConfig::from_key(&mut rng, key, SignatureType::CertPositive)?;
 
                     config.hashed_subpackets = match key.version() {
                         KeyVersion::V6 => basic_subpackets()?,
