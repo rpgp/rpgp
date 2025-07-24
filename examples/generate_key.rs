@@ -12,7 +12,7 @@ use rand::thread_rng;
 /// Generate a private example key and the equivalent certificate (aka public key).
 /// Store these two artifacts in `example-key.priv` and `example-key.pub`, respectively.
 ///
-/// These keys can be re-used in the separate `encrypt_decrypt` example!
+/// These keys can be reused in the separate `encrypt_decrypt` example!
 fn main() {
     // Generate a new OpenPGP private key (TSK)
     let secret_key = keygen(
