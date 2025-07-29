@@ -139,9 +139,12 @@ impl UserId {
             "typ must be a certifying signature type"
         );
 
-        let hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
-            Utc::now().trunc_subsecs(0),
-        ))?];
+        let hashed_subpackets = vec![
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                Utc::now().trunc_subsecs(0),
+            ))?,
+            Subpacket::regular(SubpacketData::IssuerFingerprint(signer.fingerprint()))?,
+        ];
 
         let mut config = SignatureConfig::from_key(&mut rng, signer, typ)?;
 

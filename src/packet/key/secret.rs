@@ -630,9 +630,12 @@ where
     use chrono::SubsecRound;
 
     let mut config = SignatureConfig::from_key(&mut rng, key, sig_typ)?;
-    config.hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
-        chrono::Utc::now().trunc_subsecs(0),
-    ))?];
+    config.hashed_subpackets = vec![
+        Subpacket::regular(SubpacketData::SignatureCreationTime(
+            chrono::Utc::now().trunc_subsecs(0),
+        ))?,
+        Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
+    ];
     if key.version() <= KeyVersion::V4 {
         config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
     }
