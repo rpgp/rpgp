@@ -409,19 +409,14 @@ enum Part<R: BufRead> {
 /// - `crc24_check` is disabled (as mandated by RFC 9580).
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct DearmorOptions {
-    limit: usize,
-    crc24_check: bool,
+    pub(crate) limit: usize,
+    pub(crate) crc24_check: bool,
 }
 
 impl DearmorOptions {
     /// A new DearmorOptions with default settings
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// The maximum size of armored data that this Dearmor can handle
-    pub fn get_limit(&self) -> usize {
-        self.limit
     }
 
     /// Specify the maximum size of armored data that this Dearmor can handle.

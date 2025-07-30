@@ -174,7 +174,7 @@ where {
         debug!("parsing cleartext message");
         // Headers
         let (typ, headers, has_leading_data) =
-            read_from_buf(&mut b, "cleartext header", opt.get_limit(), header_parser)?;
+            read_from_buf(&mut b, "cleartext header", opt.limit, header_parser)?;
         ensure_eq!(typ, BlockType::CleartextMessage, "unexpected block type");
         ensure!(
             !has_leading_data,
