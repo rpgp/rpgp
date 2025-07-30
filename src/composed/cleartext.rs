@@ -188,7 +188,7 @@ where {
     pub fn from_armor_after_header<R: BufRead>(
         mut b: R,
         headers: Headers,
-        limit: usize,
+        _limit: usize,
     ) -> Result<(Self, Headers)> {
         let hashes = validate_headers(headers)?;
 
@@ -199,7 +199,7 @@ where {
         let b = std::io::Cursor::new(prefix).chain(b);
 
         // Signatures
-        let mut dearmor = armor::Dearmor::with_limit(b, limit);
+        let mut dearmor = armor::Dearmor::new(b);
         dearmor.read_header()?;
         // Safe to unwrap, as read_header succeeded.
         let typ = dearmor

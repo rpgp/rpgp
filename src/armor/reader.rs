@@ -401,39 +401,72 @@ enum Part<R: BufRead> {
     Temp,
 }
 
-impl<R: BufRead> Dearmor<R> {
-    /// Creates a new `Dearmor`, with the default limit of 1GiB.
-    pub fn new(input: R) -> Self {
-        Self::with_limit(input, 1024 * 1024 * 1024)
+/// Configuration for creating a custom Dearmor instance.
+///
+/// By default,
+///
+/// - the size `limit` of data that can be dearmored is 1 GiB,
+/// - `crc24_check` is disabled (as mandated by RFC 9580).
+pub struct DearmorOptions {
+    limit: usize,
+    crc24_check: bool,
+}
+
+impl DearmorOptions {
+    /// A new DearmorOptions with default settings
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    /// Creates a new `Dearmor` with the provided maximum buffer size.
-    pub fn with_limit(input: R, limit: usize) -> Self {
-        Dearmor {
-            typ: None,
-            headers: BTreeMap::new(),
-            checksum: None,
-            current_part: Part::Header(input),
-            crc: None,
-            max_buffer_limit: limit,
-        }
+    /// The maximum size of armored data that this Dearmor can handle
+    pub fn set_limit(mut self, limit: usize) -> Self {
+        self.limit = limit;
+        self
     }
 
-    /// Creates a new `Dearmor` with CRC24 checking (and the provided maximum buffer size).
+    /// Enable CRC24 checking.
     ///
     /// Calculating and checking the CRC24 is heavily discouraged by RFC 9580:
     /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-optional-checksum>
     ///
-    /// This function allows opting into the check for special-purpose use cases, on legacy OpenPGP
+    /// This flag allows opting into the check for special-purpose use cases, on legacy OpenPGP
     /// data.
-    pub fn with_crc24(input: R, limit: usize) -> Self {
+    pub fn enable_crc24_check(mut self) -> Self {
+        self.crc24_check = true;
+        self
+    }
+}
+
+impl Default for DearmorOptions {
+    fn default() -> Self {
+        Self {
+            limit: 1024 * 1024 * 1024,
+            crc24_check: false,
+        }
+    }
+}
+
+impl<R: BufRead> Dearmor<R> {
+    /// Creates a new `Dearmor`, with the default limit of 1GiB.
+    pub fn new(input: R) -> Self {
+        Self::with_options(input, DearmorOptions::default())
+    }
+
+    /// Creates a new `Dearmor` with explicitly chosen options.
+    pub fn with_options(input: R, opt: DearmorOptions) -> Self {
+        let crc = if opt.crc24_check {
+            Some(Default::default())
+        } else {
+            None
+        };
+
         Dearmor {
             typ: None,
             headers: BTreeMap::new(),
             checksum: None,
             current_part: Part::Header(input),
-            crc: Some(Default::default()),
-            max_buffer_limit: limit,
+            crc,
+            max_buffer_limit: opt.limit,
         }
     }
 
@@ -974,8 +1007,11 @@ RrvW21RoMfltDA==
         assert!(dec.checksum.is_none());
         assert_eq!(dec.crc24_status(), ArmorCrc24Status::NoCrc24);
 
-        // A "with_crc24" Dearmor should accept the missing CRC24 without complaint
-        let mut dec = Dearmor::with_crc24(BufReader::new(MSG_NO_CRC24.as_bytes()), 1_000_000);
+        // A Dearmor with crc24 should accept the missing CRC24 without complaint
+        let mut dec = Dearmor::with_options(
+            BufReader::new(MSG_NO_CRC24.as_bytes()),
+            DearmorOptions::default().enable_crc24_check(),
+        );
 
         let mut res = Vec::new();
         let _read = dec.read_to_end(&mut res).unwrap();
@@ -1011,7 +1047,10 @@ RrvW21RoMfltDA==
         assert_eq!(dec.crc24_status(), ArmorCrc24Status::Unchecked);
 
         // A "with_crc24" Dearmor should error for the bad CRC24
-        let mut dec = Dearmor::with_crc24(BufReader::new(MSG_BAD_CRC24.as_bytes()), 1_000_000);
+        let mut dec = Dearmor::with_options(
+            BufReader::new(MSG_BAD_CRC24.as_bytes()),
+            DearmorOptions::default().enable_crc24_check(),
+        );
 
         let mut res = Vec::new();
         let res = dec.read_to_end(&mut res);
