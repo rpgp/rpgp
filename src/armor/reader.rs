@@ -373,7 +373,7 @@ pub enum ArmorCrc24Status {
     },
 
     /// A CRC24 was present, but not checked (it's unknown if it matches the armored data)
-    Unchecked,
+    Unchecked { footer_crc: u32 },
 }
 
 /// Streaming based ascii armor parsing.
@@ -581,7 +581,9 @@ impl<R: BufRead> Dearmor<R> {
     pub fn crc24_status(&self) -> ArmorCrc24Status {
         match (self.checksum, self.crc) {
             (None, _) => ArmorCrc24Status::NoCrc24,
-            (_, None) => ArmorCrc24Status::Unchecked,
+            (Some(footer), None) => ArmorCrc24Status::Unchecked {
+                footer_crc: footer as u32,
+            },
             (Some(expected), Some(actual)) => {
                 let calculated_crc = actual.finish();
                 if expected == calculated_crc {
@@ -1056,7 +1058,12 @@ RrvW21RoMfltDA==
         assert_eq!(res.len(), 154);
 
         assert!(dec.checksum.is_some());
-        assert_eq!(dec.crc24_status(), ArmorCrc24Status::Unchecked);
+        assert_eq!(
+            dec.crc24_status(),
+            ArmorCrc24Status::Unchecked {
+                footer_crc: 0x69a69a
+            }
+        );
 
         // A "with_crc24" Dearmor should error for the bad CRC24
         let mut dec = Dearmor::with_options(
