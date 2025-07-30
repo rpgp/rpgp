@@ -362,11 +362,15 @@ pub enum ArmorCrc24Status {
     /// No CRC24 was present in the footer of the armored data
     NoCrc24,
 
-    /// A CRC24 was present, and it matches the correct checksum of the armored data
-    CheckedOk,
+    /// A CRC24 was present, and it matches the correct checksum of the armored data.
+    /// (
+    CheckedOk { crc: u32 },
 
     /// A CRC24 was present, it does not match the correct checksum of the armored data
-    CheckedInvalid,
+    CheckedInvalid {
+        footer_crc: u32,
+        calculated_crc: u32,
+    },
 
     /// A CRC24 was present, but not checked (it's unknown if it matches the armored data)
     Unchecked,
@@ -566,7 +570,7 @@ impl<R: BufRead> Dearmor<R> {
         self.current_part = Part::Done(b);
 
         // validate checksum if we calculated one and the armor footer had one
-        if self.crc24_status() == ArmorCrc24Status::CheckedInvalid {
+        if matches!(self.crc24_status(), ArmorCrc24Status::CheckedInvalid { .. }) {
             bail!("invalid crc24 checksum");
         }
 
@@ -579,10 +583,16 @@ impl<R: BufRead> Dearmor<R> {
             (None, _) => ArmorCrc24Status::NoCrc24,
             (_, None) => ArmorCrc24Status::Unchecked,
             (Some(expected), Some(actual)) => {
-                if expected == actual.finish() {
-                    ArmorCrc24Status::CheckedOk
+                let calculated_crc = actual.finish();
+                if expected == calculated_crc {
+                    ArmorCrc24Status::CheckedOk {
+                        crc: expected as u32,
+                    }
                 } else {
-                    ArmorCrc24Status::CheckedInvalid
+                    ArmorCrc24Status::CheckedInvalid {
+                        footer_crc: expected as u32,
+                        calculated_crc: calculated_crc as u32,
+                    }
                 }
             }
         }
@@ -1061,7 +1071,13 @@ RrvW21RoMfltDA==
         assert!(res.is_err());
 
         assert!(dec.checksum.is_some());
-        assert_eq!(dec.crc24_status(), ArmorCrc24Status::CheckedInvalid);
+        assert_eq!(
+            dec.crc24_status(),
+            ArmorCrc24Status::CheckedInvalid {
+                footer_crc: 0x69a69a,
+                calculated_crc: 0xb704ce,
+            }
+        );
     }
 
     #[test]
