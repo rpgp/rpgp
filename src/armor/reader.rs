@@ -584,15 +584,13 @@ impl<R: BufRead> Dearmor<R> {
             (Some(footer), None) => ArmorCrc24Status::Unchecked {
                 footer_crc: footer as u32,
             },
-            (Some(expected), Some(actual)) => {
+            (Some(footer), Some(actual)) => {
                 let calculated_crc = actual.finish();
-                if expected == calculated_crc {
-                    ArmorCrc24Status::CheckedOk {
-                        crc: expected as u32,
-                    }
+                if footer == calculated_crc {
+                    ArmorCrc24Status::CheckedOk { crc: footer as u32 }
                 } else {
                     ArmorCrc24Status::CheckedInvalid {
-                        footer_crc: expected as u32,
+                        footer_crc: footer as u32,
                         calculated_crc: calculated_crc as u32,
                     }
                 }
