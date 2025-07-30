@@ -123,6 +123,9 @@ struct SigningConfig<'a> {
     key_pw: Password,
     /// The hash algorithm to be used when signing.
     hash_algorithm: HashAlgorithm,
+
+    /// Hashed, Unhashed area subpackets
+    subpackets: Option<(Vec<Subpacket>, Vec<Subpacket>)>,
 }
 
 impl<'a> SigningConfig<'a> {
@@ -132,6 +135,22 @@ impl<'a> SigningConfig<'a> {
             key,
             key_pw,
             hash_algorithm: hash,
+            subpackets: None,
+        }
+    }
+
+    fn with_subpackets(
+        key: &'a dyn SecretKeyTrait,
+        key_pw: Password,
+        hash: HashAlgorithm,
+        hashed: Vec<Subpacket>,
+        unhashed: Vec<Subpacket>,
+    ) -> Self {
+        Self {
+            key,
+            key_pw,
+            hash_algorithm: hash,
+            subpackets: Some((hashed, unhashed)),
         }
     }
 }
@@ -189,13 +208,6 @@ where
         let algorithm = config.key.algorithm();
         let hash_alg = config.hash_algorithm;
 
-        let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::IssuerFingerprint(config.key.fingerprint()))?,
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))?,
-        ];
-
         // prepare signing
         let mut sig_config = match config.key.version() {
             KeyVersion::V4 => crate::packet::SignatureConfig::v4(typ, algorithm, hash_alg),
@@ -204,10 +216,24 @@ where
             }
             v => bail!("unsupported key version {:?}", v),
         };
-        sig_config.hashed_subpackets = hashed_subpackets;
-        if config.key.version() <= KeyVersion::V4 {
-            sig_config.unhashed_subpackets =
-                vec![Subpacket::regular(SubpacketData::Issuer(key_id))?];
+
+        match &config.subpackets {
+            None => {
+                sig_config.hashed_subpackets = vec![
+                    Subpacket::regular(SubpacketData::IssuerFingerprint(config.key.fingerprint()))?,
+                    Subpacket::regular(SubpacketData::SignatureCreationTime(
+                        chrono::Utc::now().trunc_subsecs(0),
+                    ))?,
+                ];
+                if config.key.version() <= KeyVersion::V4 {
+                    sig_config.unhashed_subpackets =
+                        vec![Subpacket::regular(SubpacketData::Issuer(key_id))?];
+                }
+            }
+            Some((hashed, unhashed)) => {
+                sig_config.hashed_subpackets = hashed.to_vec();
+                sig_config.unhashed_subpackets = unhashed.to_vec();
+            }
         }
 
         let mut ops = match config.key.version() {
@@ -526,6 +552,24 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     ) -> &mut Self {
         self.signing
             .push(SigningConfig::new(key, key_pw, hash_algorithm));
+        self
+    }
+
+    pub fn sign_with_subpackets(
+        &mut self,
+        key: &'a dyn SecretKeyTrait,
+        key_pw: Password,
+        hash_algorithm: HashAlgorithm,
+        hashed: Vec<Subpacket>,
+        unhashed: Vec<Subpacket>,
+    ) -> &mut Self {
+        self.signing.push(SigningConfig::with_subpackets(
+            key,
+            key_pw,
+            hash_algorithm,
+            hashed,
+            unhashed,
+        ));
         self
     }
 
