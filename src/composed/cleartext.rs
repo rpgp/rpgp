@@ -10,7 +10,7 @@ use chrono::SubsecRound;
 use log::debug;
 
 use crate::{
-    armor::{self, header_parser, read_from_buf, BlockType, Headers},
+    armor::{self, header_parser, read_from_buf, BlockType, DearmorOptions, Headers},
     composed::{ArmorOptions, Deserializable, StandaloneSignature},
     crypto::hash::HashAlgorithm,
     errors::{bail, ensure, ensure_eq, format_err, InvalidInputSnafu, Result},
@@ -18,7 +18,6 @@ use crate::{
     normalize_lines::{normalize_lines, NormalizedReader},
     packet::{Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
-    MAX_BUFFER_SIZE,
 };
 
 /// Implementation of a Cleartext Signed Message.
@@ -162,33 +161,33 @@ where {
 
     /// Parse from an arbitrary reader, containing the text of the message.
     pub fn from_armor<R: Read>(bytes: R) -> Result<(Self, Headers)> {
-        Self::from_armor_buf(BufReader::new(bytes), MAX_BUFFER_SIZE)
+        Self::from_armor_buf(BufReader::new(bytes), DearmorOptions::default())
     }
 
     /// Parse from string, containing the text of the message.
     pub fn from_string(input: &str) -> Result<(Self, Headers)> {
-        Self::from_armor_buf(input.as_bytes(), MAX_BUFFER_SIZE)
+        Self::from_armor_buf(input.as_bytes(), DearmorOptions::default())
     }
 
     /// Parse from a buffered reader, containing the text of the message.
-    pub fn from_armor_buf<R: BufRead>(mut b: R, limit: usize) -> Result<(Self, Headers)> {
+    pub fn from_armor_buf<R: BufRead>(mut b: R, opt: DearmorOptions) -> Result<(Self, Headers)> {
         debug!("parsing cleartext message");
         // Headers
         let (typ, headers, has_leading_data) =
-            read_from_buf(&mut b, "cleartext header", limit, header_parser)?;
+            read_from_buf(&mut b, "cleartext header", opt.get_limit(), header_parser)?;
         ensure_eq!(typ, BlockType::CleartextMessage, "unexpected block type");
         ensure!(
             !has_leading_data,
             "must not have leading data for a cleartext message"
         );
 
-        Self::from_armor_after_header(b, headers, limit)
+        Self::from_armor_after_header(b, headers, opt)
     }
 
     pub fn from_armor_after_header<R: BufRead>(
         mut b: R,
         headers: Headers,
-        _limit: usize,
+        opt: DearmorOptions,
     ) -> Result<(Self, Headers)> {
         let hashes = validate_headers(headers)?;
 
@@ -199,7 +198,7 @@ where {
         let b = std::io::Cursor::new(prefix).chain(b);
 
         // Signatures
-        let mut dearmor = armor::Dearmor::new(b);
+        let mut dearmor = armor::Dearmor::with_options(b, opt);
         dearmor.read_header()?;
         // Safe to unwrap, as read_header succeeded.
         let typ = dearmor

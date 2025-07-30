@@ -1,7 +1,7 @@
 use std::io::{BufRead, BufReader, Read};
 
 use crate::{
-    armor::{self, BlockType, Dearmor},
+    armor::{self, BlockType, Dearmor, DearmorOptions},
     composed::{
         cleartext::CleartextSignedMessage, Deserializable, Message, SignedPublicKey,
         SignedSecretKey, StandaloneSignature,
@@ -33,11 +33,18 @@ impl<'a> Any<'a> {
         Self::from_armor_buf(input.as_bytes())
     }
 
-    /// Parse armored ascii data.
     pub fn from_armor_buf<R: BufRead + std::fmt::Debug + 'a + Send>(
         input: R,
     ) -> Result<(Self, armor::Headers)> {
-        let dearmor = armor::Dearmor::new(input);
+        Self::from_armor_buf_with_options(input, DearmorOptions::default())
+    }
+
+    /// Parse armored ascii data, with explicit options for dearmoring.
+    pub fn from_armor_buf_with_options<R: BufRead + std::fmt::Debug + 'a + Send>(
+        input: R,
+        opt: DearmorOptions,
+    ) -> Result<(Self, armor::Headers)> {
+        let dearmor = armor::Dearmor::with_options(input, opt);
         let limit = dearmor.max_buffer_limit();
         let (typ, headers, has_leading_data, rest) = dearmor.read_only_header()?;
         match typ {
@@ -68,7 +75,7 @@ impl<'a> Any<'a> {
                     "must not have leading data for a cleartext message"
                 );
                 let (sig, headers) =
-                    CleartextSignedMessage::from_armor_after_header(rest, headers, limit)?;
+                    CleartextSignedMessage::from_armor_after_header(rest, headers, opt)?;
                 Ok((Self::Cleartext(sig), headers))
             }
             _ => unimplemented_err!("unsupported block type: {}", typ),

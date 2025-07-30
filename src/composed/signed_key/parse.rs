@@ -1,7 +1,7 @@
 use std::{io, io::BufReader, iter};
 
 use crate::{
-    armor::{self, BlockType},
+    armor::{self, BlockType, DearmorOptions},
     composed::signed_key::{
         PublicOrSecret, SignedPublicKey, SignedPublicKeyParser, SignedSecretKey,
         SignedSecretKeyParser,
@@ -16,7 +16,6 @@ impl PublicOrSecret {
     ///
     /// Returns an iterator of public or secret keys and a BTreeMap containing armor headers
     /// (None, if the data was unarmored)
-    #[allow(clippy::type_complexity)]
     pub fn from_reader_many<'a, R: io::Read + 'a>(
         input: R,
     ) -> Result<(
@@ -26,7 +25,6 @@ impl PublicOrSecret {
         Self::from_reader_many_buf(BufReader::new(input))
     }
 
-    #[allow(clippy::type_complexity)]
     pub fn from_reader_many_buf<'a, R: io::BufRead + 'a>(
         mut input: R,
     ) -> Result<(
@@ -42,7 +40,6 @@ impl PublicOrSecret {
     }
 
     /// Parses a list of secret and public keys from ascii armored text.
-    #[allow(clippy::type_complexity)]
     pub fn from_armor_many<'a, R: io::Read + 'a>(
         input: R,
     ) -> Result<(
@@ -53,14 +50,25 @@ impl PublicOrSecret {
     }
 
     /// Parses a list of secret and public keys from ascii armored text.
-    #[allow(clippy::type_complexity)]
     pub fn from_armor_many_buf<'a, R: io::BufRead + 'a>(
         input: R,
     ) -> Result<(
         Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
         armor::Headers,
     )> {
-        let mut dearmor = armor::Dearmor::new(input);
+        Self::from_armor_many_buf_with_options(input, DearmorOptions::default())
+    }
+
+    /// Parses a list of secret and public keys from ascii armored text, with explicit options
+    /// for dearmoring.
+    pub fn from_armor_many_buf_with_options<'a, R: io::BufRead + 'a>(
+        input: R,
+        opt: DearmorOptions,
+    ) -> Result<(
+        Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
+        armor::Headers,
+    )> {
+        let mut dearmor = armor::Dearmor::with_options(input, opt);
         dearmor.read_header()?;
         // Safe to unwrap, as read_header succeeded.
         let typ = dearmor

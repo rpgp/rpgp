@@ -6,7 +6,7 @@ use std::{
 use log::{debug, warn};
 
 use crate::{
-    armor::{self, BlockType},
+    armor::{self, BlockType, DearmorOptions},
     errors::{bail, format_err, unimplemented_err, Error, Result},
     packet::{Packet, PacketParser},
 };
@@ -30,7 +30,6 @@ pub trait Deserializable: Sized {
     }
 
     /// Parse an armor encoded list of compositions.
-    #[allow(clippy::type_complexity)]
     fn from_string_many<'a>(
         input: &'a str,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
@@ -49,7 +48,15 @@ pub trait Deserializable: Sized {
 
     /// Armored ascii data.
     fn from_armor_single_buf<R: BufRead>(input: R) -> Result<(Self, armor::Headers)> {
-        let (mut el, headers) = Self::from_armor_many_buf(input)?;
+        Self::from_armor_single_buf_with_options(input, DearmorOptions::default())
+    }
+
+    /// Armored ascii data, with explicit options for dearmoring.
+    fn from_armor_single_buf_with_options<R: BufRead>(
+        input: R,
+        opt: DearmorOptions,
+    ) -> Result<(Self, armor::Headers)> {
+        let (mut el, headers) = Self::from_armor_many_buf_with_options(input, opt)?;
         Ok((
             el.next()
                 .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())??,
@@ -58,18 +65,25 @@ pub trait Deserializable: Sized {
     }
 
     /// Armored ascii data.
-    #[allow(clippy::type_complexity)]
     fn from_armor_many<'a, R: Read + 'a>(
         input: R,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
         Self::from_armor_many_buf(BufReader::new(input))
     }
 
-    #[allow(clippy::type_complexity)]
+    /// Armored ascii data.
     fn from_armor_many_buf<'a, R: BufRead + 'a>(
         input: R,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
-        let mut dearmor = armor::Dearmor::new(input);
+        Self::from_armor_many_buf_with_options(input, DearmorOptions::default())
+    }
+
+    /// Armored ascii data, with explicit options for dearmoring.
+    fn from_armor_many_buf_with_options<'a, R: BufRead + 'a>(
+        input: R,
+        opt: DearmorOptions,
+    ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
+        let mut dearmor = armor::Dearmor::with_options(input, opt);
         dearmor.read_header()?;
         // Safe to unwrap, as read_header succeeded.
         let typ = dearmor
@@ -158,12 +172,10 @@ pub trait Deserializable: Sized {
     ///
     /// Returns a composition and a BTreeMap containing armor headers
     /// (None, if the data was unarmored)
-    #[allow(clippy::type_complexity)]
     fn from_reader_single<'a, R: Read + 'a>(input: R) -> Result<(Self, Option<armor::Headers>)> {
         Self::from_reader_single_buf(BufReader::new(input))
     }
 
-    #[allow(clippy::type_complexity)]
     fn from_reader_single_buf<'a, R: BufRead + 'a>(
         mut input: R,
     ) -> Result<(Self, Option<armor::Headers>)> {
@@ -183,7 +195,6 @@ pub trait Deserializable: Sized {
     ///
     /// Returns an iterator of compositions and a BTreeMap containing armor headers
     /// (None, if the data was unarmored)
-    #[allow(clippy::type_complexity)]
     fn from_reader_many<'a, R: Read + 'a>(
         input: R,
     ) -> Result<(
@@ -197,7 +208,6 @@ pub trait Deserializable: Sized {
     ///
     /// Returns an iterator of compositions and a BTreeMap containing armor headers
     /// (None, if the data was unarmored)
-    #[allow(clippy::type_complexity)]
     fn from_reader_many_buf<'a, R: BufRead + 'a>(
         mut input: R,
     ) -> Result<(

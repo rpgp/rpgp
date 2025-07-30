@@ -407,6 +407,7 @@ enum Part<R: BufRead> {
 ///
 /// - the size `limit` of data that can be dearmored is 1 GiB,
 /// - `crc24_check` is disabled (as mandated by RFC 9580).
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct DearmorOptions {
     limit: usize,
     crc24_check: bool,
@@ -419,6 +420,12 @@ impl DearmorOptions {
     }
 
     /// The maximum size of armored data that this Dearmor can handle
+    pub fn get_limit(&self) -> usize {
+        self.limit
+    }
+
+    /// Specify the maximum size of armored data that this Dearmor can handle.
+    /// The corresponding amount of RAM will be needed (depending on the size of the input data).
     pub fn set_limit(mut self, limit: usize) -> Self {
         self.limit = limit;
         self
