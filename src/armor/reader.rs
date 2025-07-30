@@ -384,7 +384,7 @@ pub struct Dearmor<R: BufRead> {
     /// Current state
     current_part: Part<R>,
     /// (Optional) crc24 hasher
-    #[debug("Crc24Hasher")] // FIXME: show if Some or None?
+    #[debug("Crc24Hasher")]
     crc: Option<crc24::Crc24Hasher>,
     /// Maximum buffer limit
     max_buffer_limit: usize,
