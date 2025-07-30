@@ -33,6 +33,7 @@ impl<'a> Any<'a> {
         Self::from_armor_buf(input.as_bytes())
     }
 
+    /// Parse armored ascii data.
     pub fn from_armor_buf<R: BufRead + std::fmt::Debug + 'a + Send>(
         input: R,
     ) -> Result<(Self, armor::Headers)> {
