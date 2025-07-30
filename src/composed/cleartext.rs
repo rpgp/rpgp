@@ -67,10 +67,10 @@ where {
         R: rand::Rng + rand::CryptoRng,
     {
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
             ))?,
+            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
         ];
 
         let mut config = SignatureConfig::from_key(rng, key, SignatureType::Text)?;

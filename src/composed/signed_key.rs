@@ -82,7 +82,7 @@
 //!         hash_alg: HashAlgorithm::Sha256,
 //!         hashed_subpackets: vec![
 //!             packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)).unwrap(),
-//!             packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())).unwrap(),
+//!             packet::Subpacket::regular(packet::SubpacketData::IssuerFingerprint(signing_key.fingerprint())).unwrap(),
 //!         ],
 //!         unhashed_subpackets: vec![],
 //!         version_specific: SignatureVersionSpecific::V4,
