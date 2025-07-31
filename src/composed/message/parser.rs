@@ -10,7 +10,7 @@ use super::{
     DebugBufRead, MessageReader,
 };
 use crate::{
-    armor::BlockType,
+    armor::{BlockType, DearmorOptions},
     composed::{message::Message, shared::is_binary, Edata, Esk},
     errors::{bail, format_err, unimplemented_err, Result},
     packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
@@ -271,7 +271,15 @@ impl<'a> Message<'a> {
     pub fn from_armor<R: BufRead + std::fmt::Debug + 'a + Send>(
         input: R,
     ) -> Result<(Self, crate::armor::Headers)> {
-        let mut dearmor = crate::armor::Dearmor::new(input);
+        Self::from_armor_with_options(input, DearmorOptions::default())
+    }
+
+    /// Armored ascii data, with explicit options for dearmoring.
+    pub fn from_armor_with_options<R: BufRead + std::fmt::Debug + 'a + Send>(
+        input: R,
+        opt: DearmorOptions,
+    ) -> Result<(Self, crate::armor::Headers)> {
+        let mut dearmor = crate::armor::Dearmor::with_options(input, opt);
         dearmor.read_header()?;
         // Safe to unwrap, as read_header succeeded.
         let typ = dearmor

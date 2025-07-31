@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt, hash::Hasher, io, io::prelude::*, str};
+use std::{cmp::PartialEq, collections::BTreeMap, fmt, hash::Hasher, io, io::prelude::*, str};
 
 use base64::engine::{general_purpose::STANDARD, Engine as _};
 use buffer_redux::BufReader;
@@ -356,6 +356,26 @@ fn armor_footer_line(i: &[u8]) -> IResult<&[u8], BlockType> {
     .parse(i)
 }
 
+/// Status of the CRC24 in an armor footer
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum ArmorCrc24Status {
+    /// No CRC24 was present in the footer of the armored data
+    NoCrc24,
+
+    /// A CRC24 was present, and it matches the correct checksum of the armored data.
+    /// (
+    CheckedOk { crc: u32 },
+
+    /// A CRC24 was present, it does not match the correct checksum of the armored data
+    CheckedInvalid {
+        footer_crc: u32,
+        calculated_crc: u32,
+    },
+
+    /// A CRC24 was present, but not checked (it's unknown if it matches the armored data)
+    Unchecked { footer_crc: u32 },
+}
+
 /// Streaming based ascii armor parsing.
 #[derive(derive_more::Debug)]
 pub struct Dearmor<R: BufRead> {
@@ -363,12 +383,13 @@ pub struct Dearmor<R: BufRead> {
     pub typ: Option<BlockType>,
     /// The headers found in the armored file.
     pub headers: Headers,
-    /// Optional crc checksum
+    /// Optional crc checksum from the armor footer
     pub checksum: Option<u64>,
     /// Current state
     current_part: Part<R>,
+    /// (Optional) crc24 hasher
     #[debug("Crc24Hasher")]
-    crc: crc24::Crc24Hasher,
+    crc: Option<crc24::Crc24Hasher>,
     /// Maximum buffer limit
     max_buffer_limit: usize,
 }
@@ -384,21 +405,74 @@ enum Part<R: BufRead> {
     Temp,
 }
 
+/// Configuration for creating a custom Dearmor instance.
+///
+/// By default,
+///
+/// - the size `limit` of data that can be dearmored is 1 GiB,
+/// - `crc24_check` is disabled (as mandated by RFC 9580).
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub struct DearmorOptions {
+    pub(crate) limit: usize,
+    pub(crate) crc24_check: bool,
+}
+
+impl DearmorOptions {
+    /// A new DearmorOptions with default settings
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Specify the maximum size of armored data that this Dearmor can handle.
+    /// The corresponding amount of RAM will be needed (depending on the size of the input data).
+    pub fn set_limit(mut self, limit: usize) -> Self {
+        self.limit = limit;
+        self
+    }
+
+    /// Enable CRC24 checking.
+    ///
+    /// Calculating and checking the CRC24 is heavily discouraged by RFC 9580:
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-optional-checksum>
+    ///
+    /// This flag allows opting into the check for special-purpose use cases, on legacy OpenPGP
+    /// data.
+    pub fn enable_crc24_check(mut self) -> Self {
+        self.crc24_check = true;
+        self
+    }
+}
+
+impl Default for DearmorOptions {
+    fn default() -> Self {
+        Self {
+            limit: 1024 * 1024 * 1024,
+            crc24_check: false,
+        }
+    }
+}
+
 impl<R: BufRead> Dearmor<R> {
     /// Creates a new `Dearmor`, with the default limit of 1GiB.
     pub fn new(input: R) -> Self {
-        Self::with_limit(input, 1024 * 1024 * 1024)
+        Self::with_options(input, DearmorOptions::default())
     }
 
-    /// Creates a new `Dearmor` with the provided maximum buffer size.
-    pub fn with_limit(input: R, limit: usize) -> Self {
+    /// Creates a new `Dearmor` with explicitly chosen options.
+    pub fn with_options(input: R, opt: DearmorOptions) -> Self {
+        let crc = if opt.crc24_check {
+            Some(Default::default())
+        } else {
+            None
+        };
+
         Dearmor {
             typ: None,
             headers: BTreeMap::new(),
             checksum: None,
             current_part: Part::Header(input),
-            crc: Default::default(),
-            max_buffer_limit: limit,
+            crc,
+            max_buffer_limit: opt.limit,
         }
     }
 
@@ -469,9 +543,11 @@ impl<R: BufRead> Dearmor<R> {
         base_decoder: &mut Base64Decoder<Base64Reader<R>>,
     ) -> io::Result<usize> {
         let size = base_decoder.read(into)?;
-        if size > 0 {
-            // update the hash
-            self.crc.write(&into[0..size]);
+        if let Some(mut crc) = self.crc {
+            if size > 0 {
+                // update the hash
+                crc.write(&into[0..size]);
+            }
         }
 
         Ok(size)
@@ -493,15 +569,33 @@ impl<R: BufRead> Dearmor<R> {
         self.checksum = checksum;
         self.current_part = Part::Done(b);
 
-        // check checksum if there is one
-        if let Some(expected) = self.checksum {
-            let actual = self.crc.finish();
-            if expected != actual {
-                bail!("invalid crc24 checksum");
-            }
+        // validate checksum if we calculated one and the armor footer had one
+        if matches!(self.crc24_status(), ArmorCrc24Status::CheckedInvalid { .. }) {
+            bail!("invalid crc24 checksum");
         }
 
         Ok(())
+    }
+
+    /// Returns the status of the armor's CRC24 checksum
+    pub fn crc24_status(&self) -> ArmorCrc24Status {
+        match (self.checksum, self.crc) {
+            (None, _) => ArmorCrc24Status::NoCrc24,
+            (Some(footer), None) => ArmorCrc24Status::Unchecked {
+                footer_crc: footer as u32,
+            },
+            (Some(footer), Some(actual)) => {
+                let calculated_crc = actual.finish();
+                if footer == calculated_crc {
+                    ArmorCrc24Status::CheckedOk { crc: footer as u32 }
+                } else {
+                    ArmorCrc24Status::CheckedInvalid {
+                        footer_crc: footer as u32,
+                        calculated_crc: calculated_crc as u32,
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -901,6 +995,94 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         let read = dec.read(&mut res).unwrap();
         assert_eq!(read, 0);
         assert_eq!(res.as_slice()[0], b'd'); // unchanged
+    }
+
+    #[test]
+    fn test_dearmor_no_crc24() {
+        const MSG_NO_CRC24: &str = "-----BEGIN PGP MESSAGE-----
+
+xA0DAAgWRbTg0QA4pREByxJiAAAAAABoZWxsbyB3b3JsZArCdQQAFggAHRYhBI+6
+y7JaHukErbi530W04NEAOKURBQJogLxNAAoJEEW04NEAOKURQFoBAP858lgyrKmy
+6QHKz3Zs52+3eGSDMgvWEgsealcZnIl9AQDEgKglQQlUoss5opqRRgWPbMBkeQ4E
+RrvW21RoMfltDA==
+-----END PGP MESSAGE-----";
+
+        // A regular Dearmor should accept the missing CRC24 without complaint
+        let mut dec = Dearmor::new(BufReader::new(MSG_NO_CRC24.as_bytes()));
+
+        let mut res = Vec::new();
+        let _read = dec.read_to_end(&mut res).unwrap();
+
+        assert_eq!(dec.typ, Some(BlockType::Message));
+        assert_eq!(res.len(), 154);
+
+        assert!(dec.checksum.is_none());
+        assert_eq!(dec.crc24_status(), ArmorCrc24Status::NoCrc24);
+
+        // A Dearmor with crc24 should accept the missing CRC24 without complaint
+        let mut dec = Dearmor::with_options(
+            BufReader::new(MSG_NO_CRC24.as_bytes()),
+            DearmorOptions::default().enable_crc24_check(),
+        );
+
+        let mut res = Vec::new();
+        let _read = dec.read_to_end(&mut res).unwrap();
+
+        assert_eq!(dec.typ, Some(BlockType::Message));
+        assert_eq!(res.len(), 154);
+
+        assert!(dec.checksum.is_none());
+        assert_eq!(dec.crc24_status(), ArmorCrc24Status::NoCrc24);
+    }
+
+    #[test]
+    fn test_dearmor_bad_crc24() {
+        const MSG_BAD_CRC24: &str = "-----BEGIN PGP MESSAGE-----
+
+xA0DAAgWRbTg0QA4pREByxJiAAAAAABoZWxsbyB3b3JsZArCdQQAFggAHRYhBI+6
+y7JaHukErbi530W04NEAOKURBQJogLxNAAoJEEW04NEAOKURQFoBAP858lgyrKmy
+6QHKz3Zs52+3eGSDMgvWEgsealcZnIl9AQDEgKglQQlUoss5opqRRgWPbMBkeQ4E
+RrvW21RoMfltDA==
+=aaaa
+-----END PGP MESSAGE-----";
+
+        // A regular Dearmor should accept the bad CRC24 without complaint
+        let mut dec = Dearmor::new(BufReader::new(MSG_BAD_CRC24.as_bytes()));
+
+        let mut res = Vec::new();
+        let _read = dec.read_to_end(&mut res).unwrap();
+
+        assert_eq!(dec.typ, Some(BlockType::Message));
+        assert_eq!(res.len(), 154);
+
+        assert!(dec.checksum.is_some());
+        assert_eq!(
+            dec.crc24_status(),
+            ArmorCrc24Status::Unchecked {
+                footer_crc: 0x69a69a
+            }
+        );
+
+        // A "with_crc24" Dearmor should error for the bad CRC24
+        let mut dec = Dearmor::with_options(
+            BufReader::new(MSG_BAD_CRC24.as_bytes()),
+            DearmorOptions::default().enable_crc24_check(),
+        );
+
+        let mut res = Vec::new();
+        let res = dec.read_to_end(&mut res);
+
+        // We expect to get an Error::Message with "invalid crc24 checksum"
+        assert!(res.is_err());
+
+        assert!(dec.checksum.is_some());
+        assert_eq!(
+            dec.crc24_status(),
+            ArmorCrc24Status::CheckedInvalid {
+                footer_crc: 0x69a69a,
+                calculated_crc: 0xb704ce,
+            }
+        );
     }
 
     #[test]
