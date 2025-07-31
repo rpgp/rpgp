@@ -114,10 +114,21 @@ pub trait Encryption: PartialEq {
     fn is_plaintext(&self) -> bool;
 }
 
-/// Subpacket configuration, per signing key
+/// Subpacket configuration for a Signature packet.
+///
+/// Configuration may be implicit, relying on rPGP to set customary subpackets, or
+/// explicit, consisting of lists of hashed and unhashed subpackets.
 #[derive(Debug)]
-enum SubpacketConfig {
+pub enum SubpacketConfig {
+    /// Signature subpackets are automatically while signing
     Implicit,
+
+    /// Caller-provided exact subpacket configuration.
+    /// The lists of subpackets will be used in the signature verbatim, and without any additions.
+    ///
+    /// CAUTION: For interoperability with other OpenPGP implementations, it's important to set
+    /// signature subpackets appropriately!
+    /// Also see <https://datatracker.ietf.org/doc/draft-gallagher-openpgp-signatures/>
     Explicit {
         hashed: Vec<Subpacket>,
         unhashed: Vec<Subpacket>,
@@ -141,26 +152,20 @@ struct SigningConfig<'a> {
 impl<'a> SigningConfig<'a> {
     /// Create a new signing configuration.
     fn new(key: &'a dyn SecretKeyTrait, key_pw: Password, hash: HashAlgorithm) -> Self {
-        Self {
-            key,
-            key_pw,
-            hash_algorithm: hash,
-            subpackets: SubpacketConfig::Implicit,
-        }
+        Self::with_subpackets(key, key_pw, hash, SubpacketConfig::Implicit)
     }
 
     fn with_subpackets(
         key: &'a dyn SecretKeyTrait,
         key_pw: Password,
         hash: HashAlgorithm,
-        hashed: Vec<Subpacket>,
-        unhashed: Vec<Subpacket>,
+        subpackets: SubpacketConfig,
     ) -> Self {
         Self {
             key,
             key_pw,
             hash_algorithm: hash,
-            subpackets: SubpacketConfig::Explicit { hashed, unhashed },
+            subpackets,
         }
     }
 }
@@ -570,15 +575,13 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         key: &'a dyn SecretKeyTrait,
         key_pw: Password,
         hash_algorithm: HashAlgorithm,
-        hashed: Vec<Subpacket>,
-        unhashed: Vec<Subpacket>,
+        subpackets: SubpacketConfig,
     ) -> &mut Self {
         self.signing.push(SigningConfig::with_subpackets(
             key,
             key_pw,
             hash_algorithm,
-            hashed,
-            unhashed,
+            subpackets,
         ));
         self
     }
@@ -2269,8 +2272,7 @@ mod tests {
             key,
             Password::empty(),
             HashAlgorithm::Sha256,
-            hashed,
-            unhashed,
+            SubpacketConfig::Explicit { hashed, unhashed },
         );
 
         let signed = builder.to_vec(&mut rng).unwrap();
