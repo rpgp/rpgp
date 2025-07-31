@@ -33,8 +33,8 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketHeaderVersion,
-        PacketLength, Password, SecretKeyTrait, StringToKey, Tag,
+        CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PacketHeaderVersion, PacketLength,
+        Password, SecretKeyTrait, StringToKey, Tag,
     },
     util::{fill_buffer, TeeWriter},
 };
@@ -144,7 +144,10 @@ pub enum SubpacketConfig {
 impl SubpacketConfig {
     /// Return the appropriate (hashed, unhashed) Subpacket lists for this SubpacketConfig
     /// and the signing key (only actually needed for the `Default` case)
-    fn to_subpackets(&self, signer: &dyn KeyDetails) -> Result<(Vec<Subpacket>, Vec<Subpacket>)> {
+    fn to_subpackets(
+        &self,
+        signer: &dyn SecretKeyTrait,
+    ) -> Result<(Vec<Subpacket>, Vec<Subpacket>)> {
         match self {
             SubpacketConfig::Default => {
                 let hashed = vec![
