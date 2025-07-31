@@ -2300,8 +2300,7 @@ mod tests {
         );
         assert!(hashed
             .iter()
-            .find(|sp| sp.typ() == SubpacketType::SignatureCreationTime)
-            .is_some());
+            .any(|sp| sp.typ() == SubpacketType::SignatureCreationTime));
         assert_eq!(
             hashed
                 .iter()
