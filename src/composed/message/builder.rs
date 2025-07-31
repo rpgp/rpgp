@@ -159,9 +159,7 @@ impl SubpacketConfig {
 
                 let mut unhashed = vec![];
                 if signer.version() <= KeyVersion::V4 {
-                    let key_id = signer.key_id();
-
-                    unhashed.push(Subpacket::regular(SubpacketData::Issuer(key_id))?);
+                    unhashed.push(Subpacket::regular(SubpacketData::Issuer(signer.key_id()))?);
                 }
 
                 Ok((hashed, unhashed))
