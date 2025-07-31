@@ -580,6 +580,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         self
     }
 
+    /// Produce a data signature with the signing key `key`.
     pub fn sign(
         &mut self,
         key: &'a dyn SecretKeyTrait,
@@ -591,6 +592,10 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         self
     }
 
+    /// Produce a data signature with the signing key `key` and an explicitly configured
+    /// subpacket configuration.
+    ///
+    /// This gives callers full control of the hashed and unhashed subpacket areas.
     pub fn sign_with_subpackets(
         &mut self,
         key: &'a dyn SecretKeyTrait,
