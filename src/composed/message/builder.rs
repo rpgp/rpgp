@@ -114,6 +114,63 @@ pub trait Encryption: PartialEq {
     fn is_plaintext(&self) -> bool;
 }
 
+/// Subpacket configuration for a Signature packet.
+///
+/// The subpacket configuration may be implicit (relying on rPGP to set default subpackets), or
+/// user-provided and explicit (consisting of lists of hashed and unhashed subpackets).
+#[derive(Debug, Default)]
+pub enum SubpacketConfig {
+    /// Signature subpackets are automatically produced while signing.
+    ///
+    /// This produces two hashed subpackets: `IssuerFingerprint` and `SignatureCreationTime`.
+    ///
+    /// In addition, for v4 keys, an `Issuer` subpacket is added to the unhashed area
+    /// (showing the signer's Key ID).
+    #[default]
+    Default,
+
+    /// Caller-provided exact subpacket configuration.
+    /// The lists of subpackets will be used in the signature verbatim, and without any additions.
+    ///
+    /// CAUTION: For interoperability with other OpenPGP implementations, it's important to set
+    /// signature subpackets appropriately!
+    /// Also see <https://datatracker.ietf.org/doc/draft-gallagher-openpgp-signatures/>
+    UserDefined {
+        hashed: Vec<Subpacket>,
+        unhashed: Vec<Subpacket>,
+    },
+}
+
+impl SubpacketConfig {
+    /// Return the appropriate (hashed, unhashed) Subpacket lists for this SubpacketConfig
+    /// and the signing key (which is only actually needed for the `Default` case)
+    fn to_subpackets(
+        &self,
+        signer: &dyn SecretKeyTrait,
+    ) -> Result<(Vec<Subpacket>, Vec<Subpacket>)> {
+        match self {
+            SubpacketConfig::Default => {
+                let hashed = vec![
+                    Subpacket::regular(SubpacketData::IssuerFingerprint(signer.fingerprint()))?,
+                    Subpacket::regular(SubpacketData::SignatureCreationTime(
+                        chrono::Utc::now().trunc_subsecs(0),
+                    ))?,
+                ];
+
+                let mut unhashed = vec![];
+                if signer.version() <= KeyVersion::V4 {
+                    unhashed.push(Subpacket::regular(SubpacketData::Issuer(signer.key_id()))?);
+                }
+
+                Ok((hashed, unhashed))
+            }
+            SubpacketConfig::UserDefined { hashed, unhashed } => {
+                Ok((hashed.clone(), unhashed.clone()))
+            }
+        }
+    }
+}
+
 /// Configures a signing key and how to use it.
 #[derive(Debug)]
 struct SigningConfig<'a> {
@@ -123,15 +180,28 @@ struct SigningConfig<'a> {
     key_pw: Password,
     /// The hash algorithm to be used when signing.
     hash_algorithm: HashAlgorithm,
+
+    /// Subpacket configuration, specifies what will go into the hashed and unhashed areas
+    subpackets: SubpacketConfig,
 }
 
 impl<'a> SigningConfig<'a> {
     /// Create a new signing configuration.
     fn new(key: &'a dyn SecretKeyTrait, key_pw: Password, hash: HashAlgorithm) -> Self {
+        Self::with_subpackets(key, key_pw, hash, SubpacketConfig::Default)
+    }
+
+    fn with_subpackets(
+        key: &'a dyn SecretKeyTrait,
+        key_pw: Password,
+        hash: HashAlgorithm,
+        subpackets: SubpacketConfig,
+    ) -> Self {
         Self {
             key,
             key_pw,
             hash_algorithm: hash,
+            subpackets,
         }
     }
 }
@@ -185,16 +255,8 @@ where
         let is_last = i == keys_len - 1;
 
         // Signature setup
-        let key_id = config.key.key_id();
         let algorithm = config.key.algorithm();
         let hash_alg = config.hash_algorithm;
-
-        let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::IssuerFingerprint(config.key.fingerprint()))?,
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))?,
-        ];
 
         // prepare signing
         let mut sig_config = match config.key.version() {
@@ -204,14 +266,12 @@ where
             }
             v => bail!("unsupported key version {:?}", v),
         };
-        sig_config.hashed_subpackets = hashed_subpackets;
-        if config.key.version() <= KeyVersion::V4 {
-            sig_config.unhashed_subpackets =
-                vec![Subpacket::regular(SubpacketData::Issuer(key_id))?];
-        }
+
+        (sig_config.hashed_subpackets, sig_config.unhashed_subpackets) =
+            config.subpackets.to_subpackets(config.key)?;
 
         let mut ops = match config.key.version() {
-            KeyVersion::V4 => OnePassSignature::v3(typ, hash_alg, algorithm, key_id),
+            KeyVersion::V4 => OnePassSignature::v3(typ, hash_alg, algorithm, config.key.key_id()),
             KeyVersion::V6 => {
                 let SignatureVersionSpecific::V6 { ref salt } = sig_config.version_specific else {
                     // This should never happen
@@ -518,6 +578,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         self
     }
 
+    /// Produce a data signature with the signing key `key`.
     pub fn sign(
         &mut self,
         key: &'a dyn SecretKeyTrait,
@@ -526,6 +587,25 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     ) -> &mut Self {
         self.signing
             .push(SigningConfig::new(key, key_pw, hash_algorithm));
+        self
+    }
+
+    /// Produce a data signature with the signing key `key` and an explicit subpacket configuration.
+    ///
+    /// This gives callers full control of the hashed and unhashed subpacket areas.
+    pub fn sign_with_subpackets(
+        &mut self,
+        key: &'a dyn SecretKeyTrait,
+        key_pw: Password,
+        hash_algorithm: HashAlgorithm,
+        subpackets: SubpacketConfig,
+    ) -> &mut Self {
+        self.signing.push(SigningConfig::with_subpackets(
+            key,
+            key_pw,
+            hash_algorithm,
+            subpackets,
+        ));
         self
     }
 
@@ -1254,6 +1334,8 @@ mod tests {
             Deserializable, InnerRingResult, Message, SignedSecretKey, TheRing, VerificationResult,
         },
         crypto::sym::SymmetricKeyAlgorithm,
+        packet::SubpacketType,
+        types::KeyDetails,
         util::test::{check_strings, random_string, ChaosReader},
     };
 
@@ -2181,6 +2263,89 @@ mod tests {
         };
 
         assert_eq!(*fingerprint, None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn sign_with_explicit_subpackets() -> TestResult {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(std::fs::File::open(
+            "./tests/autocrypt/alice@autocrypt.example.sec.asc",
+        )?)?;
+
+        let key = &skey.primary_key;
+
+        let hashed = vec![
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                key.public_key().fingerprint(),
+            ))?,
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                chrono::Utc::now().trunc_subsecs(0),
+            ))?,
+            // Extra subpacket to assert it also goes into the signature
+            Subpacket::regular(SubpacketData::PreferredKeyServer("hello world".to_string()))?,
+        ];
+
+        // Put a weird subpacket into the unhashed area, just for testing
+        let unhashed = vec![Subpacket::regular(SubpacketData::Revocable(true))?];
+
+        let mut builder = Builder::from_bytes("plaintext.txt", b"hello world".as_slice());
+        builder.sign_with_subpackets(
+            key,
+            Password::empty(),
+            HashAlgorithm::Sha256,
+            SubpacketConfig::UserDefined { hashed, unhashed },
+        );
+
+        let signed = builder.to_vec(&mut rng).unwrap();
+
+        // re-parse, get the signature and check the subpacket areas
+        let mut message = Message::from_bytes(&signed[..]).unwrap();
+        let mut data = vec![];
+        message.read_to_end(&mut data).expect("read msg");
+
+        let Message::SignedOnePass { reader, .. } = message else {
+            panic!("should be a signed message")
+        };
+
+        let sig = reader.signature().unwrap();
+
+        let hashed = &sig.config().unwrap().hashed_subpackets;
+        let unhashed = &sig.config().unwrap().unhashed_subpackets;
+
+        assert_eq!(hashed.len(), 3);
+        assert_eq!(
+            hashed
+                .iter()
+                .find(|sp| sp.typ() == SubpacketType::IssuerFingerprint)
+                .map(|sp| sp.data.clone())
+                .unwrap(),
+            SubpacketData::IssuerFingerprint(key.public_key().fingerprint())
+        );
+        assert!(hashed
+            .iter()
+            .any(|sp| sp.typ() == SubpacketType::SignatureCreationTime));
+        assert_eq!(
+            hashed
+                .iter()
+                .find(|sp| sp.typ() == SubpacketType::PreferredKeyServer)
+                .map(|sp| sp.data.clone())
+                .unwrap(),
+            SubpacketData::PreferredKeyServer("hello world".to_string())
+        );
+
+        assert_eq!(unhashed.len(), 1);
+        assert_eq!(
+            unhashed
+                .iter()
+                .find(|sp| sp.typ() == SubpacketType::Revocable)
+                .map(|sp| sp.data.clone())
+                .unwrap(),
+            SubpacketData::Revocable(true)
+        );
 
         Ok(())
     }
