@@ -1308,6 +1308,8 @@ mod tests {
             Deserializable, InnerRingResult, Message, SignedSecretKey, TheRing, VerificationResult,
         },
         crypto::sym::SymmetricKeyAlgorithm,
+        packet::SubpacketType,
+        types::KeyDetails,
         util::test::{check_strings, random_string, ChaosReader},
     };
 
@@ -2235,6 +2237,89 @@ mod tests {
         };
 
         assert_eq!(*fingerprint, None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn sign_with_explicit_subpackets() -> TestResult {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(std::fs::File::open(
+            "./tests/autocrypt/alice@autocrypt.example.sec.asc",
+        )?)?;
+
+        let key = &skey.primary_key;
+
+        let hashed = vec![
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                key.public_key().fingerprint(),
+            ))?,
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                chrono::Utc::now().trunc_subsecs(0),
+            ))?,
+            // Extra subpacket to assert it also goes into the signature
+            Subpacket::regular(SubpacketData::PreferredKeyServer("hello world".to_string()))?,
+        ];
+        let unhashed = vec![Subpacket::regular(SubpacketData::Revocable(true))?];
+
+        let mut builder = Builder::from_bytes("plaintext.txt", b"hello world".as_slice());
+        builder.sign_with_subpackets(
+            key,
+            Password::empty(),
+            HashAlgorithm::Sha256,
+            hashed,
+            unhashed,
+        );
+
+        let signed = builder.to_vec(&mut rng).unwrap();
+
+        // re-parse, get the signature and check the subpacket areas
+        let mut message = Message::from_bytes(&signed[..]).unwrap();
+        let mut data = vec![];
+        message.read_to_end(&mut data).expect("read msg");
+
+        let Message::SignedOnePass { reader, .. } = message else {
+            panic!("should be a signed message")
+        };
+
+        let sig = reader.signature().unwrap();
+
+        let hashed = &sig.config().unwrap().hashed_subpackets;
+        let unhashed = &sig.config().unwrap().unhashed_subpackets;
+
+        assert_eq!(hashed.len(), 3);
+        assert_eq!(
+            hashed
+                .iter()
+                .find(|sp| sp.typ() == SubpacketType::IssuerFingerprint)
+                .map(|sp| sp.data.clone())
+                .unwrap(),
+            SubpacketData::IssuerFingerprint(key.public_key().fingerprint())
+        );
+        assert!(hashed
+            .iter()
+            .find(|sp| sp.typ() == SubpacketType::SignatureCreationTime)
+            .is_some());
+        assert_eq!(
+            hashed
+                .iter()
+                .find(|sp| sp.typ() == SubpacketType::PreferredKeyServer)
+                .map(|sp| sp.data.clone())
+                .unwrap(),
+            SubpacketData::PreferredKeyServer("hello world".to_string())
+        );
+
+        assert_eq!(unhashed.len(), 1);
+        assert_eq!(
+            unhashed
+                .iter()
+                .find(|sp| sp.typ() == SubpacketType::Revocable)
+                .map(|sp| sp.data.clone())
+                .unwrap(),
+            SubpacketData::Revocable(true)
+        );
 
         Ok(())
     }
