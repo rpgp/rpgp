@@ -143,7 +143,7 @@ pub enum SubpacketConfig {
 
 impl SubpacketConfig {
     /// Return the appropriate (hashed, unhashed) Subpacket lists for this SubpacketConfig
-    /// and the signing key (only actually needed for the `Default` case)
+    /// and the signing key (which is only actually needed for the `Default` case)
     fn to_subpackets(
         &self,
         signer: &dyn SecretKeyTrait,
