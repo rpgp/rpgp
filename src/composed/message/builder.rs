@@ -114,6 +114,16 @@ pub trait Encryption: PartialEq {
     fn is_plaintext(&self) -> bool;
 }
 
+/// Subpacket configuration, per signing key
+#[derive(Debug)]
+enum SubpacketConfig {
+    Implicit,
+    Explicit {
+        hashed: Vec<Subpacket>,
+        unhashed: Vec<Subpacket>,
+    },
+}
+
 /// Configures a signing key and how to use it.
 #[derive(Debug)]
 struct SigningConfig<'a> {
@@ -125,7 +135,7 @@ struct SigningConfig<'a> {
     hash_algorithm: HashAlgorithm,
 
     /// Hashed, Unhashed area subpackets
-    subpackets: Option<(Vec<Subpacket>, Vec<Subpacket>)>,
+    subpackets: SubpacketConfig,
 }
 
 impl<'a> SigningConfig<'a> {
@@ -135,7 +145,7 @@ impl<'a> SigningConfig<'a> {
             key,
             key_pw,
             hash_algorithm: hash,
-            subpackets: None,
+            subpackets: SubpacketConfig::Implicit,
         }
     }
 
@@ -150,7 +160,7 @@ impl<'a> SigningConfig<'a> {
             key,
             key_pw,
             hash_algorithm: hash,
-            subpackets: Some((hashed, unhashed)),
+            subpackets: SubpacketConfig::Explicit { hashed, unhashed },
         }
     }
 }
@@ -218,7 +228,7 @@ where
         };
 
         match &config.subpackets {
-            None => {
+            SubpacketConfig::Implicit => {
                 sig_config.hashed_subpackets = vec![
                     Subpacket::regular(SubpacketData::IssuerFingerprint(config.key.fingerprint()))?,
                     Subpacket::regular(SubpacketData::SignatureCreationTime(
@@ -230,7 +240,7 @@ where
                         vec![Subpacket::regular(SubpacketData::Issuer(key_id))?];
                 }
             }
-            Some((hashed, unhashed)) => {
+            SubpacketConfig::Explicit { hashed, unhashed } => {
                 sig_config.hashed_subpackets = hashed.to_vec();
                 sig_config.unhashed_subpackets = unhashed.to_vec();
             }
