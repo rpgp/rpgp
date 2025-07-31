@@ -116,8 +116,8 @@ pub trait Encryption: PartialEq {
 
 /// Subpacket configuration for a Signature packet.
 ///
-/// Configuration may be implicit, relying on rPGP to set customary subpackets, or
-/// explicit, consisting of lists of hashed and unhashed subpackets.
+/// The subpacket configuration may be implicit (relying on rPGP to set default subpackets), or
+/// user-provided and explicit (consisting of lists of hashed and unhashed subpackets).
 #[derive(Debug, Default)]
 pub enum SubpacketConfig {
     /// Signature subpackets are automatically produced while signing.
@@ -183,7 +183,7 @@ struct SigningConfig<'a> {
     /// The hash algorithm to be used when signing.
     hash_algorithm: HashAlgorithm,
 
-    /// Hashed, Unhashed area subpackets
+    /// Subpacket configuration, specifies what will go into the hashed and unhashed areas
     subpackets: SubpacketConfig,
 }
 
@@ -592,8 +592,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         self
     }
 
-    /// Produce a data signature with the signing key `key` and an explicitly configured
-    /// subpacket configuration.
+    /// Produce a data signature with the signing key `key` and an explicit subpacket configuration.
     ///
     /// This gives callers full control of the hashed and unhashed subpacket areas.
     pub fn sign_with_subpackets(
@@ -2291,6 +2290,8 @@ mod tests {
             // Extra subpacket to assert it also goes into the signature
             Subpacket::regular(SubpacketData::PreferredKeyServer("hello world".to_string()))?,
         ];
+
+        // Put a weird subpacket into the unhashed area, just for testing
         let unhashed = vec![Subpacket::regular(SubpacketData::Revocable(true))?];
 
         let mut builder = Builder::from_bytes("plaintext.txt", b"hello world".as_slice());
