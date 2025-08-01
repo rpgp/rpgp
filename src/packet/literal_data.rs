@@ -11,7 +11,7 @@ use proptest::prelude::*;
 use crate::{
     errors::{ensure, Result},
     line_writer::LineBreak,
-    normalize_lines::{normalize_lines, NormalizedReader},
+    normalize_lines::normalize_lines,
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -249,34 +249,41 @@ impl PacketTrait for LiteralData {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
-pub(crate) enum MaybeNormalizedReader<R: io::Read> {
-    Normalized(NormalizedReader<R>),
-    Raw(R),
+/// A reader that can check if literal packet content is legal.
+///
+/// For binary literals, this passes data through and checks nothing.
+/// For UTF-8 literals, this checks that line-endings are CR+LF, and the data is valid UTF-8
+pub(crate) enum LiteralCheckingReader<R: io::Read> {
+    Utf8Checking(R),
+    BinaryRaw(R),
 }
 
-impl<R: io::Read> MaybeNormalizedReader<R> {
+impl<R: io::Read> LiteralCheckingReader<R> {
     pub(crate) fn into_inner(self) -> R {
         match self {
-            Self::Normalized(s) => s.into_inner(),
-            Self::Raw(s) => s,
+            Self::Utf8Checking(s) => s,
+            Self::BinaryRaw(s) => s,
         }
     }
 }
 
-impl<R: io::Read> io::Read for MaybeNormalizedReader<R> {
+impl<R: io::Read> io::Read for LiteralCheckingReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
-            Self::Normalized(r) => r.read(buf),
-            Self::Raw(r) => r.read(buf),
+            Self::Utf8Checking(r) => {
+                // FIXME: check that: line-endings are CR+LF, data stream is valid UTF-8
+
+                r.read(buf)
+            }
+            Self::BinaryRaw(r) => r.read(buf),
         }
     }
 }
 
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum LiteralDataGenerator<R: io::Read> {
-    Fixed(LiteralDataFixedGenerator<MaybeNormalizedReader<R>>),
-    Partial(LiteralDataPartialGenerator<MaybeNormalizedReader<R>>),
+    Fixed(LiteralDataFixedGenerator<LiteralCheckingReader<R>>),
+    Partial(LiteralDataPartialGenerator<LiteralCheckingReader<R>>),
 }
 
 impl<R: io::Read> LiteralDataGenerator<R> {
@@ -287,9 +294,9 @@ impl<R: io::Read> LiteralDataGenerator<R> {
         chunk_size: u32,
     ) -> Result<Self> {
         let source = if header.mode == DataMode::Utf8 {
-            MaybeNormalizedReader::Normalized(NormalizedReader::new(source, LineBreak::Crlf))
+            LiteralCheckingReader::Utf8Checking(source)
         } else {
-            MaybeNormalizedReader::Raw(source)
+            LiteralCheckingReader::BinaryRaw(source)
         };
 
         Self::from_normalized(header, source, source_len, chunk_size)
@@ -297,7 +304,7 @@ impl<R: io::Read> LiteralDataGenerator<R> {
 
     pub(crate) fn from_normalized(
         header: LiteralDataHeader,
-        source: MaybeNormalizedReader<R>,
+        source: LiteralCheckingReader<R>,
         source_len: Option<u32>,
         chunk_size: u32,
     ) -> Result<Self> {
