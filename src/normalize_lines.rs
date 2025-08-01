@@ -63,9 +63,9 @@ impl<R: std::io::Read> NormalizedReader<R> {
         self.replaced.extend_from_slice(&res);
     }
 
-    pub(crate) fn into_inner(self) -> R {
-        self.source
-    }
+    // pub(crate) fn into_inner(self) -> R {
+    //     self.source
+    // }
 }
 
 impl<R: std::io::Read> std::io::Read for NormalizedReader<R> {
