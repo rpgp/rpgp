@@ -67,6 +67,10 @@ impl MessageReader<'_> {
                         }
                     }
                 }
+                // FIXME: handle wrapped in InvalidPacketContent?
+                Some(Err(Error::Unsupported { message, .. })) => {
+                    debug!("ignoring unsupported packet ({message})");
+                }
                 Some(Err(err)) => {
                     warn!("failed to parse trailing data: {err:?}");
                     return Err(io::Error::new(

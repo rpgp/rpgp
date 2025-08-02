@@ -81,7 +81,12 @@ impl Packet {
                 }
                 .build())
             }
+            Tag::Other(60..=63) => Err(UnsupportedSnafu {
+                message: format!("Experimental packet type: {:?}", packet_header.tag()),
+            }
+            .build()),
             Tag::Other(other) => Err(UnsupportedSnafu {
+                // This should never happen, TODO: return a "hard" error?
                 message: format!("Unknown packet type: {other}"),
             }
             .build()),
