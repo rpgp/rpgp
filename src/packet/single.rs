@@ -65,6 +65,18 @@ impl Packet {
             Tag::GnupgAead => {
                 GnupgAeadData::try_from_reader(packet_header, &mut body).map(Into::into)
             }
+
+            // Unassigned/"reserver number" packet types
+            Tag::Other(0) | Tag::Other(15..=16) => {
+                // a "hard" error that will bubble up and interrupt processing of compositions
+                Err(Error::InvalidPacketContent {
+                    source: Box::new(format_err!(
+                        "Unassigned Packet type {:?}",
+                        packet_header.tag()
+                    )),
+                })
+            }
+            // "Unassigned Critical Packets"
             Tag::Other(22..=39) => {
                 // a "hard" error that will bubble up and interrupt processing of compositions
                 Err(Error::InvalidPacketContent {
@@ -74,13 +86,18 @@ impl Packet {
                     )),
                 })
             }
+            // "Unassigned Non-Critical Packets"
             Tag::Other(40..=59) => {
                 // a "soft" error that will usually get ignored while processing packet streams
                 Err(UnsupportedSnafu {
-                    message: format!("Unassigned Critical Packet type {:?}", packet_header.tag()),
+                    message: format!(
+                        "Unassigned Non-critical Packet type {:?}",
+                        packet_header.tag()
+                    ),
                 }
                 .build())
             }
+            // "Private or Experimental Use"
             Tag::Other(60..=63) => Err(UnsupportedSnafu {
                 message: format!("Experimental packet type: {:?}", packet_header.tag()),
             }
