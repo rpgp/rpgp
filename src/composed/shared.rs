@@ -248,8 +248,10 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
         }
         Err(e) => {
             if let Error::Unsupported { ref message, .. } = e {
-                // "Error::Unsupported" signals parser errors that we can safely ignore
-                // (e.g. packets with unsupported versions)
+                // "Error::Unsupported" signals parser errors that we can safely ignore,  e.g.:
+                // - packets with unsupported versions
+                // - unknown non-critical packet types
+                // - experimental packet types
                 warn!("skipping unsupported packet: {e:?}");
                 debug!("error: {message}");
                 return None;
