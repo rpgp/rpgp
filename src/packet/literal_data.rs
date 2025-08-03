@@ -786,6 +786,10 @@ mod tests {
             };
 
             let s = random_string(&mut rng, file_size);
+
+            // DataMode::Utf8 only accepts data that uses Crlf line endings
+            let s = normalize_lines(&s, LineBreak::Crlf).to_string();
+
             let mut generator = LiteralDataGenerator::new(
                 header.clone(),
                 ChaosReader::new(rng.clone(), s.clone()),
