@@ -7,6 +7,7 @@ use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
 #[cfg(test)]
 use proptest::prelude::*;
+use utf8::DecodeError;
 
 use crate::{
     errors::{ensure, Result},
@@ -254,7 +255,7 @@ impl PacketTrait for LiteralData {
 /// For binary literals, this passes data through and checks nothing.
 /// For UTF-8 literals, this checks that line-endings are CR+LF, and the data is valid UTF-8
 pub(crate) enum LiteralCheckingReader<R: io::Read> {
-    Utf8Checking(Utf8CheckReader<CrLfCheckReader<R>>),
+    Utf8Checking(CrLfCheckReader<Utf8CheckReader<R>>),
     BinaryRaw(R),
 }
 
@@ -354,57 +355,47 @@ where
     R: io::Read,
 {
     source: R,
-    parser: utf8parse::Parser,
+    rest: Vec<u8>,
 }
 
 impl<R: io::Read> Utf8CheckReader<R> {
     fn new(source: R) -> Self {
         Self {
             source,
-            parser: utf8parse::Parser::new(),
+            rest: vec![],
         }
     }
 
     pub(crate) fn into_inner(self) -> R {
-        // TODO: should this fail if the parser is mid-codepoint?
         self.source
     }
 }
 
 impl<R: io::Read> io::Read for Utf8CheckReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        struct Receiver {
-            chars: Vec<char>,
-            error: bool,
-        }
-
-        impl utf8parse::Receiver for Receiver {
-            fn codepoint(&mut self, ch: char) {
-                self.chars.push(ch);
-            }
-
-            fn invalid_sequence(&mut self) {
-                self.error = true;
-            }
-        }
-
         let len = self.source.read(buf)?;
 
         if len == 0 {
-            // TODO: if the parser is mid-codepoint, error?
+            if !self.rest.is_empty() {
+                // If the parser is mid-codepoint at the end of the stream, error
+                return Err(io::Error::other("Illegal UTF-8 data")); // FIXME
+            }
 
             return Ok(0);
         }
 
-        let mut rec = Receiver {
-            chars: vec![],
-            error: false,
-        };
+        // get remaining bytes from before and append newly read data for checking
+        let mut check = std::mem::take(&mut self.rest);
+        check.extend_from_slice(&buf[..len]);
 
-        for byte in buf[..len].iter() {
-            self.parser.advance(&mut rec, *byte);
+        let dec = utf8::decode(&check);
 
-            if rec.error {
+        match dec {
+            Err(DecodeError::Incomplete {
+                incomplete_suffix, ..
+            }) => self.rest = incomplete_suffix.buffer.to_vec(),
+            Ok(_) => {}
+            _ => {
                 return Err(io::Error::other("Illegal UTF-8 data")); // FIXME
             }
         }
@@ -427,9 +418,10 @@ impl<R: io::Read> LiteralDataGenerator<R> {
         chunk_size: u32,
     ) -> Result<Self> {
         let source = if header.mode == DataMode::Utf8 {
-            // FIXME: check that data stream is valid UTF-8
+            let utf8 = Utf8CheckReader::new(source);
+            let crlf = CrLfCheckReader::new(utf8);
 
-            LiteralCheckingReader::Utf8Checking(Utf8CheckReader::new(CrLfCheckReader::new(source)))
+            LiteralCheckingReader::Utf8Checking(crlf)
         } else {
             LiteralCheckingReader::BinaryRaw(source)
         };
