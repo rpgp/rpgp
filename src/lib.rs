@@ -14,6 +14,7 @@
 #[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;
+extern crate core;
 
 // Reexport as used in the public api
 pub use bytes;

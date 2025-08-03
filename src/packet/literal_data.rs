@@ -254,14 +254,14 @@ impl PacketTrait for LiteralData {
 /// For binary literals, this passes data through and checks nothing.
 /// For UTF-8 literals, this checks that line-endings are CR+LF, and the data is valid UTF-8
 pub(crate) enum LiteralCheckingReader<R: io::Read> {
-    Utf8Checking(CrLfCheckReader<R>),
+    Utf8Checking(Utf8CheckReader<CrLfCheckReader<R>>),
     BinaryRaw(R),
 }
 
 impl<R: io::Read> LiteralCheckingReader<R> {
     pub(crate) fn into_inner(self) -> R {
         match self {
-            Self::Utf8Checking(s) => s.into_inner(),
+            Self::Utf8Checking(s) => s.into_inner().into_inner(),
             Self::BinaryRaw(s) => s,
         }
     }
@@ -276,7 +276,7 @@ impl<R: io::Read> io::Read for LiteralCheckingReader<R> {
     }
 }
 
-/// This struct wraps a reader that checks that all line endings are CR+LF.
+/// Wrapping reader that checks that all line endings are CR+LF.
 ///
 /// Any other line endings in the input stream are rejected with an `io::Error`.
 pub(crate) struct CrLfCheckReader<R>
@@ -346,6 +346,73 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
     }
 }
 
+/// Wrapping reader that checks that the input data is valid UTF-8.
+///
+/// Non-UTF-8 data in the input stream are rejected with an `io::Error`.
+pub(crate) struct Utf8CheckReader<R>
+where
+    R: io::Read,
+{
+    source: R,
+    parser: utf8parse::Parser,
+}
+
+impl<R: io::Read> Utf8CheckReader<R> {
+    fn new(source: R) -> Self {
+        Self {
+            source,
+            parser: utf8parse::Parser::new(),
+        }
+    }
+
+    pub(crate) fn into_inner(self) -> R {
+        // TODO: should this fail if the parser is mid-codepoint?
+        self.source
+    }
+}
+
+impl<R: io::Read> io::Read for Utf8CheckReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        struct Receiver {
+            chars: Vec<char>,
+            error: bool,
+        }
+
+        impl utf8parse::Receiver for Receiver {
+            fn codepoint(&mut self, ch: char) {
+                self.chars.push(ch);
+            }
+
+            fn invalid_sequence(&mut self) {
+                self.error = true;
+            }
+        }
+
+        let len = self.source.read(buf)?;
+
+        if len == 0 {
+            // TODO: if the parser is mid-codepoint, error?
+
+            return Ok(0);
+        }
+
+        let mut rec = Receiver {
+            chars: vec![],
+            error: false,
+        };
+
+        for byte in buf[..len].iter() {
+            self.parser.advance(&mut rec, *byte);
+
+            if rec.error {
+                return Err(io::Error::other("Illegal UTF-8 data")); // FIXME
+            }
+        }
+
+        Ok(len)
+    }
+}
+
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum LiteralDataGenerator<R: io::Read> {
     Fixed(LiteralDataFixedGenerator<LiteralCheckingReader<R>>),
@@ -362,7 +429,7 @@ impl<R: io::Read> LiteralDataGenerator<R> {
         let source = if header.mode == DataMode::Utf8 {
             // FIXME: check that data stream is valid UTF-8
 
-            LiteralCheckingReader::Utf8Checking(CrLfCheckReader::new(source))
+            LiteralCheckingReader::Utf8Checking(Utf8CheckReader::new(CrLfCheckReader::new(source)))
         } else {
             LiteralCheckingReader::BinaryRaw(source)
         };
