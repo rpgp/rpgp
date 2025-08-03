@@ -7,7 +7,6 @@ use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
 #[cfg(test)]
 use proptest::prelude::*;
-use utf8::DecodeError;
 
 use crate::{
     errors::{ensure, Result},
@@ -388,15 +387,18 @@ impl<R: io::Read> io::Read for Utf8CheckReader<R> {
         let mut check = std::mem::take(&mut self.rest);
         check.extend_from_slice(&buf[..len]);
 
-        let dec = utf8::decode(&check);
-
-        match dec {
-            Err(DecodeError::Incomplete {
-                incomplete_suffix, ..
-            }) => self.rest = incomplete_suffix.buffer.to_vec(),
+        match std::str::from_utf8(&check) {
             Ok(_) => {}
-            _ => {
-                return Err(io::Error::other("Illegal UTF-8 data")); // FIXME
+            Err(err) => {
+                let valid_up_to = err.valid_up_to();
+
+                // store a potentially intermediate bit of UTF-8 for the next read
+                self.rest = check[valid_up_to..].to_vec();
+
+                // however, 3 bytes is the longest possibly legal intermediate bit of UTF-8 data
+                if self.rest.len() > 3 {
+                    return Err(io::Error::other("Illegal UTF-8 data")); // FIXME
+                }
             }
         }
 

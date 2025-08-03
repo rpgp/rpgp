@@ -1525,7 +1525,6 @@ dependencies = [
  "tempfile",
  "testresult",
  "twofish",
- "utf-8",
  "x25519-dalek",
  "zeroize",
 ]
@@ -2272,12 +2271,6 @@ dependencies = [
  "crypto-common",
  "subtle",
 ]
-
-[[package]]
-name = "utf-8"
-version = "0.7.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "version_check"
