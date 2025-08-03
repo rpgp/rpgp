@@ -2550,19 +2550,17 @@ mod tests {
 
         let key = &skey.primary_key;
 
-        // Illegal UTF-8 should be rejected
-
-        let invalid_utf8 = &[0xc3, 0x28][..];
-
-        let mut builder = Builder::from_bytes(&[][..], invalid_utf8);
+        // Bad line-ending (not "CR+LF") should be rejected
+        let mut builder = Builder::from_bytes(&[][..], b"hello\nworld".as_slice());
         builder.sign_text().data_mode(DataMode::Utf8);
         builder.sign(key, Password::empty(), HashAlgorithm::Sha256);
 
         let res = builder.to_vec(&mut rng);
         assert!(res.is_err());
 
-        // Bad line-ending (not "CR+LF") should get rejected
-        let mut builder = Builder::from_bytes(&[][..], b"hello\nworld".as_slice());
+        // Illegal UTF-8 should be rejected
+        let invalid_utf8 = &[0xc3, 0x28][..];
+        let mut builder = Builder::from_bytes(&[][..], invalid_utf8);
         builder.sign_text().data_mode(DataMode::Utf8);
         builder.sign(key, Password::empty(), HashAlgorithm::Sha256);
 

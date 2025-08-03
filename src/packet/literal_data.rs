@@ -254,14 +254,14 @@ impl PacketTrait for LiteralData {
 /// For binary literals, this passes data through and checks nothing.
 /// For UTF-8 literals, this checks that line-endings are CR+LF, and the data is valid UTF-8
 pub(crate) enum LiteralCheckingReader<R: io::Read> {
-    Utf8Checking(R),
+    Utf8Checking(CrLfCheckReader<R>),
     BinaryRaw(R),
 }
 
 impl<R: io::Read> LiteralCheckingReader<R> {
     pub(crate) fn into_inner(self) -> R {
         match self {
-            Self::Utf8Checking(s) => s,
+            Self::Utf8Checking(s) => s.into_inner(),
             Self::BinaryRaw(s) => s,
         }
     }
@@ -270,13 +270,79 @@ impl<R: io::Read> LiteralCheckingReader<R> {
 impl<R: io::Read> io::Read for LiteralCheckingReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
-            Self::Utf8Checking(r) => {
-                // FIXME: check that: line-endings are CR+LF, data stream is valid UTF-8
-
-                r.read(buf)
-            }
+            Self::Utf8Checking(r) => r.read(buf),
             Self::BinaryRaw(r) => r.read(buf),
         }
+    }
+}
+
+/// This struct wraps a reader that checks that all line endings are CR+LF.
+///
+/// Any other line endings in the input stream are rejected with an `io::Error`.
+pub(crate) struct CrLfCheckReader<R>
+where
+    R: io::Read,
+{
+    source: R,
+    last_was_cr: bool,
+}
+
+impl<R: io::Read> CrLfCheckReader<R> {
+    fn new(source: R) -> Self {
+        Self {
+            source,
+            last_was_cr: false,
+        }
+    }
+
+    pub(crate) fn into_inner(self) -> R {
+        self.source
+    }
+}
+
+impl<R: io::Read> io::Read for CrLfCheckReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let len = self.source.read(buf)?;
+
+        // If the previous read ended with a CR, an LF must follow now
+        if self.last_was_cr && (len == 0 || buf[0] != b'\n') {
+            return Err(io::Error::other("Illegal line ending")); // FIXME
+        }
+
+        // Reading is done, no more checks required
+        if len == 0 {
+            return Ok(0);
+        }
+
+        // Check the body of this read for any illegal linebreaks
+
+        let mut pos = if self.last_was_cr { 1 } else { 0 };
+        while pos < len - 1 {
+            // bare linefeed is not ok
+            if buf[pos] == b'\n' {
+                return Err(io::Error::other("Illegal line ending")); // FIXME
+            }
+
+            // CR must be followed by LF
+            if buf[pos] == b'\r' {
+                if buf[pos + 1] != b'\n' {
+                    return Err(io::Error::other("Illegal line ending")); // FIXME
+                }
+
+                pos += 2;
+            } else {
+                pos += 1;
+            }
+        }
+
+        if pos < len && buf[pos] == b'\n' {
+            return Err(io::Error::other("Illegal line ending")); // FIXME
+        }
+
+        // remember if the last character is a CR, so we can check for a matching LF in the next read
+        self.last_was_cr = buf[len - 1] == b'\r';
+
+        Ok(len)
     }
 }
 
@@ -294,7 +360,9 @@ impl<R: io::Read> LiteralDataGenerator<R> {
         chunk_size: u32,
     ) -> Result<Self> {
         let source = if header.mode == DataMode::Utf8 {
-            LiteralCheckingReader::Utf8Checking(source)
+            // FIXME: check that data stream is valid UTF-8
+
+            LiteralCheckingReader::Utf8Checking(CrLfCheckReader::new(source))
         } else {
             LiteralCheckingReader::BinaryRaw(source)
         };
