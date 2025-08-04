@@ -844,7 +844,8 @@ fn test_unknown_hash() {
         .decrypt_with_session_key(PlainSessionKey::V3_4 {
             sym_alg: SymmetricKeyAlgorithm::AES256,
             key: hex::decode("0A62FC3D10FA134E8C3C915C68AA4B6C6E081D68A9ED1578735AC4743D0381F8")
-                .unwrap(),
+                .unwrap()
+                .into(),
         })
         .expect("failed to decrypt");
 

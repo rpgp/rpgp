@@ -78,7 +78,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                         let Source::Init(source) = source else {
                             unreachable!("checked");
                         };
-                        match StreamDecryptor::v1(*sym_alg, session_key, source) {
+                        match StreamDecryptor::v1(*sym_alg, session_key.as_ref(), source) {
                             Ok(dec) => (Ok(()), Source::BodyDecryptor(dec)),
                             Err(err) => (Err(err), Source::Error),
                         }
@@ -126,7 +126,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                             sym_alg,
                             aead,
                             chunk_size,
-                            session_key,
+                            session_key.as_ref(),
                             iv,
                             source,
                         ) {
@@ -178,7 +178,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                             aead,
                             chunk_size,
                             &salt,
-                            session_key,
+                            session_key.as_ref(),
                             source,
                         ) {
                             Ok(dec) => (Ok(()), Source::BodyDecryptor(dec)),

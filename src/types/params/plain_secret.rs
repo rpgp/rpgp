@@ -16,7 +16,7 @@ use crate::crypto::{
     slh_dsa_shake128s, slh_dsa_shake256s,
 };
 use crate::{
-    composed::PlainSessionKey,
+    composed::{PlainSessionKey, RawSessionKey},
     crypto::{
         aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
         elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, x448,
@@ -338,7 +338,7 @@ impl PlainSecretParams {
                         self.to_writer_raw(&mut data).expect("preallocated vector");
 
                         data.extend_from_slice(&self.checksum_sha1()?[..]);
-                        sym_alg.encrypt_with_iv_regular(&key, iv, &mut data)?;
+                        sym_alg.encrypt_with_iv_regular(key.as_ref(), iv, &mut data)?;
 
                         data
                     }
@@ -371,8 +371,13 @@ impl PlainSecretParams {
                             bail!("no secret_tag provided");
                         };
 
-                        let (okm, ad) =
-                            s2k_usage_aead(&key, secret_tag, pub_key, *sym_alg, *aead_mode)?;
+                        let (okm, ad) = s2k_usage_aead(
+                            key.as_ref(),
+                            secret_tag,
+                            pub_key,
+                            *sym_alg,
+                            *aead_mode,
+                        )?;
 
                         // AEAD encrypt
                         aead_mode.encrypt_in_place(sym_alg, &okm, nonce, &ad, &mut data)?;
@@ -463,7 +468,7 @@ impl PlainSecretParams {
                     encrypted_session_key: session_key,
                 };
 
-                let key = priv_key.decrypt(data)?;
+                let key = priv_key.decrypt(data)?.into();
 
                 return match (&typ, *sym_alg) {
                     // We expect `sym_alg` to be set for v3 PKESK, and unset for v6 PKESK
@@ -498,7 +503,7 @@ impl PlainSecretParams {
                     encrypted_session_key: session_key,
                 };
 
-                let key = priv_key.decrypt(data)?;
+                let key = priv_key.decrypt(data)?.into();
 
                 return match (&typ, *sym_alg) {
                     // We expect `sym_alg` to be set for v3 PKESK, and unset for v6 PKESK
@@ -533,7 +538,7 @@ impl PlainSecretParams {
                     encrypted_session_key: session_key,
                 };
 
-                let key = priv_key.decrypt(data)?;
+                let key = priv_key.decrypt(data)?.into();
 
                 return match (&typ, *sym_alg) {
                     // We expect `sym_alg` to be set for v3 PKESK, and unset for v6 PKESK
@@ -564,7 +569,7 @@ impl PlainSecretParams {
                     encrypted_session_key: session_key,
                 };
 
-                let key = priv_key.decrypt(data)?;
+                let key = priv_key.decrypt(data)?.into();
 
                 // We expect `algo` to be set for v3 PKESK, and unset for v6 PKESK
                 return if let Some(sym_alg) = *sym_alg {
@@ -600,12 +605,12 @@ impl PlainSecretParams {
                     sym_alg
                 );
 
-                let key = decrypted_key[1..=key_size].to_vec();
+                let key: RawSessionKey = decrypted_key[1..=key_size].into();
                 let checksum = decrypted_key[key_size + 1..key_size + 3]
                     .try_into()
                     .expect("fixed size");
 
-                checksum::simple(checksum, &key)?;
+                checksum::simple(checksum, key.as_ref())?;
 
                 Ok(PlainSessionKey::V3_4 { key, sym_alg })
             }
@@ -620,10 +625,10 @@ impl PlainSecretParams {
                     len,
                 );
 
-                let key = decrypted_key[0..len - 2].to_vec();
+                let key: RawSessionKey = decrypted_key[0..len - 2].into();
                 let checksum = decrypted_key[len - 2..].try_into().expect("fixed size");
 
-                checksum::simple(checksum, &key)?;
+                checksum::simple(checksum, key.as_ref())?;
 
                 Ok(PlainSessionKey::V6 { key })
             }

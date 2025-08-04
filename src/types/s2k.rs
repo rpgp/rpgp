@@ -3,8 +3,10 @@ use std::io::{self, BufRead};
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
 use rand::{CryptoRng, Rng};
+use zeroize::Zeroizing;
 
 use crate::{
+    composed::RawSessionKey,
     crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
     errors::{bail, ensure, unimplemented_err, Result},
     parsing_reader::BufReadParsing,
@@ -267,7 +269,7 @@ impl StringToKey {
     ///   function in an S2K KDF.
     /// - Implementations MUST NOT decrypt a secret using MD5, SHA-1, or RIPEMD-160 as a hash
     ///   function in an S2K KDF in a version 6 (or later) packet.
-    pub fn derive_key(&self, passphrase: &[u8], key_size: usize) -> Result<Vec<u8>> {
+    pub fn derive_key(&self, passphrase: &[u8], key_size: usize) -> Result<RawSessionKey> {
         let key = match self {
             Self::Simple { hash_alg, .. }
             | Self::Salted { hash_alg, .. }
@@ -277,7 +279,7 @@ impl StringToKey {
                 };
                 let rounds = (key_size as f32 / digest_size as f32).ceil() as usize;
 
-                let mut key = vec![0u8; key_size];
+                let mut key = Zeroizing::new(vec![0u8; key_size]);
                 let zeros = vec![0u8; rounds];
 
                 for round in 0..rounds {
@@ -391,7 +393,7 @@ impl StringToKey {
                     Params::new(m, *t as u32, *p as u32, Some(key_size))?,
                 );
 
-                let mut output_key_material = vec![0; key_size];
+                let mut output_key_material = Zeroizing::new(vec![0; key_size]);
 
                 a2.hash_password_into(passphrase, salt, &mut output_key_material)?;
 
@@ -401,7 +403,7 @@ impl StringToKey {
             _ => unimplemented_err!("S2K {:?} is not available", self),
         };
 
-        Ok(key)
+        Ok(key.into())
     }
 
     #[allow(clippy::len_without_is_empty)]
@@ -604,7 +606,7 @@ mod tests {
         };
         let key = s2k.derive_key(b"password", 16).expect("argon derive");
         assert_eq!(
-            key,
+            key.as_ref(),
             [
                 0x84, 0xa3, 0x64, 0x3c, 0x39, 0xd5, 0xf5, 0x50, 0x52, 0x6d, 0x19, 0x39, 0xe8, 0x57,
                 0xfa, 0x66
@@ -623,7 +625,7 @@ mod tests {
         };
         let key = s2k.derive_key(b"password", 24).expect("argon derive");
         assert_eq!(
-            key,
+            key.as_ref(),
             [
                 0xf5, 0x42, 0x47, 0x6d, 0x2b, 0x9f, 0xf4, 0x35, 0x15, 0x85, 0x18, 0x11, 0x21, 0x2d,
                 0xe9, 0x49, 0x7f, 0x1b, 0xfe, 0x1a, 0x3d, 0x08, 0xd7, 0x07
@@ -642,7 +644,7 @@ mod tests {
         };
         let key = s2k.derive_key(b"password", 32).expect("argon derive");
         assert_eq!(
-            key,
+            key.as_ref(),
             [
                 0x4e, 0xd7, 0xeb, 0x27, 0x43, 0x4f, 0x6d, 0xf6, 0x23, 0xce, 0xe3, 0xac, 0x08, 0xb7,
                 0x63, 0xc4, 0xaf, 0x79, 0xdf, 0xde, 0x5f, 0xdc, 0x92, 0xdd, 0x1d, 0x88, 0x1c, 0x6c,

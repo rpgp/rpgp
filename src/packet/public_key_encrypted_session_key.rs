@@ -6,6 +6,7 @@ use rand::{CryptoRng, Rng};
 use zeroize::Zeroizing;
 
 use crate::{
+    composed::RawSessionKey,
     crypto::{checksum, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
     errors::{bail, ensure_eq, Result},
     packet::{PacketHeader, PacketTrait},
@@ -133,7 +134,7 @@ impl PublicKeyEncryptedSessionKey {
     /// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-public-key-encrypted-sessio>
     fn prepare_session_key_for_encryption(
         alg: Option<SymmetricKeyAlgorithm>, // set for pkesk v3
-        sk: &[u8],
+        sk: &RawSessionKey,
         pp: &PublicParams,
     ) -> Zeroizing<Vec<u8>> {
         let mut data = Zeroizing::new(Vec::with_capacity(1 + sk.len() + 2)); // max required capacity (for v3 and not-x22519/449)
@@ -144,14 +145,14 @@ impl PublicKeyEncryptedSessionKey {
         }
 
         // Add the raw session key data
-        data.extend_from_slice(sk);
+        data.extend_from_slice(sk.as_ref());
 
         // If needed, appended a checksum of the session key
         match pp {
             PublicParams::X25519(_) | PublicParams::X448(_) => {}
             #[cfg(feature = "draft-pqc")]
             PublicParams::MlKem768X25519(_) | PublicParams::MlKem1024X448(_) => {}
-            _ => data.extend_from_slice(&checksum::calculate_simple(sk).to_be_bytes()),
+            _ => data.extend_from_slice(&checksum::calculate_simple(sk.as_ref()).to_be_bytes()),
         }
 
         data
@@ -160,7 +161,7 @@ impl PublicKeyEncryptedSessionKey {
     /// Encrypts the given session key to `pkey` as a v3 pkesk.
     pub fn from_session_key_v3<R: CryptoRng + Rng>(
         rng: R,
-        session_key: &[u8],
+        session_key: &RawSessionKey,
         alg: SymmetricKeyAlgorithm,
         pkey: &impl PublicKeyTrait,
     ) -> Result<Self> {
@@ -186,7 +187,7 @@ impl PublicKeyEncryptedSessionKey {
     /// Encrypts the given session key to `pkey` as a v6 pkesk.
     pub fn from_session_key_v6<R: CryptoRng + Rng>(
         rng: R,
-        session_key: &[u8],
+        session_key: &RawSessionKey,
         pkey: &impl PublicKeyTrait,
     ) -> Result<Self> {
         // "An implementation MUST NOT generate ElGamal v6 PKESK packets."

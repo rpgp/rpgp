@@ -62,7 +62,7 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
             Self::Body {
                 decryptor: MaybeDecryptor::Raw(source),
             } => {
-                let decryptor = sym_alg.stream_decryptor_unprotected(key, source)?;
+                let decryptor = sym_alg.stream_decryptor_unprotected(key.as_ref(), source)?;
                 let decryptor = MaybeDecryptor::Decryptor(decryptor);
                 *self = Self::Body { decryptor };
                 Ok(())

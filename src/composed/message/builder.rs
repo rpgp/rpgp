@@ -10,9 +10,8 @@ use crc24::Crc24Hasher;
 use generic_array::typenum::U64;
 use log::debug;
 use rand::{CryptoRng, Rng};
-use zeroize::Zeroizing;
 
-use super::ArmorOptions;
+use super::{ArmorOptions, RawSessionKey};
 use crate::{
     armor,
     composed::Esk,
@@ -79,7 +78,7 @@ pub struct NoEncryption;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct EncryptionSeipdV1 {
-    session_key: Zeroizing<Vec<u8>>,
+    session_key: RawSessionKey,
     sym_esks: Vec<SymKeyEncryptedSessionKey>,
     pub_esks: Vec<PublicKeyEncryptedSessionKey>,
     sym_alg: SymmetricKeyAlgorithm,
@@ -87,7 +86,7 @@ pub struct EncryptionSeipdV1 {
 
 #[derive(derive_more::Debug, PartialEq, Clone)]
 pub struct EncryptionSeipdV2 {
-    session_key: Zeroizing<Vec<u8>>,
+    session_key: RawSessionKey,
     sym_esks: Vec<SymKeyEncryptedSessionKey>,
     pub_esks: Vec<PublicKeyEncryptedSessionKey>,
     sym_alg: SymmetricKeyAlgorithm,
@@ -369,7 +368,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     ///
     /// CAUTION: The session key must be generated appropriately!
     /// If it's not random, then encryption based on it does not provide privacy!
-    pub fn set_session_key(&mut self, sk: Vec<u8>) -> Result<&mut Self> {
+    pub fn set_session_key(&mut self, sk: RawSessionKey) -> Result<&mut Self> {
         ensure!(
             self.encryption.pub_esks.is_empty(),
             "Session key may not be set, already have PKESK"
@@ -385,7 +384,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
             "Session key has inappropriate length for the symmetric algorithm"
         );
 
-        self.encryption.session_key = sk.into();
+        self.encryption.session_key = sk;
 
         Ok(self)
     }
@@ -453,7 +452,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     ///
     /// WARNING: this is sensitive material, and leaking it can lead to
     /// a compromise of the data.
-    pub fn session_key(&self) -> &Zeroizing<Vec<u8>> {
+    pub fn session_key(&self) -> &RawSessionKey {
         &self.encryption.session_key
     }
 }
@@ -465,7 +464,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     ///
     /// CAUTION: The session key must be generated appropriately!
     /// If it's not random, then encryption based on it does not provide privacy!
-    pub fn set_session_key(&mut self, sk: Vec<u8>) -> Result<&mut Self> {
+    pub fn set_session_key(&mut self, sk: RawSessionKey) -> Result<&mut Self> {
         ensure!(
             self.encryption.pub_esks.is_empty(),
             "Session key may not be set, already have PKESK"
@@ -481,7 +480,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
             "Session key has inappropriate length for the symmetric algorithm"
         );
 
-        self.encryption.session_key = sk.into();
+        self.encryption.session_key = sk;
 
         Ok(self)
     }
@@ -554,7 +553,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     ///
     /// WARNING: this is sensitive material, and leaking it can lead to
     /// a compromise of the data.
-    pub fn session_key(&self) -> &Zeroizing<Vec<u8>> {
+    pub fn session_key(&self) -> &RawSessionKey {
         &self.encryption.session_key
     }
 }
@@ -960,7 +959,7 @@ impl Encryption for EncryptionSeipdV1 {
         }
 
         let config = SymEncryptedProtectedDataConfig::V1;
-        let encrypted = sym_alg.stream_encryptor(rng, &session_key, generator)?;
+        let encrypted = sym_alg.stream_encryptor(rng, session_key.as_ref(), generator)?;
 
         encrypt_write(
             Tag::SymEncryptedProtectedData,
@@ -1029,7 +1028,7 @@ impl Encryption for EncryptionSeipdV2 {
             sym_alg,
             aead,
             chunk_size,
-            &session_key,
+            session_key.as_ref(),
             salt,
             generator,
         )?;
@@ -2419,7 +2418,7 @@ mod tests {
         let mut builder = Builder::from_bytes("plaintext.txt", b"hello world".as_slice())
             .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
         builder
-            .set_session_key(MY_BAD_SESSION_KEY.to_vec())?
+            .set_session_key(MY_BAD_SESSION_KEY.to_vec().into())?
             .encrypt_to_key(&mut rng, &skey.secret_subkeys[0].public_key())
             .unwrap();
 
@@ -2447,7 +2446,7 @@ mod tests {
             panic!("not a v6 pkesk");
         };
 
-        assert_eq!(*key, MY_BAD_SESSION_KEY);
+        assert_eq!(key.as_ref(), MY_BAD_SESSION_KEY);
 
         Ok(())
     }
@@ -2470,7 +2469,7 @@ mod tests {
             ChunkSize::default(),
         );
         builder
-            .set_session_key(MY_BAD_SESSION_KEY.to_vec())?
+            .set_session_key(MY_BAD_SESSION_KEY.to_vec().into())?
             .encrypt_to_key(&mut rng, &skey.secret_subkeys[0].public_key())
             .unwrap();
 
@@ -2498,7 +2497,7 @@ mod tests {
             panic!("not a v6 pkesk");
         };
 
-        assert_eq!(*key, MY_BAD_SESSION_KEY);
+        assert_eq!(key.as_ref(), MY_BAD_SESSION_KEY);
 
         Ok(())
     }
