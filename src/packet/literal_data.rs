@@ -844,6 +844,8 @@ mod tests {
 
     #[test]
     fn test_utf8_check_reader() {
+        // tests the "ok" case of Utf8CheckReader
+
         pretty_env_logger::try_init().ok();
 
         let mut rng = ChaCha20Rng::seed_from_u64(1);
@@ -858,6 +860,32 @@ mod tests {
             let _ = r.read_to_end(&mut out).expect("ok");
 
             assert_eq!(out, string.as_bytes());
+
+            drop(r);
+            drop(out);
+        }
+    }
+
+    #[test]
+    fn test_crlf_check_reader() {
+        // tests the "ok" case of CrLfCheckReader
+
+        pretty_env_logger::try_init().ok();
+
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+        for len in (1..100_000).step_by(1000) {
+            let string = random_string(&mut rng, len);
+            let norm = normalize_lines(&string, LineBreak::Crlf);
+
+            let b: Bytes = Bytes::from(norm.to_string());
+
+            let cr = ChaosReader::new(&mut rng, b);
+            let mut r = CrLfCheckReader::new(cr);
+
+            let mut out = Vec::new();
+            let _ = r.read_to_end(&mut out).expect("ok");
+
+            assert_eq!(out, norm.as_bytes());
 
             drop(r);
             drop(out);
