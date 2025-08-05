@@ -2406,7 +2406,9 @@ mod tests {
 
     #[test]
     fn encrypt_to_custom_session_key_seipdv1() -> TestResult {
-        const MY_BAD_SESSION_KEY: [u8; 16] = [0x01; 16];
+        // NOTE: Session keys must be random! This fixed session key is used for testing purposes.
+        // Never use fixed session keys in real world code!
+        const MY_TERRIBLE_SESSION_KEY: [u8; 16] = [0x01; 16];
 
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
@@ -2418,7 +2420,7 @@ mod tests {
         let mut builder = Builder::from_bytes("plaintext.txt", b"hello world".as_slice())
             .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
         builder
-            .set_session_key(MY_BAD_SESSION_KEY.to_vec().into())?
+            .set_session_key(MY_TERRIBLE_SESSION_KEY.to_vec().into())?
             .encrypt_to_key(&mut rng, &skey.secret_subkeys[0].public_key())
             .unwrap();
 
@@ -2446,14 +2448,16 @@ mod tests {
             panic!("not a v6 pkesk");
         };
 
-        assert_eq!(key.as_ref(), MY_BAD_SESSION_KEY);
+        assert_eq!(key.as_ref(), MY_TERRIBLE_SESSION_KEY);
 
         Ok(())
     }
 
     #[test]
     fn encrypt_to_custom_session_key_seipdv2() -> TestResult {
-        const MY_BAD_SESSION_KEY: [u8; 16] = [0x01; 16];
+        // NOTE: Session keys must be random! This fixed session key is used for testing purposes.
+        // Never use fixed session keys in real world code!
+        const MY_TERRIBLE_SESSION_KEY: [u8; 16] = [0x01; 16];
 
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
@@ -2469,7 +2473,7 @@ mod tests {
             ChunkSize::default(),
         );
         builder
-            .set_session_key(MY_BAD_SESSION_KEY.to_vec().into())?
+            .set_session_key(MY_TERRIBLE_SESSION_KEY.to_vec().into())?
             .encrypt_to_key(&mut rng, &skey.secret_subkeys[0].public_key())
             .unwrap();
 
@@ -2497,7 +2501,7 @@ mod tests {
             panic!("not a v6 pkesk");
         };
 
-        assert_eq!(key.as_ref(), MY_BAD_SESSION_KEY);
+        assert_eq!(key.as_ref(), MY_TERRIBLE_SESSION_KEY);
 
         Ok(())
     }
