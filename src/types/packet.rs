@@ -226,33 +226,8 @@ impl From<u8> for Tag {
 impl Tag {
     /// Packet Type ID encoded in OpenPGP format
     /// (bits 7 and 6 set, bits 5-0 carry the packet type ID)
-    pub const fn encode(self) -> u8 {
-        let t = match self {
-            Self::PublicKeyEncryptedSessionKey => 1,
-            Self::Signature => 2,
-            Self::SymKeyEncryptedSessionKey => 3,
-            Self::OnePassSignature => 4,
-            Self::SecretKey => 5,
-            Self::PublicKey => 6,
-            Self::SecretSubkey => 7,
-            Self::CompressedData => 8,
-            Self::SymEncryptedData => 9,
-            Self::Marker => 10,
-            Self::LiteralData => 11,
-            Self::Trust => 12,
-            Self::UserId => 13,
-            Self::PublicSubkey => 14,
-            Self::UserAttribute => 17,
-            Self::SymEncryptedProtectedData => 18,
-            Self::ModDetectionCode => 19,
-            Self::GnupgAead => 20,
-            Self::Padding => 21,
-            Self::UnassignedCritical(i) => i,
-            Self::UnassignedNonCritical(i) => i,
-            Self::Experimental(i) => i,
-            Self::Other(i) => i,
-        };
-        0b1100_0000 | t
+    pub fn encode(self) -> u8 {
+        0b1100_0000 | u8::from(self)
     }
 }
 
