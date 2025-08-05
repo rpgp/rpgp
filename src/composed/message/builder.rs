@@ -588,12 +588,15 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     ///
     /// Alternatively, `DataMode::Utf8` is supported.
     /// In this case, the payload must be valid UTF-8, with CR-LF line endings!
-    pub fn data_mode(&mut self, mode: DataMode) -> &mut Self {
-        // FIXME: return Result?
-        assert!([DataMode::Binary, DataMode::Utf8].contains(&mode));
+    pub fn data_mode(&mut self, mode: DataMode) -> Result<&mut Self> {
+        ensure!(
+            [DataMode::Binary, DataMode::Utf8].contains(&mode),
+            "Unsupported data mode {:?}",
+            mode
+        );
 
         self.data_mode = mode;
-        self
+        Ok(self)
     }
 
     /// Configure the data signatures to use `SignatureType::Binary`.
@@ -2518,7 +2521,7 @@ mod tests {
         let key = &skey.primary_key;
 
         let mut builder = Builder::from_bytes(&[][..], b"hello\r\nworld".as_slice());
-        builder.sign_text().data_mode(DataMode::Utf8);
+        builder.sign_text().data_mode(DataMode::Utf8)?;
         builder.sign(key, Password::empty(), HashAlgorithm::Sha256);
 
         let signed = builder
@@ -2552,7 +2555,7 @@ mod tests {
 
         // Bad line-ending (not "CR+LF") should be rejected
         let mut builder = Builder::from_bytes(&[][..], b"hello\nworld".as_slice());
-        builder.sign_text().data_mode(DataMode::Utf8);
+        builder.sign_text().data_mode(DataMode::Utf8)?;
         builder.sign(key, Password::empty(), HashAlgorithm::Sha256);
 
         let res = builder.to_vec(&mut rng);
@@ -2561,7 +2564,7 @@ mod tests {
         // Illegal UTF-8 should be rejected
         let invalid_utf8 = &[0xc3, 0x28][..];
         let mut builder = Builder::from_bytes(&[][..], invalid_utf8);
-        builder.sign_text().data_mode(DataMode::Utf8);
+        builder.sign_text().data_mode(DataMode::Utf8)?;
         builder.sign(key, Password::empty(), HashAlgorithm::Sha256);
 
         let res = builder.to_vec(&mut rng);
