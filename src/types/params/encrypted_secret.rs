@@ -157,8 +157,13 @@ impl EncryptedSecretParams {
                             bail!("no secret_tag provided");
                         };
 
-                        let (okm, ad) =
-                            s2k_usage_aead(&derived, secret_tag, pub_key, *sym_alg, *aead_mode)?;
+                        let (okm, ad) = s2k_usage_aead(
+                            derived.as_ref(),
+                            secret_tag,
+                            pub_key,
+                            *sym_alg,
+                            *aead_mode,
+                        )?;
 
                         // AEAD decrypt
                         let mut ciphertext: BytesMut = self.data.clone().into();
@@ -181,7 +186,7 @@ impl EncryptedSecretParams {
 
                 // Decryption
                 let mut plaintext: BytesMut = self.data.clone().into();
-                sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
+                sym_alg.decrypt_with_iv_regular(key.as_ref(), iv, &mut plaintext)?;
 
                 // Checksum
 
@@ -208,7 +213,7 @@ impl EncryptedSecretParams {
 
                 // Decryption
                 let mut plaintext: BytesMut = self.data.clone().into();
-                sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
+                sym_alg.decrypt_with_iv_regular(key.as_ref(), iv, &mut plaintext)?;
                 if plaintext.len() < 2 {
                     return Err(InvalidInputSnafu.build());
                 }

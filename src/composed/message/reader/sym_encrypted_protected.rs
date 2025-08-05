@@ -3,6 +3,7 @@ use std::io::{self, BufRead, Read};
 use super::PacketBodyReader;
 use crate::{
     composed::{DebugBufRead, PlainSessionKey},
+    crypto::sym::SymmetricKeyAlgorithm,
     errors::{bail, ensure, ensure_eq, unsupported_err, Result},
     packet::{
         GnupgAeadConfig, PacketHeader, ProtectedDataConfig, StreamDecryptor,
@@ -68,7 +69,6 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                     PlainSessionKey::V6 { .. } => {
                         bail!("v6 session keys are not allowed with SEIPD v1 edata");
                     }
-                    PlainSessionKey::Unknown { sym_alg, key } => (sym_alg, key),
                 };
 
                 replace_with::replace_with_and_return(
@@ -78,7 +78,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                         let Source::Init(source) = source else {
                             unreachable!("checked");
                         };
-                        match StreamDecryptor::v1(*sym_alg, session_key, source) {
+                        match StreamDecryptor::v1(*sym_alg, session_key.as_ref(), source) {
                             Ok(dec) => (Ok(()), Source::BodyDecryptor(dec)),
                             Err(err) => (Err(err), Source::Error),
                         }
@@ -97,7 +97,6 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                     PlainSessionKey::V6 { .. } => {
                         bail!("v6 session keys are not allowed with GnupgAead edata")
                     }
-                    PlainSessionKey::Unknown { sym_alg, key } => (Some(sym_alg), key),
                 };
                 if let Some(sym_alg_session_key) = sym_alg_session_key {
                     ensure_eq!(
@@ -126,7 +125,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                             sym_alg,
                             aead,
                             chunk_size,
-                            session_key,
+                            session_key.as_ref(),
                             iv,
                             source,
                         ) {
@@ -149,8 +148,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                     PlainSessionKey::V5 { .. } => {
                         bail!("v5 session keys are not allowed with SEIPD v2 edata");
                     }
-                    PlainSessionKey::V6 { key } => (None, key),
-                    PlainSessionKey::Unknown { sym_alg, key } => (Some(sym_alg), key),
+                    PlainSessionKey::V6 { key } => (None::<&SymmetricKeyAlgorithm>, key),
                 };
                 if let Some(sym_alg_session_key) = sym_alg_session_key {
                     ensure_eq!(
@@ -178,7 +176,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                             aead,
                             chunk_size,
                             &salt,
-                            session_key,
+                            session_key.as_ref(),
                             source,
                         ) {
                             Ok(dec) => (Ok(()), Source::BodyDecryptor(dec)),

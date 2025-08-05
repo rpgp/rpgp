@@ -367,7 +367,7 @@ fn card_decrypt() {
         let (session_key, session_key_algorithm) = hsm.decrypt(values).unwrap();
         edata
             .decrypt(&pgp::composed::PlainSessionKey::V3_4 {
-                key: session_key,
+                key: session_key.into(),
                 sym_alg: session_key_algorithm,
             })
             .unwrap();

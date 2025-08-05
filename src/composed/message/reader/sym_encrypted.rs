@@ -50,9 +50,7 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
 
     pub fn decrypt(&mut self, session_key: &PlainSessionKey) -> Result<()> {
         let (sym_alg, key) = match session_key {
-            PlainSessionKey::V3_4 { sym_alg, key } | PlainSessionKey::Unknown { sym_alg, key } => {
-                (*sym_alg, key)
-            }
+            PlainSessionKey::V3_4 { sym_alg, key } => (*sym_alg, key),
             PlainSessionKey::V5 { .. } | PlainSessionKey::V6 { .. } => {
                 bail!("must not combine unprotected encryption with new session keys");
             }
@@ -62,7 +60,7 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
             Self::Body {
                 decryptor: MaybeDecryptor::Raw(source),
             } => {
-                let decryptor = sym_alg.stream_decryptor_unprotected(key, source)?;
+                let decryptor = sym_alg.stream_decryptor_unprotected(key.as_ref(), source)?;
                 let decryptor = MaybeDecryptor::Decryptor(decryptor);
                 *self = Self::Body { decryptor };
                 Ok(())

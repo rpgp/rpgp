@@ -1,5 +1,5 @@
 use log::debug;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::{
     crypto::sym::SymmetricKeyAlgorithm,
@@ -10,7 +10,7 @@ use crate::{
 
 /// Decrypted session key.
 ///
-/// A v3/v4 session key can be used  v1 SEIPD (and historically with SED packets).
+/// A v3/v4 session key can be used with a v1 SEIPD (and historically with SED packets).
 /// A v6 session key can only be used with a v2 SEIPD.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-versions-in-encrypte>
@@ -18,49 +18,69 @@ use crate::{
 /// (Note that SED packets are malleable. They are historical and considered dangerous!
 /// They MUST NOT be produced and decryption is also discouraged:
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#sed>)
-#[derive(derive_more::Debug, Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+#[derive(Debug, Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub enum PlainSessionKey {
     /// A session key from a v3 PKESK or a v4 SKESK
     ///
     /// (Note: for historical reasons, the OpenPGP format doesn't specify a v4 PKESK or a V3 SKESK)
     V3_4 {
         sym_alg: SymmetricKeyAlgorithm,
-        #[debug("..")]
-        key: Vec<u8>,
+        key: RawSessionKey,
     },
-
     V5 {
-        #[debug("..")]
-        key: Vec<u8>,
+        key: RawSessionKey,
     },
-
     /// A session key from a v6 PKESK or a v6 SKESK
     V6 {
-        #[debug("..")]
-        key: Vec<u8>,
-    },
-
-    /// If the version is unknown, it will be matched to the packets
-    Unknown {
-        sym_alg: SymmetricKeyAlgorithm,
-        #[debug("..")]
-        key: Vec<u8>,
+        key: RawSessionKey,
     },
 }
 
-impl PlainSessionKey {
-    pub fn unknown(sym_alg: SymmetricKeyAlgorithm, key: impl AsRef<[u8]>) -> Self {
-        Self::Unknown {
-            sym_alg,
-            key: key.as_ref().to_vec(),
-        }
+/// A raw session key, must be kept secret.
+///
+/// Usually occurs as a building block of a [PlainSessionKey].
+#[derive(derive_more::Debug, Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+pub struct RawSessionKey(#[debug("..")] Zeroizing<Vec<u8>>);
+
+impl RawSessionKey {
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl From<&[u8]> for RawSessionKey {
+    fn from(value: &[u8]) -> Self {
+        Self(Zeroizing::new(value.to_vec()))
+    }
+}
+
+impl From<Vec<u8>> for RawSessionKey {
+    fn from(value: Vec<u8>) -> Self {
+        Self(Zeroizing::new(value))
+    }
+}
+
+impl From<Zeroizing<Vec<u8>>> for RawSessionKey {
+    fn from(value: Zeroizing<Vec<u8>>) -> Self {
+        Self(value)
+    }
+}
+
+impl AsRef<[u8]> for RawSessionKey {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl PlainSessionKey {
     pub fn sym_algorithm(&self) -> Option<SymmetricKeyAlgorithm> {
         match self {
             Self::V3_4 { sym_alg, .. } => Some(*sym_alg),
             Self::V5 { .. } | Self::V6 { .. } => None,
-            Self::Unknown { sym_alg, .. } => Some(*sym_alg),
         }
     }
 }

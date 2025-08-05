@@ -7,9 +7,10 @@ use log::debug;
 use proptest::prelude::*;
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
+use zeroize::Zeroizing;
 
 use crate::{
-    composed::PlainSessionKey,
+    composed::{PlainSessionKey, RawSessionKey},
     crypto::{aead::AeadAlgorithm, sym::SymmetricKeyAlgorithm},
     errors::{
         ensure, ensure_eq, format_err, unimplemented_err, unsupported_err, InvalidInputSnafu,
@@ -159,8 +160,9 @@ impl SymKeyEncryptedSessionKey {
         }
     }
 
-    pub fn decrypt(&self, key: &[u8]) -> Result<PlainSessionKey> {
+    pub fn decrypt(&self, key: impl AsRef<[u8]>) -> Result<PlainSessionKey> {
         debug!("decrypt session key {:?}", self.version());
+        let key = key.as_ref();
 
         let Some(decrypted_key) = self.encrypted_key() else {
             unsupported_err!("SKESK {:?}", self.version());
@@ -173,7 +175,7 @@ impl SymKeyEncryptedSessionKey {
                 sym_algorithm.decrypt_with_iv_regular(key, &iv, &mut decrypted_key)?;
 
                 let sym_alg = SymmetricKeyAlgorithm::from(decrypted_key[0]);
-                let key = decrypted_key[1..].to_vec();
+                let key = RawSessionKey::from(&decrypted_key[1..]);
 
                 // v4 SKESK decryption doesn't guarantee integrity.
                 // Check plausibility of decrypted data.
@@ -212,7 +214,7 @@ impl SymKeyEncryptedSessionKey {
                 alg.decrypt_in_place(sym_algorithm, ikm, aead.iv(), &info, &mut decrypted_key)?;
 
                 Ok(PlainSessionKey::V5 {
-                    key: decrypted_key.into(),
+                    key: RawSessionKey::from(decrypted_key.to_vec()),
                 })
             }
             Self::V6 {
@@ -241,7 +243,7 @@ impl SymKeyEncryptedSessionKey {
                 alg.decrypt_in_place(sym_algorithm, &okm, aead.iv(), &info, &mut decrypted_key)?;
 
                 Ok(PlainSessionKey::V6 {
-                    key: decrypted_key.into(),
+                    key: decrypted_key.to_vec().into(),
                 })
             }
             Self::Other { version, .. } => {
@@ -270,7 +272,7 @@ impl SymKeyEncryptedSessionKey {
     /// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-version-4-symmetric-key-enc>
     pub fn encrypt_v4(
         msg_pw: &Password,
-        session_key: &[u8],
+        session_key: &RawSessionKey,
         s2k: StringToKey,
         alg: SymmetricKeyAlgorithm,
     ) -> Result<Self> {
@@ -290,13 +292,13 @@ impl SymKeyEncryptedSessionKey {
 
         let key = s2k.derive_key(&msg_pw.read(), alg.key_size())?;
 
-        let mut private_key = Vec::with_capacity(session_key.len());
+        let mut private_key = Zeroizing::new(Vec::with_capacity(session_key.len()));
         private_key.push(u8::from(alg));
-        private_key.extend(session_key);
+        private_key.extend(session_key.as_ref());
 
         let iv = vec![0u8; alg.block_size()];
         let mut encrypted_key = private_key.to_vec();
-        alg.encrypt_with_iv_regular(&key, &iv, &mut encrypted_key)?;
+        alg.encrypt_with_iv_regular(key.as_ref(), &iv, &mut encrypted_key)?;
 
         let len = 2 + s2k.write_len() + encrypted_key.len();
         let packet_header =
@@ -316,7 +318,7 @@ impl SymKeyEncryptedSessionKey {
     pub fn encrypt_v6<R: CryptoRng + Rng>(
         mut rng: R,
         msg_pw: &Password,
-        session_key: &[u8],
+        session_key: &RawSessionKey,
         s2k: StringToKey,
         sym_algorithm: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
@@ -347,7 +349,7 @@ impl SymKeyEncryptedSessionKey {
             aead.into(),
         ];
 
-        let hk = hkdf::Hkdf::<Sha256>::new(salt, &ikm);
+        let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm.as_ref());
         let mut okm = [0u8; 42];
         hk.expand(&info, &mut okm).expect("42");
 
@@ -355,7 +357,7 @@ impl SymKeyEncryptedSessionKey {
         rng.fill_bytes(&mut iv);
 
         // AEAD encrypt
-        let mut encrypted_key: BytesMut = session_key.into();
+        let mut encrypted_key: BytesMut = session_key.as_ref().into();
         aead.encrypt_in_place(&sym_algorithm, &okm, &iv, &info, &mut encrypted_key)?;
 
         let aead = match aead {
@@ -704,7 +706,7 @@ mod tests {
             sym_alg in supported_sym_alg_gen(),
             s2k in s2k_with_salt_gen()
         ) -> SymKeyEncryptedSessionKey {
-            SymKeyEncryptedSessionKey::encrypt_v4(&pw.into(), &session_key, s2k, sym_alg)
+            SymKeyEncryptedSessionKey::encrypt_v4(&pw.into(), &session_key.into(), s2k, sym_alg)
             .unwrap()
         }
     }
@@ -721,7 +723,7 @@ mod tests {
             SymKeyEncryptedSessionKey::encrypt_v6(
                 &mut rng,
                 &pw.into(),
-                &session_key,
+                &session_key.into(),
                 s2k,
                 sym_alg,
                 aead,
