@@ -275,6 +275,9 @@ impl Tag {
             18 => Self::SymEncryptedProtectedData,
             19 => Self::ModDetectionCode,
             21 => Self::Padding,
+            22..=39 => Self::UnassignedCritical(bits),
+            40..=59 => Self::UnassignedNonCritical(bits),
+            60..=63 => Self::Experimental(bits),
             i => Self::Other(i),
         }
     }
