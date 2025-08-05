@@ -886,9 +886,40 @@ mod tests {
             let _ = r.read_to_end(&mut out).expect("ok");
 
             assert_eq!(out, norm.as_bytes());
+        }
+    }
 
-            drop(r);
-            drop(out);
+    #[test]
+    fn test_crlf_check_reader_bad() {
+        // tests the "bad" case of CrLfCheckReader
+
+        pretty_env_logger::try_init().ok();
+
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+        for count in 1..10000 {
+            let string = random_string(&mut rng, count % 100);
+
+            if !string.contains('\n') && !string.contains('\r') {
+                continue;
+            }
+
+            // normalize to either "just Cr" or "just Lf", expect failure
+            let norm = normalize_lines(
+                &string,
+                if rng.gen::<bool>() {
+                    LineBreak::Cr
+                } else {
+                    LineBreak::Lf
+                },
+            );
+
+            let b: Bytes = Bytes::from(norm.to_string());
+
+            let cr = ChaosReader::new(&mut rng, b);
+            let mut r = CrLfCheckReader::new(cr);
+
+            let mut out = Vec::new();
+            let _ = r.read_to_end(&mut out).err().expect("should error");
         }
     }
 
