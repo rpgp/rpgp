@@ -249,10 +249,10 @@ impl PacketTrait for LiteralData {
     }
 }
 
-/// A reader that can check if literal packet content is legal.
+/// A reader that checks if literal data packet content is legal.
 ///
-/// For binary literals, this passes data through and checks nothing.
-/// For UTF-8 literals, this checks that line-endings are CR+LF, and the data is valid UTF-8
+/// For "Binary" literals, this passes data through and checks nothing.
+/// For "Utf8" literals, this checks that line-endings are CR+LF, and the data is valid UTF-8.
 pub(crate) enum LiteralCheckingReader<R: io::Read> {
     Utf8Checking(CrLfCheckReader<Utf8CheckReader<R>>),
     BinaryRaw(R),
@@ -306,7 +306,9 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
 
         // If the previous read ended with a CR, an LF must follow now
         if self.last_was_cr && (len == 0 || buf[0] != b'\n') {
-            return Err(io::Error::other("Illegal line ending")); // FIXME
+            return Err(io::Error::other(
+                "Illegal line ending (CR without matching LF)",
+            ));
         }
 
         // Reading is done, no more checks required
@@ -317,16 +319,22 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
         // Check the body of this read for any illegal linebreaks
 
         let mut pos = if self.last_was_cr { 1 } else { 0 };
+
+        // inspect data from the start until the second-to-last byte
         while pos < len - 1 {
             // bare linefeed is not ok
             if buf[pos] == b'\n' {
-                return Err(io::Error::other("Illegal line ending")); // FIXME
+                return Err(io::Error::other(
+                    "Illegal line ending (LF without preceding CR)",
+                ));
             }
 
             // CR must be followed by LF
             if buf[pos] == b'\r' {
                 if buf[pos + 1] != b'\n' {
-                    return Err(io::Error::other("Illegal line ending")); // FIXME
+                    return Err(io::Error::other(
+                        "Illegal line ending (CR without matching LF)",
+                    ));
                 }
 
                 pos += 2;
@@ -335,11 +343,16 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
             }
         }
 
+        // If `buf` doesn't end in `\r\n`, then `pos` will now point at the very last byte.
+        // In this case, we check if it is an un-matched '\n'.
         if pos < len && buf[pos] == b'\n' {
-            return Err(io::Error::other("Illegal line ending")); // FIXME
+            return Err(io::Error::other(
+                "Illegal line ending (LF without preceding CR)",
+            ));
         }
 
-        // remember if the last character is a CR, so we can check for a matching LF in the next read
+        // Remember if the last character is a CR. If so, we must check for a matching LF at the
+        // start of the next read.
         self.last_was_cr = buf[len - 1] == b'\r';
 
         Ok(len)

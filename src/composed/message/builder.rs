@@ -59,13 +59,15 @@ pub struct Builder<'a, R = DummyReader, E = NoEncryption> {
 
     /// DataMode may be `Binary` or `Utf8` in this builder.
     ///
-    /// The content of literal packets is never changed
-    /// (in part because we can't currently handle on the fly changes of the length of literals).
+    /// In `DataMode::Binary`, the payload can be arbitrary data.
     ///
-    /// In `DataMode::Utf8` bad data will be rejected with an error:
-    /// Line endings must be CRLF and the payload must be UTF-8.
+    /// `DataMode::Utf8` enforces two constraints: The payload must be valid UTF-8, and line
+    /// endings must be CR+LF. Non-conforming input data is rejected with an error.
     ///
     /// Note that the usefulness of text-mode (Utf8) literal data packets is generally questionable.
+    ///
+    /// The content of literal packets is never changed (e.g. normalized) by this builder
+    /// (in part because we can't currently handle on the fly changes of the length of literals).
     data_mode: DataMode,
     /// Only Binary or Text are allowed
     sign_typ: SignatureType,
