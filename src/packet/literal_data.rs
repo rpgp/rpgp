@@ -687,6 +687,8 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Read;
+
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
@@ -694,7 +696,7 @@ mod tests {
     use crate::{
         normalize_lines::normalize_lines,
         packet::Packet,
-        util::test::{check_strings, random_string, ChaosReader},
+        util::test::{check_strings, random_string, random_utf8_string, ChaosReader},
     };
 
     #[test]
@@ -837,6 +839,28 @@ mod tests {
             assert_eq!(data.header, header);
             let normalized_s = normalize_lines(&s, LineBreak::Crlf);
             check_strings(data.as_str().unwrap(), normalized_s);
+        }
+    }
+
+    #[test]
+    fn test_utf8_check_reader() {
+        pretty_env_logger::try_init().ok();
+
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+        for len in (1..100_000).step_by(1000) {
+            let string = random_utf8_string(&mut rng, len);
+            let b: Bytes = Bytes::from(string.clone());
+
+            let cr = ChaosReader::new(&mut rng, b);
+            let mut r = Utf8CheckReader::new(cr);
+
+            let mut out = Vec::new();
+            let _ = r.read_to_end(&mut out).expect("ok");
+
+            assert_eq!(out, string.as_bytes());
+
+            drop(r);
+            drop(out);
         }
     }
 

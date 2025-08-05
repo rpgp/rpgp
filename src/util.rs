@@ -127,6 +127,10 @@ pub(crate) mod test {
             .collect()
     }
 
+    pub(crate) fn random_utf8_string(rng: &mut impl Rng, size: usize) -> String {
+        (0..size).map(|_| rng.gen::<char>()).collect()
+    }
+
     #[derive(Debug)]
     pub(crate) struct ChaosReader<R: Rng> {
         rng: R,
