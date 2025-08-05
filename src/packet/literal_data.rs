@@ -392,13 +392,16 @@ impl<R: io::Read> io::Read for Utf8CheckReader<R> {
             Err(err) => {
                 let valid_up_to = err.valid_up_to();
 
-                // store a potentially intermediate bit of UTF-8 for the next read
-                self.rest = check[valid_up_to..].to_vec();
+                // handle the remaining data, which may be a fragment of UTF-8 that will be completed in the next read
+                let rest = &check[valid_up_to..];
 
-                // however, 3 bytes is the longest possibly legal intermediate bit of UTF-8 data
-                if self.rest.len() > 3 {
+                // 3 bytes is the longest possibly legal intermediate fragment of UTF-8 data.
+                // If the rest is longer, then the data is definitely not valid UTF-8.
+                if rest.len() > 3 {
                     return Err(io::Error::other("Illegal UTF-8 data")); // FIXME
                 }
+
+                self.rest = rest.to_vec();
             }
         }
 
