@@ -50,9 +50,7 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
 
     pub fn decrypt(&mut self, session_key: &PlainSessionKey) -> Result<()> {
         let (sym_alg, key) = match session_key {
-            PlainSessionKey::V3_4 { sym_alg, key } | PlainSessionKey::Unknown { sym_alg, key } => {
-                (*sym_alg, key)
-            }
+            PlainSessionKey::V3_4 { sym_alg, key } => (*sym_alg, key),
             PlainSessionKey::V5 { .. } | PlainSessionKey::V6 { .. } => {
                 bail!("must not combine unprotected encryption with new session keys");
             }

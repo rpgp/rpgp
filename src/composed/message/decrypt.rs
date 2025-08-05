@@ -10,7 +10,7 @@ use crate::{
 
 /// Decrypted session key.
 ///
-/// A v3/v4 session key can be used  v1 SEIPD (and historically with SED packets).
+/// A v3/v4 session key can be used with a v1 SEIPD (and historically with SED packets).
 /// A v6 session key can only be used with a v2 SEIPD.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-versions-in-encrypte>
@@ -34,14 +34,11 @@ pub enum PlainSessionKey {
     V6 {
         key: RawSessionKey,
     },
-    /// If the version is unknown, it will be matched to the packets
-    Unknown {
-        sym_alg: SymmetricKeyAlgorithm,
-        key: RawSessionKey,
-    },
 }
 
 /// A raw session key, must be kept secret.
+///
+/// Usually occurs as a building block of a [PlainSessionKey].
 #[derive(derive_more::Debug, Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct RawSessionKey(#[debug("..")] Zeroizing<Vec<u8>>);
 
@@ -80,18 +77,10 @@ impl AsRef<[u8]> for RawSessionKey {
 }
 
 impl PlainSessionKey {
-    pub fn unknown(sym_alg: SymmetricKeyAlgorithm, key: impl AsRef<[u8]>) -> Self {
-        Self::Unknown {
-            sym_alg,
-            key: key.as_ref().into(),
-        }
-    }
-
     pub fn sym_algorithm(&self) -> Option<SymmetricKeyAlgorithm> {
         match self {
             Self::V3_4 { sym_alg, .. } => Some(*sym_alg),
             Self::V5 { .. } | Self::V6 { .. } => None,
-            Self::Unknown { sym_alg, .. } => Some(*sym_alg),
         }
     }
 }
