@@ -53,7 +53,10 @@ impl MessageReader<'_> {
                 Some(Ok(packet)) => {
                     let tag = packet.packet_header().tag();
                     match tag {
-                        Tag::Padding | Tag::Marker | Tag::Other(40..=63) => {
+                        Tag::Padding
+                        | Tag::Marker
+                        | Tag::UnassignedNonCritical(_)
+                        | Tag::Experimental(_) => {
                             debug!("ignoring trailing packet: {tag:?}");
                         }
                         _ => {

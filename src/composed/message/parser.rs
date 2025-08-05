@@ -176,7 +176,7 @@ pub(super) fn next(
                 packet.drain()?;
                 packets = crate::packet::PacketParser::new(packet.into_inner());
             }
-            Tag::Other(40..=63) => {
+            Tag::UnassignedNonCritical(_) | Tag::Experimental(_) => {
                 // Skip "Unassigned Non-Critical" and "Private or Experimental Use" packets
 
                 // drain reader
