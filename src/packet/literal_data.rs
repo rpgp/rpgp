@@ -354,15 +354,12 @@ where
     R: io::Read,
 {
     source: R,
-    rest: Vec<u8>,
+    rest: Option<Vec<u8>>,
 }
 
 impl<R: io::Read> Utf8CheckReader<R> {
     fn new(source: R) -> Self {
-        Self {
-            source,
-            rest: vec![],
-        }
+        Self { source, rest: None }
     }
 
     pub(crate) fn into_inner(self) -> R {
@@ -372,10 +369,36 @@ impl<R: io::Read> Utf8CheckReader<R> {
 
 impl<R: io::Read> io::Read for Utf8CheckReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        // Checks if `data` contains valid utf-8 and returns up to 3 bytes of overhang, which
+        // might add up to a valid codepoint with more data in the following read.
+        // Errors if data is definitely not UTF-8.
+        fn check_utf8(data: &[u8]) -> Result<Option<Vec<u8>>, io::Error> {
+            match std::str::from_utf8(data) {
+                Ok(_) => Ok(None),
+                Err(err) => {
+                    let valid_up_to = err.valid_up_to();
+
+                    // handle the remaining data, which may be a fragment of UTF-8 that will be completed in the next read
+                    let rest = &data[valid_up_to..];
+
+                    match rest.len() {
+                        0 => Ok(None),
+                        1..=3 => Ok(Some(Vec::from(rest))),
+
+                        // 3 bytes is the longest possibly legal intermediate fragment of UTF-8 data.
+                        // If the rest is longer, then the data is definitely not valid UTF-8.
+                        4.. => Err(io::Error::other("Illegal UTF-8 data")), // FIXME
+                    }
+                }
+            }
+        }
+
         let len = self.source.read(buf)?;
 
         if len == 0 {
-            if !self.rest.is_empty() {
+            // we reached the end of the input stream
+
+            if self.rest.is_some() {
                 // If the parser is mid-codepoint at the end of the stream, error
                 return Err(io::Error::other("Illegal UTF-8 data")); // FIXME
             }
@@ -383,27 +406,13 @@ impl<R: io::Read> io::Read for Utf8CheckReader<R> {
             return Ok(0);
         }
 
-        // get remaining bytes from before and append newly read data for checking
-        let mut check = std::mem::take(&mut self.rest);
-        check.extend_from_slice(&buf[..len]);
+        self.rest = if let Some(mut check) = self.rest.take() {
+            check.extend_from_slice(&buf[..len]);
 
-        match std::str::from_utf8(&check) {
-            Ok(_) => {}
-            Err(err) => {
-                let valid_up_to = err.valid_up_to();
-
-                // handle the remaining data, which may be a fragment of UTF-8 that will be completed in the next read
-                let rest = &check[valid_up_to..];
-
-                // 3 bytes is the longest possibly legal intermediate fragment of UTF-8 data.
-                // If the rest is longer, then the data is definitely not valid UTF-8.
-                if rest.len() > 3 {
-                    return Err(io::Error::other("Illegal UTF-8 data")); // FIXME
-                }
-
-                self.rest = rest.to_vec();
-            }
-        }
+            check_utf8(&check)?
+        } else {
+            check_utf8(&buf[..len])?
+        };
 
         Ok(len)
     }
