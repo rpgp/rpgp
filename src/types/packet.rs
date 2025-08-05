@@ -218,7 +218,7 @@ impl From<u8> for Tag {
             40..=59 => Self::UnassignedNonCritical(value),
             60..=63 => Self::Experimental(value),
 
-            o => Self::Other(o),
+            0 | 15 | 16 | 64.. => Self::Other(value),
         }
     }
 }
