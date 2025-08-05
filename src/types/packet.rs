@@ -1,4 +1,5 @@
 use std::io::{self, BufRead};
+use std::ops::Deref;
 
 use byteorder::{BigEndian, WriteBytesExt};
 use log::debug;
@@ -156,7 +157,36 @@ pub enum Tag {
 
     /// Catchall, this should only occur for the (illegal) type IDs 0, 15 and 16
     #[cfg_attr(test, proptest(skip))]
-    Other(u8),
+    Other(OtherTag),
+}
+
+/// Tag that can only be `0`, `15`, `16`, or `64` and above.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(transparent)]
+pub struct OtherTag(u8);
+
+impl OtherTag {
+    /// Creates a new tag, returning `None` if it is not a valid `Other` tag.
+    pub fn new(value: u8) -> Option<Self> {
+        match value {
+            0 | 15 | 16 | 64.. => Some(Self(value)),
+            _ => None,
+        }
+    }
+}
+
+impl Deref for OtherTag {
+    type Target = u8;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Into<u8> for OtherTag {
+    fn into(self) -> u8 {
+        self.0
+    }
 }
 
 impl From<Tag> for u8 {
@@ -187,7 +217,7 @@ impl From<Tag> for u8 {
             Tag::UnassignedNonCritical(id) => id,
             Tag::Experimental(id) => id,
 
-            Tag::Other(id) => id,
+            Tag::Other(id) => id.into(),
         }
     }
 }
@@ -218,7 +248,7 @@ impl From<u8> for Tag {
             40..=59 => Self::UnassignedNonCritical(value),
             60..=63 => Self::Experimental(value),
 
-            0 | 15 | 16 | 64.. => Self::Other(value),
+            0 | 15 | 16 | 64.. => Self::Other(OtherTag(value)),
         }
     }
 }
