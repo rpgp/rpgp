@@ -92,7 +92,7 @@ impl PacketLength {
 /// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#appendix-B.1-3.7.1>
 ///
 /// However, rPGP will continue to use the term "(Packet) Tag" for the time being.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
 #[non_exhaustive]
@@ -142,9 +142,85 @@ pub enum Tag {
     /// Padding Packet
     Padding = 21,
 
-    #[num_enum(catch_all)]
+    /// Unassigned Critical Packets [22-39]
+    #[cfg_attr(test, proptest(skip))]
+    UnassignedCritical(u8),
+
+    /// Unassigned Non-Critical Packets [40-59]
+    #[cfg_attr(test, proptest(skip))]
+    UnassignedNonCritical(u8),
+
+    /// Private or Experimental Use [60-63]
+    #[cfg_attr(test, proptest(skip))]
+    Experimental(u8),
+
+    /// Catchall, this should only occur for the (illegal) type IDs 0, 15 and 16
     #[cfg_attr(test, proptest(skip))]
     Other(u8),
+}
+
+impl From<Tag> for u8 {
+    fn from(value: Tag) -> Self {
+        match value {
+            Tag::PublicKeyEncryptedSessionKey => 1,
+            Tag::Signature => 2,
+            Tag::SymKeyEncryptedSessionKey => 3,
+            Tag::OnePassSignature => 4,
+            Tag::SecretKey => 5,
+            Tag::PublicKey => 6,
+            Tag::SecretSubkey => 7,
+            Tag::CompressedData => 8,
+            Tag::SymEncryptedData => 9,
+            Tag::Marker => 10,
+            Tag::LiteralData => 11,
+            Tag::Trust => 12,
+            Tag::UserId => 13,
+            Tag::PublicSubkey => 14,
+
+            Tag::UserAttribute => 17,
+            Tag::SymEncryptedProtectedData => 18,
+            Tag::ModDetectionCode => 19,
+            Tag::GnupgAead => 20,
+            Tag::Padding => 21,
+
+            Tag::UnassignedCritical(id) => id,
+            Tag::UnassignedNonCritical(id) => id,
+            Tag::Experimental(id) => id,
+
+            Tag::Other(id) => id,
+        }
+    }
+}
+impl From<u8> for Tag {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => Self::PublicKeyEncryptedSessionKey,
+            2 => Self::Signature,
+            3 => Self::SymKeyEncryptedSessionKey,
+            4 => Self::OnePassSignature,
+            5 => Self::SecretKey,
+            6 => Self::PublicKey,
+            7 => Self::SecretSubkey,
+            8 => Self::CompressedData,
+            9 => Self::SymEncryptedData,
+            10 => Self::Marker,
+            11 => Self::LiteralData,
+            12 => Self::Trust,
+            13 => Self::UserId,
+            14 => Self::PublicSubkey,
+
+            17 => Self::UserAttribute,
+            18 => Self::SymEncryptedProtectedData,
+            19 => Self::ModDetectionCode,
+            20 => Self::GnupgAead,
+            21 => Self::Padding,
+            22..=39 => Self::UnassignedCritical(value),
+            40..=59 => Self::UnassignedNonCritical(value),
+            60..=63 => Self::Experimental(value),
+
+            o => Self::Other(o),
+        }
+    }
 }
 
 impl Tag {
@@ -171,6 +247,9 @@ impl Tag {
             Self::ModDetectionCode => 19,
             Self::GnupgAead => 20,
             Self::Padding => 21,
+            Self::UnassignedCritical(i) => i,
+            Self::UnassignedNonCritical(i) => i,
+            Self::Experimental(i) => i,
             Self::Other(i) => i,
         };
         0b1100_0000 | t
