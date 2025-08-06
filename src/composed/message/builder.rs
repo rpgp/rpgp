@@ -2573,4 +2573,46 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn esk_less_roundtrip() -> TestResult {
+        // Encryption roundtrip without any ESK packets, just based on a session key.
+
+        // NOTE: Session keys must be random! This fixed session key is used for testing purposes.
+        // Never use fixed session keys in real world code!
+        const MY_TERRIBLE_SESSION_KEY: [u8; 16] = [0x01; 16];
+
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        const PLAIN: &str = "hello world";
+
+        let mut builder = Builder::from_bytes(&[][..], PLAIN.as_bytes()).seipd_v2(
+            &mut rng,
+            SymmetricKeyAlgorithm::AES128,
+            AeadAlgorithm::Ocb,
+            ChunkSize::default(),
+        );
+        builder.set_session_key(MY_TERRIBLE_SESSION_KEY.to_vec().into())?;
+
+        let encrypted = builder.to_vec(&mut rng)?;
+
+        // Re-parse and decrypt with the same session key
+        let (message, _) = Message::from_reader(&*encrypted)?;
+
+        // check that the message is parsed as an encrypted message with no ESK
+        let Message::Encrypted { esk, .. } = &message else {
+            panic!("should be an encrypted message")
+        };
+        assert!(esk.is_empty());
+
+        let mut dec = message.decrypt_with_session_key(PlainSessionKey::V6 {
+            key: MY_TERRIBLE_SESSION_KEY.to_vec().into(),
+        })?;
+
+        let plain = dec.as_data_vec()?;
+        assert_eq!(plain, PLAIN.as_bytes());
+
+        Ok(())
+    }
 }
