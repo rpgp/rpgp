@@ -406,7 +406,10 @@ impl<R: io::Read> io::Read for Utf8CheckReader<R> {
 
                         // 3 bytes is the longest possibly legal intermediate fragment of UTF-8 data.
                         // If `rest` is longer, then the data is definitely not valid UTF-8.
-                        4.. => Err(io::Error::other("Illegal UTF-8 data")),
+                        4.. => Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "Invalid UTF-8 data",
+                        )),
                     }
                 }
             }
@@ -419,7 +422,10 @@ impl<R: io::Read> io::Read for Utf8CheckReader<R> {
 
             // If the UTF-8 parsing seems to be stuck mid-codepoint, we error
             if self.rest.is_some() {
-                return Err(io::Error::other("Illegal UTF-8 data"));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Invalid UTF-8 data",
+                ));
             }
 
             return Ok(0);
