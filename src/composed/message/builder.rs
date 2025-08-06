@@ -22,13 +22,11 @@ use crate::{
     },
     errors::{bail, ensure, ensure_eq, Result},
     line_writer::{LineBreak, LineWriter},
-    normalize_lines::NormalizedReader,
     packet::{
         CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader,
-        MaybeNormalizedReader, OnePassSignature, PacketHeader, PacketTrait,
-        PublicKeyEncryptedSessionKey, SignatureHasher, SignatureType, SignatureVersionSpecific,
-        Subpacket, SubpacketData, SymEncryptedProtectedData, SymEncryptedProtectedDataConfig,
-        SymKeyEncryptedSessionKey,
+        OnePassSignature, PacketHeader, PacketTrait, PublicKeyEncryptedSessionKey, SignatureHasher,
+        SignatureType, SignatureVersionSpecific, Subpacket, SubpacketData,
+        SymEncryptedProtectedData, SymEncryptedProtectedDataConfig, SymKeyEncryptedSessionKey,
     },
     ser::Serialize,
     types::{
@@ -58,9 +56,18 @@ pub struct Builder<'a, R = DummyReader, E = NoEncryption> {
     encryption: E,
     /// The chunk size when generating partial packets
     partial_chunk_size: u32,
-    // XXX: text-mode literals (including Utf8) are not currently supported by this builder:
-    // Normalizing line endings in them may change their length, and we don't currently handle this.
-    // However, the usefulness of text-mode literal data packets is questionable.
+
+    /// DataMode may be `Binary` or `Utf8` in this builder.
+    ///
+    /// In `DataMode::Binary`, the payload can be arbitrary data.
+    ///
+    /// `DataMode::Utf8` enforces two constraints: The payload must be valid UTF-8, and line
+    /// endings must be CR+LF. Non-conforming input data is rejected with an error.
+    ///
+    /// Note that the usefulness of text-mode (Utf8) literal data packets is generally questionable.
+    ///
+    /// The content of literal packets is never changed (e.g. normalized) by this builder
+    /// (in part because we can't currently handle on the fly changes of the length of literals).
     data_mode: DataMode,
     /// Only Binary or Text are allowed
     sign_typ: SignatureType,
@@ -577,19 +584,22 @@ impl<R: Read> Builder<'_, R, NoEncryption> {
 }
 
 impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
-    // XXX: we don't currently allow setting the literal data mode, it *must* be binary!
+    /// Configure the [`DataMode`] for the literal data portion.
+    ///
+    /// Defaults to `DataMode::Binary`
+    ///
+    /// Alternatively, `DataMode::Utf8` is supported.
+    /// In this case, the payload must be valid UTF-8, with CR-LF line endings!
+    pub fn data_mode(&mut self, mode: DataMode) -> Result<&mut Self> {
+        ensure!(
+            [DataMode::Binary, DataMode::Utf8].contains(&mode),
+            "Unsupported data mode {:?}",
+            mode
+        );
 
-    // /// Configure the [`DataMode`] for the literal data portion.
-    // ///
-    // /// Defaults to `DataMode::Binary`
-    // ///
-    // /// If the mode is set to `DataMode::Utf8` (or `DataMode::Text`), the [SignatureType] will be `Text`, and line endings will be hashed in normalized form.
-    // pub fn data_mode(mut self, mode: DataMode) -> Self {
-    //     assert_eq!(mode, DataMode::Binary); // FIXME
-    //
-    //     self.data_mode = mode;
-    //     self
-    // }
+        self.data_mode = mode;
+        Ok(self)
+    }
 
     /// Configure the data signatures to use `SignatureType::Binary`.
     ///
@@ -1151,13 +1161,13 @@ enum State<'a, R: std::io::Read> {
         ops: VecDeque<OnePassSignature>,
         buffer: BytesMut,
         configs: VecDeque<SigningConfig<'a>>,
-        source: LiteralDataGenerator<SignatureHashers<MaybeNormalizedReader<R>>>,
+        source: LiteralDataGenerator<SignatureHashers<R>>,
     },
     /// Pass through the source,
     /// sending the data to the hashers as well
     Body {
         configs: VecDeque<SigningConfig<'a>>,
-        source: LiteralDataGenerator<SignatureHashers<MaybeNormalizedReader<R>>>,
+        source: LiteralDataGenerator<SignatureHashers<R>>,
     },
     /// Buffer a single Signature
     Signatures {
@@ -1215,15 +1225,9 @@ impl<'a, R: std::io::Read> SignGenerator<'a, R> {
             configs.push_back(signer);
         }
 
-        let normalized_source = if literal_data_header.mode() == DataMode::Utf8 {
-            MaybeNormalizedReader::Normalized(NormalizedReader::new(source, LineBreak::Crlf))
-        } else {
-            MaybeNormalizedReader::Raw(source)
-        };
-
         let hashed_source = SignatureHashers {
             hashers: sign_hashers,
-            source: normalized_source,
+            source,
         };
 
         let source =
@@ -2502,6 +2506,70 @@ mod tests {
         };
 
         assert_eq!(key.as_ref(), MY_TERRIBLE_SESSION_KEY);
+
+        Ok(())
+    }
+
+    #[test]
+    fn sign_utf8_lit() -> TestResult {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(std::fs::File::open(
+            "./tests/autocrypt/alice@autocrypt.example.sec.asc",
+        )?)?;
+
+        let key = &skey.primary_key;
+
+        let mut builder = Builder::from_bytes(&[][..], b"hello\r\nworld".as_slice());
+        builder.sign_text().data_mode(DataMode::Utf8)?;
+        builder.sign(key, Password::empty(), HashAlgorithm::Sha256);
+
+        let signed = builder
+            .to_armored_string(&mut rng, ArmorOptions::default())
+            .unwrap();
+
+        // re-parse and check the signature
+        let (mut message, _) = Message::from_armor(signed.as_bytes()).unwrap();
+
+        let mut data = vec![];
+        message.read_to_end(&mut data).expect("read msg");
+
+        // returns a sig if verification shows that the signature is correct
+        let _sig = message
+            .verify(key.public_key())
+            .expect("signature verifies as correct");
+
+        Ok(())
+    }
+
+    #[test]
+    fn sign_utf8_lit_reject_invalid() -> TestResult {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(std::fs::File::open(
+            "./tests/autocrypt/alice@autocrypt.example.sec.asc",
+        )?)?;
+
+        let key = &skey.primary_key;
+
+        // Bad line-ending (not "CR+LF") should be rejected
+        let mut builder = Builder::from_bytes(&[][..], b"hello\nworld".as_slice());
+        builder.sign_text().data_mode(DataMode::Utf8)?;
+        builder.sign(key, Password::empty(), HashAlgorithm::Sha256);
+
+        let res = builder.to_vec(&mut rng);
+        assert!(res.is_err());
+
+        // Illegal UTF-8 should be rejected
+        let invalid_utf8 = &[0xc3, 0x28][..];
+        let mut builder = Builder::from_bytes(&[][..], invalid_utf8);
+        builder.sign_text().data_mode(DataMode::Utf8)?;
+        builder.sign(key, Password::empty(), HashAlgorithm::Sha256);
+
+        let res = builder.to_vec(&mut rng);
+        assert!(res.is_err());
 
         Ok(())
     }

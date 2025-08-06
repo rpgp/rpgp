@@ -11,7 +11,7 @@ use proptest::prelude::*;
 use crate::{
     errors::{ensure, Result},
     line_writer::LineBreak,
-    normalize_lines::{normalize_lines, NormalizedReader},
+    normalize_lines::normalize_lines,
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -249,34 +249,205 @@ impl PacketTrait for LiteralData {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
-pub(crate) enum MaybeNormalizedReader<R: io::Read> {
-    Normalized(NormalizedReader<R>),
-    Raw(R),
+/// A reader that checks if literal data packet content is legal.
+///
+/// For "Binary" literals, this passes data through and checks nothing.
+/// For "Utf8" literals, this checks that line-endings are CR+LF, and the data is valid UTF-8.
+pub(crate) enum LiteralCheckingReader<R: io::Read> {
+    Utf8Checking(CrLfCheckReader<Utf8CheckReader<R>>),
+    BinaryRaw(R),
 }
 
-impl<R: io::Read> MaybeNormalizedReader<R> {
+impl<R: io::Read> LiteralCheckingReader<R> {
     pub(crate) fn into_inner(self) -> R {
         match self {
-            Self::Normalized(s) => s.into_inner(),
-            Self::Raw(s) => s,
+            Self::Utf8Checking(s) => s.into_inner().into_inner(),
+            Self::BinaryRaw(s) => s,
         }
     }
 }
 
-impl<R: io::Read> io::Read for MaybeNormalizedReader<R> {
+impl<R: io::Read> io::Read for LiteralCheckingReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
-            Self::Normalized(r) => r.read(buf),
-            Self::Raw(r) => r.read(buf),
+            Self::Utf8Checking(r) => r.read(buf),
+            Self::BinaryRaw(r) => r.read(buf),
         }
+    }
+}
+
+/// Wrapping reader that checks that all line endings are CR+LF.
+///
+/// Any other line endings in the input stream are rejected with an `io::Error`.
+pub(crate) struct CrLfCheckReader<R>
+where
+    R: io::Read,
+{
+    source: R,
+    last_was_cr: bool,
+}
+
+impl<R: io::Read> CrLfCheckReader<R> {
+    fn new(source: R) -> Self {
+        Self {
+            source,
+            last_was_cr: false,
+        }
+    }
+
+    pub(crate) fn into_inner(self) -> R {
+        self.source
+    }
+}
+
+impl<R: io::Read> io::Read for CrLfCheckReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let len = self.source.read(buf)?;
+
+        // If the previous read ended with a CR, an LF must follow now
+        if self.last_was_cr && (len == 0 || buf[0] != b'\n') {
+            return Err(io::Error::other(
+                "Illegal line ending (CR without matching LF)",
+            ));
+        }
+
+        // Reading is done, no more checks required
+        if len == 0 {
+            return Ok(0);
+        }
+
+        // Check the body of this read for any illegal linebreaks
+
+        // Skip the first byte if it was a matching LF
+        let mut pos = if self.last_was_cr { 1 } else { 0 };
+
+        // Inspect data from the start until the second-to-last byte
+        // (because we want to look ahead one byte, if "pos" is a CR)
+        while pos < len - 1 {
+            // bare linefeed is not ok
+            if buf[pos] == b'\n' {
+                return Err(io::Error::other(
+                    "Illegal line ending (LF without preceding CR)",
+                ));
+            }
+
+            // CR must be followed by LF
+            if buf[pos] == b'\r' {
+                if buf[pos + 1] != b'\n' {
+                    return Err(io::Error::other(
+                        "Illegal line ending (CR without matching LF)",
+                    ));
+                }
+
+                pos += 2;
+            } else {
+                pos += 1;
+            }
+        }
+
+        // If `buf` doesn't end in CR+LF, then `pos` now points at the very last byte.
+        // In this case, if the last byte is an LF, it is un-matched, and we throw an error.
+        if pos < len && buf[pos] == b'\n' {
+            return Err(io::Error::other(
+                "Illegal line ending (LF without preceding CR)",
+            ));
+        }
+
+        // Remember if the last character is a CR.
+        // If so, we'll check for a matching LF at the start of the next read.
+        self.last_was_cr = buf[len - 1] == b'\r';
+
+        Ok(len)
+    }
+}
+
+/// Wrapping reader that checks that the input data is valid UTF-8.
+///
+/// Non-UTF-8 data in the input stream is rejected with an `io::Error`.
+pub(crate) struct Utf8CheckReader<R>
+where
+    R: io::Read,
+{
+    source: R,
+
+    // Overhang bytes from the last read, if any.
+    // If this is `Some`, it contains bytes that we'll prepend and check with the next read.
+    rest: Option<Vec<u8>>,
+}
+
+impl<R: io::Read> Utf8CheckReader<R> {
+    fn new(source: R) -> Self {
+        Self { source, rest: None }
+    }
+
+    pub(crate) fn into_inner(self) -> R {
+        self.source
+    }
+}
+
+impl<R: io::Read> io::Read for Utf8CheckReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        // Checks if `data` contains valid utf-8 and returns up to 3 bytes of overhang, which
+        // might add up to a valid codepoint with more data in the following read.
+        // Errors if `data` is definitely not UTF-8.
+        fn check_utf8(data: &[u8]) -> Result<Option<Vec<u8>>, io::Error> {
+            match std::str::from_utf8(data) {
+                Ok(_) => Ok(None),
+                Err(err) => {
+                    let valid_up_to = err.valid_up_to();
+
+                    // handle the remaining data, which may be a fragment of UTF-8 that will be
+                    // completed in the next read
+                    let rest = &data[valid_up_to..];
+
+                    match rest.len() {
+                        0 => Ok(None),
+                        1..=3 => Ok(Some(Vec::from(rest))),
+
+                        // 3 bytes is the longest possibly legal intermediate fragment of UTF-8 data.
+                        // If `rest` is longer, then the data is definitely not valid UTF-8.
+                        4.. => Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "Invalid UTF-8 data",
+                        )),
+                    }
+                }
+            }
+        }
+
+        let len = self.source.read(buf)?;
+
+        if len == 0 {
+            // We reached the end of the input stream
+
+            // If the UTF-8 parsing seems to be stuck mid-codepoint, we error
+            if self.rest.is_some() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Invalid UTF-8 data",
+                ));
+            }
+
+            return Ok(0);
+        }
+
+        self.rest = if let Some(mut check) = self.rest.take() {
+            // check overhang from last read + the new data from this read
+            check.extend_from_slice(&buf[..len]);
+            check_utf8(&check)?
+        } else {
+            // we have no overhang from the last read, just check the data from this read
+            check_utf8(&buf[..len])?
+        };
+
+        Ok(len)
     }
 }
 
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum LiteralDataGenerator<R: io::Read> {
-    Fixed(LiteralDataFixedGenerator<MaybeNormalizedReader<R>>),
-    Partial(LiteralDataPartialGenerator<MaybeNormalizedReader<R>>),
+    Fixed(LiteralDataFixedGenerator<LiteralCheckingReader<R>>),
+    Partial(LiteralDataPartialGenerator<LiteralCheckingReader<R>>),
 }
 
 impl<R: io::Read> LiteralDataGenerator<R> {
@@ -287,9 +458,12 @@ impl<R: io::Read> LiteralDataGenerator<R> {
         chunk_size: u32,
     ) -> Result<Self> {
         let source = if header.mode == DataMode::Utf8 {
-            MaybeNormalizedReader::Normalized(NormalizedReader::new(source, LineBreak::Crlf))
+            let utf8 = Utf8CheckReader::new(source);
+            let crlf = CrLfCheckReader::new(utf8);
+
+            LiteralCheckingReader::Utf8Checking(crlf)
         } else {
-            MaybeNormalizedReader::Raw(source)
+            LiteralCheckingReader::BinaryRaw(source)
         };
 
         Self::from_normalized(header, source, source_len, chunk_size)
@@ -297,7 +471,7 @@ impl<R: io::Read> LiteralDataGenerator<R> {
 
     pub(crate) fn from_normalized(
         header: LiteralDataHeader,
-        source: MaybeNormalizedReader<R>,
+        source: LiteralCheckingReader<R>,
         source_len: Option<u32>,
         chunk_size: u32,
     ) -> Result<Self> {
@@ -521,6 +695,8 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Read;
+
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
@@ -528,7 +704,7 @@ mod tests {
     use crate::{
         normalize_lines::normalize_lines,
         packet::Packet,
-        util::test::{check_strings, random_string, ChaosReader},
+        util::test::{check_strings, random_string, random_utf8_string, ChaosReader},
     };
 
     #[test]
@@ -644,6 +820,10 @@ mod tests {
             };
 
             let s = random_string(&mut rng, file_size);
+
+            // DataMode::Utf8 only accepts data that uses Crlf line endings
+            let s = normalize_lines(&s, LineBreak::Crlf).to_string();
+
             let mut generator = LiteralDataGenerator::new(
                 header.clone(),
                 ChaosReader::new(rng.clone(), s.clone()),
@@ -667,6 +847,120 @@ mod tests {
             assert_eq!(data.header, header);
             let normalized_s = normalize_lines(&s, LineBreak::Crlf);
             check_strings(data.as_str().unwrap(), normalized_s);
+        }
+    }
+
+    #[test]
+    fn test_utf8_check_reader() {
+        // tests the "ok" case of Utf8CheckReader
+
+        pretty_env_logger::try_init().ok();
+
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+        for len in (1..100_000).step_by(1000) {
+            let string = random_utf8_string(&mut rng, len);
+            let b: Bytes = Bytes::from(string.clone());
+
+            let cr = ChaosReader::new(&mut rng, b);
+            let mut r = Utf8CheckReader::new(cr);
+
+            let mut out = Vec::new();
+            let _ = r.read_to_end(&mut out).expect("ok");
+
+            assert_eq!(out, string.as_bytes());
+        }
+    }
+
+    #[test]
+    fn test_utf8_check_reader_bad() {
+        // (mostly) tests the "bad" case of Utf8CheckReader
+
+        pretty_env_logger::try_init().ok();
+
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+        for count in 1..10_000 {
+            // 10k tests on Vec<u8> of length 0-99
+            let len = count % 100;
+
+            let bytes: Vec<u8> = (1..=len).map(|_| rng.gen::<u8>()).collect();
+
+            let cr = ChaosReader::new(&mut rng, bytes.clone());
+            let mut r = Utf8CheckReader::new(cr);
+
+            let mut out = Vec::new();
+
+            match String::from_utf8(bytes.clone()) {
+                Ok(_) => {
+                    // the random bytes happen to be valid utf8
+                    let _ = r.read_to_end(&mut out).expect("ok");
+
+                    assert_eq!(out, bytes);
+                }
+                Err(_) => {
+                    // the random bytes are not valid utf8
+                    let _ = r.read_to_end(&mut out).expect_err("expect error");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_crlf_check_reader() {
+        // tests the "ok" case of CrLfCheckReader
+
+        pretty_env_logger::try_init().ok();
+
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+        for len in (1..100_000).step_by(1000) {
+            let string = random_string(&mut rng, len);
+            let crlf = normalize_lines(&string, LineBreak::Crlf);
+
+            let b: Bytes = Bytes::from(crlf.to_string());
+
+            let cr = ChaosReader::new(&mut rng, b);
+            let mut r = CrLfCheckReader::new(cr);
+
+            let mut out = Vec::new();
+            let _ = r.read_to_end(&mut out).expect("ok");
+
+            assert_eq!(out, crlf.as_bytes());
+        }
+    }
+
+    #[test]
+    fn test_crlf_check_reader_bad() {
+        // tests the "bad" case of CrLfCheckReader
+
+        pretty_env_logger::try_init().ok();
+
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+        for count in 1..10000 {
+            // 10k tests on Unicode strings of length 0-99
+            let len = count % 100;
+
+            let string = random_string(&mut rng, len);
+
+            if !string.contains('\n') && !string.contains('\r') {
+                continue;
+            }
+
+            // normalize to either "just Cr" or "just Lf", then expect failure
+            let norm = normalize_lines(
+                &string,
+                if rng.gen::<bool>() {
+                    LineBreak::Cr
+                } else {
+                    LineBreak::Lf
+                },
+            );
+
+            let b: Bytes = Bytes::from(norm.to_string());
+
+            let cr = ChaosReader::new(&mut rng, b);
+            let mut r = CrLfCheckReader::new(cr);
+
+            let mut out = Vec::new();
+            let _ = r.read_to_end(&mut out).expect_err("should error");
         }
     }
 
