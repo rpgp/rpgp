@@ -2510,7 +2510,6 @@ mod tests {
         Ok(())
     }
 
-
     #[test]
     fn sign_utf8_lit() -> TestResult {
         let _ = pretty_env_logger::try_init();
@@ -2530,7 +2529,7 @@ mod tests {
             .to_armored_string(&mut rng, ArmorOptions::default())
             .unwrap();
 
-        // re-parse, get the signature and check the subpacket areas
+        // re-parse and check the signature
         let (mut message, _) = Message::from_armor(signed.as_bytes()).unwrap();
 
         let mut data = vec![];

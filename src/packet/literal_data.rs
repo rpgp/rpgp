@@ -318,9 +318,11 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
 
         // Check the body of this read for any illegal linebreaks
 
+        // Skip the first byte if it was a matching LF
         let mut pos = if self.last_was_cr { 1 } else { 0 };
 
-        // inspect data from the start until the second-to-last byte
+        // Inspect data from the start until the second-to-last byte
+        // (because we want to look ahead one byte, if "pos" is a CR)
         while pos < len - 1 {
             // bare linefeed is not ok
             if buf[pos] == b'\n' {
@@ -343,16 +345,16 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
             }
         }
 
-        // If `buf` doesn't end in `\r\n`, then `pos` will now point at the very last byte.
-        // In this case, we check if it is an un-matched '\n'.
+        // If `buf` doesn't end in CR+LF, then `pos` now points at the very last byte.
+        // In this case, if the last byte is an LF, it is un-matched, and we throw an error.
         if pos < len && buf[pos] == b'\n' {
             return Err(io::Error::other(
                 "Illegal line ending (LF without preceding CR)",
             ));
         }
 
-        // Remember if the last character is a CR. If so, we must check for a matching LF at the
-        // start of the next read.
+        // Remember if the last character is a CR.
+        // If so, we'll 'check for a matching LF at the start of the next read.
         self.last_was_cr = buf[len - 1] == b'\r';
 
         Ok(len)
@@ -361,7 +363,7 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
 
 /// Wrapping reader that checks that the input data is valid UTF-8.
 ///
-/// Non-UTF-8 data in the input stream are rejected with an `io::Error`.
+/// Non-UTF-8 data in the input stream is rejected with an `io::Error`.
 pub(crate) struct Utf8CheckReader<R>
 where
     R: io::Read,
@@ -404,7 +406,7 @@ impl<R: io::Read> io::Read for Utf8CheckReader<R> {
 
                         // 3 bytes is the longest possibly legal intermediate fragment of UTF-8 data.
                         // If `rest` is longer, then the data is definitely not valid UTF-8.
-                        4.. => Err(io::Error::other("Illegal UTF-8 data")), // FIXME
+                        4.. => Err(io::Error::other("Illegal UTF-8 data")),
                     }
                 }
             }
@@ -417,7 +419,7 @@ impl<R: io::Read> io::Read for Utf8CheckReader<R> {
 
             // If the UTF-8 parsing seems to be stuck mid-codepoint, we error
             if self.rest.is_some() {
-                return Err(io::Error::other("Illegal UTF-8 data")); // FIXME
+                return Err(io::Error::other("Illegal UTF-8 data"));
             }
 
             return Ok(0);
