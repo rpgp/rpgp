@@ -354,7 +354,7 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
         }
 
         // Remember if the last character is a CR.
-        // If so, we'll 'check for a matching LF at the start of the next read.
+        // If so, we'll check for a matching LF at the start of the next read.
         self.last_was_cr = buf[len - 1] == b'\r';
 
         Ok(len)
