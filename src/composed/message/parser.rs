@@ -193,6 +193,13 @@ pub(super) fn next(
                 packet.drain()?;
                 packets = crate::packet::PacketParser::new(packet.into_inner());
             }
+            Tag::UnassignedNonCritical(_) | Tag::Experimental(_) => {
+                // Skip "Unassigned Non-Critical" and "Private or Experimental Use" packets
+
+                // drain reader
+                packet.drain()?;
+                packets = crate::packet::PacketParser::new(packet.into_inner());
+            }
             _ => {
                 bail!("unexpected packet type: {:?}", tag);
             }
