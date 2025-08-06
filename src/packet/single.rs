@@ -65,26 +65,34 @@ impl Packet {
             Tag::GnupgAead => {
                 GnupgAeadData::try_from_reader(packet_header, &mut body).map(Into::into)
             }
-            Tag::Other(22..=39) => {
+
+            // "Unassigned Critical Packets"
+            Tag::UnassignedCritical(id) => {
                 // a "hard" error that will bubble up and interrupt processing of compositions
                 Err(Error::InvalidPacketContent {
-                    source: Box::new(format_err!(
-                        "Unassigned Critical Packet type {:?}",
-                        packet_header.tag()
-                    )),
+                    source: Box::new(format_err!("Unassigned Critical Packet type {:?}", id)),
                 })
             }
-            Tag::Other(40..=59) => {
+            // "Unassigned Non-Critical Packets"
+            Tag::UnassignedNonCritical(id) => {
                 // a "soft" error that will usually get ignored while processing packet streams
                 Err(UnsupportedSnafu {
-                    message: format!("Unassigned Critical Packet type {:?}", packet_header.tag()),
+                    message: format!("Unassigned Non-Critical Packet type {id:?}"),
                 }
                 .build())
             }
-            Tag::Other(other) => Err(UnsupportedSnafu {
-                message: format!("Unknown packet type: {other}"),
+            // "Private or Experimental Use"
+            Tag::Experimental(id) => Err(UnsupportedSnafu {
+                message: format!("Experimental Packet type: {id:?}"),
             }
             .build()),
+
+            // This variant only covers invalid "reserved number" packet types (0, 15, 16).
+            // All other cases are covered above.
+            Tag::Invalid(id) => Err(Error::InvalidPacketContent {
+                // a "hard" error that will bubble up and interrupt processing of compositions
+                source: Box::new(format_err!("Unexpected Packet type {:?}", id)),
+            }),
         };
 
         if let Err(ref err) = res {

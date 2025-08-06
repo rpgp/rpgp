@@ -6,7 +6,7 @@ use log::debug;
 use super::PacketBodyReader;
 use crate::{
     composed::{Message, MessageReader, RingResult, TheRing},
-    errors::{bail, ensure_eq, Result},
+    errors::{bail, ensure_eq, Error, Result},
     packet::{OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType},
     util::{fill_buffer_bytes, NormalizingHasher},
 };
@@ -175,25 +175,54 @@ impl<'a> SignatureOnePassReader<'a> {
 
                         let (reader, parts) = source.into_parts();
 
-                        // read the signature
                         let mut packets = crate::packet::PacketParser::new(reader);
-                        let Some(packet) = packets.next() else {
-                            return Err(io::Error::new(
-                                io::ErrorKind::UnexpectedEof,
-                                "missing signature packet",
-                            ));
-                        };
-                        let packet =
-                            packet.map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
-                        let Packet::Signature(signature) = packet else {
-                            return Err(io::Error::new(
-                                io::ErrorKind::UnexpectedEof,
-                                format!(
-                                    "missing signature packet, found {:?} instead",
-                                    packet.tag()
-                                ),
-                            ));
+                        // Find the signature (skip padding and non-critical packets along the way)
+                        let signature = loop {
+                            // read next packet from stream, if any
+                            let Some(res) = packets.next() else {
+                                // no more packets
+                                return Err(io::Error::new(
+                                    io::ErrorKind::UnexpectedEof,
+                                    "missing signature packet",
+                                ));
+                            };
+
+                            // skip marker and padding packets (and read next packet)
+                            if matches!(res, Ok(Packet::Marker(_))) {
+                                debug!("skipping marker packet");
+                                continue;
+                            }
+                            if matches!(res, Ok(Packet::Padding(_))) {
+                                debug!("skipping padding packet");
+                                continue;
+                            }
+
+                            // skip soft packet parser errors (e.g. unknown non-critical packets)
+                            // and read the next packet
+                            if let Err(Error::InvalidPacketContent { ref source }) = res {
+                                let err: &Error = source; // unbox
+                                if let Error::Unsupported { message, .. } = err {
+                                    debug!("skipping unsupported packet: {res:?} ({message})");
+                                    continue;
+                                }
+                            }
+
+                            // bubble up any other errors
+                            let packet =
+                                res.map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+
+                            if let Packet::Signature(signature) = packet {
+                                break signature;
+                            } else {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::UnexpectedEof,
+                                    format!(
+                                        "missing signature packet, found {:?} instead",
+                                        packet.tag()
+                                    ),
+                                ));
+                            };
                         };
 
                         // calculate final hash

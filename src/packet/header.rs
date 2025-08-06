@@ -261,7 +261,7 @@ impl std::fmt::Debug for OldPacketHeader {
         f.debug_struct("OldPacketHeader")
             .field("padding", &(self.padding() as u8))
             .field("version", &(self.version() as u8))
-            .field("tag", &Tag::from_bits(self.tag()))
+            .field("tag", &Tag::from(self.tag()))
             .field("length_type", &self.length_type())
             .finish()
     }
@@ -289,7 +289,7 @@ impl std::fmt::Debug for NewPacketHeader {
         f.debug_struct("NewPacketHeader")
             .field("padding", &(self.padding() as u8))
             .field("version", &(self.version() as u8))
-            .field("tag", &(Tag::from_bits(self.tag())))
+            .field("tag", &(Tag::from(self.tag())))
             .finish()
     }
 }

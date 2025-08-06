@@ -92,7 +92,7 @@ impl PacketLength {
 /// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#appendix-B.1-3.7.1>
 ///
 /// However, rPGP will continue to use the term "(Packet) Tag" for the time being.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
 #[non_exhaustive]
@@ -142,42 +142,143 @@ pub enum Tag {
     /// Padding Packet
     Padding = 21,
 
-    #[num_enum(catch_all)]
+    /// Unassigned Critical Packets [22-39]
     #[cfg_attr(test, proptest(skip))]
-    Other(u8),
+    UnassignedCritical(UnassignedCriticalTag),
+
+    /// Unassigned Non-Critical Packets [40-59]
+    #[cfg_attr(test, proptest(skip))]
+    UnassignedNonCritical(UnassignedNonCriticalTag),
+
+    /// Private or Experimental Use [60-63]
+    #[cfg_attr(test, proptest(skip))]
+    Experimental(ExperimentalTag),
+
+    /// This variant covers only the (invalid) type IDs 0, 15 and 16
+    #[cfg_attr(test, proptest(skip))]
+    Invalid(InvalidTag),
 }
 
-impl Tag {
-    /// Packet Type ID encoded in OpenPGP format
-    /// (bits 7 and 6 set, bits 5-0 carry the packet type ID)
-    pub const fn encode(self) -> u8 {
-        let t = match self {
-            Self::PublicKeyEncryptedSessionKey => 1,
-            Self::Signature => 2,
-            Self::SymKeyEncryptedSessionKey => 3,
-            Self::OnePassSignature => 4,
-            Self::SecretKey => 5,
-            Self::PublicKey => 6,
-            Self::SecretSubkey => 7,
-            Self::CompressedData => 8,
-            Self::SymEncryptedData => 9,
-            Self::Marker => 10,
-            Self::LiteralData => 11,
-            Self::Trust => 12,
-            Self::UserId => 13,
-            Self::PublicSubkey => 14,
-            Self::UserAttribute => 17,
-            Self::SymEncryptedProtectedData => 18,
-            Self::ModDetectionCode => 19,
-            Self::GnupgAead => 20,
-            Self::Padding => 21,
-            Self::Other(i) => i,
-        };
-        0b1100_0000 | t
-    }
+/// Tag for Unassigned Critical Packets, that can only be `22..=39`.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(transparent)]
+pub struct UnassignedCriticalTag(u8);
 
-    pub const fn from_bits(bits: u8) -> Self {
-        match bits {
+impl UnassignedCriticalTag {
+    /// Creates a new tag, returning `None` if it is not a valid `UnassignedCritical` tag.
+    pub fn new(value: u8) -> Option<Self> {
+        match value {
+            22..=39 => Some(Self(value)),
+            _ => None,
+        }
+    }
+}
+
+impl From<UnassignedCriticalTag> for u8 {
+    fn from(val: UnassignedCriticalTag) -> Self {
+        val.0
+    }
+}
+
+/// Tag for Unassigned Non-Critical Packets, that can only be `40..=59`.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(transparent)]
+pub struct UnassignedNonCriticalTag(u8);
+
+impl UnassignedNonCriticalTag {
+    /// Creates a new tag, returning `None` if it is not a valid `UnassignedNonCritical` tag.
+    pub fn new(value: u8) -> Option<Self> {
+        match value {
+            40..=59 => Some(Self(value)),
+            _ => None,
+        }
+    }
+}
+
+impl From<UnassignedNonCriticalTag> for u8 {
+    fn from(val: UnassignedNonCriticalTag) -> Self {
+        val.0
+    }
+}
+
+/// Tag for Experimental Packets, that can only be `60..=63`.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(transparent)]
+pub struct ExperimentalTag(u8);
+
+impl ExperimentalTag {
+    /// Creates a new tag, returning `None` if it is not a valid `Experimental` tag.
+    pub fn new(value: u8) -> Option<Self> {
+        match value {
+            60..=63 => Some(Self(value)),
+            _ => None,
+        }
+    }
+}
+
+impl From<ExperimentalTag> for u8 {
+    fn from(val: ExperimentalTag) -> Self {
+        val.0
+    }
+}
+
+/// Tag that can only be `0`, `15`, `16`, or `64` and above.
+/// Those IDs are invalid and should not occur in the wild.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(transparent)]
+pub struct InvalidTag(u8);
+
+impl InvalidTag {
+    /// Creates a new tag, returning `None` if `value` is not `0`, `15`, `16`, or `64` and above.
+    pub fn new(value: u8) -> Option<Self> {
+        match value {
+            0 | 15 | 16 | 64.. => Some(Self(value)),
+            _ => None,
+        }
+    }
+}
+
+impl From<InvalidTag> for u8 {
+    fn from(val: InvalidTag) -> Self {
+        val.0
+    }
+}
+
+impl From<Tag> for u8 {
+    fn from(value: Tag) -> Self {
+        match value {
+            Tag::PublicKeyEncryptedSessionKey => 1,
+            Tag::Signature => 2,
+            Tag::SymKeyEncryptedSessionKey => 3,
+            Tag::OnePassSignature => 4,
+            Tag::SecretKey => 5,
+            Tag::PublicKey => 6,
+            Tag::SecretSubkey => 7,
+            Tag::CompressedData => 8,
+            Tag::SymEncryptedData => 9,
+            Tag::Marker => 10,
+            Tag::LiteralData => 11,
+            Tag::Trust => 12,
+            Tag::UserId => 13,
+            Tag::PublicSubkey => 14,
+
+            Tag::UserAttribute => 17,
+            Tag::SymEncryptedProtectedData => 18,
+            Tag::ModDetectionCode => 19,
+            Tag::GnupgAead => 20,
+            Tag::Padding => 21,
+
+            Tag::UnassignedCritical(id) => id.into(),
+            Tag::UnassignedNonCritical(id) => id.into(),
+            Tag::Experimental(id) => id.into(),
+
+            Tag::Invalid(id) => id.into(),
+        }
+    }
+}
+impl From<u8> for Tag {
+    fn from(value: u8) -> Self {
+        match value {
             1 => Self::PublicKeyEncryptedSessionKey,
             2 => Self::Signature,
             3 => Self::SymKeyEncryptedSessionKey,
@@ -192,12 +293,26 @@ impl Tag {
             12 => Self::Trust,
             13 => Self::UserId,
             14 => Self::PublicSubkey,
+
             17 => Self::UserAttribute,
             18 => Self::SymEncryptedProtectedData,
             19 => Self::ModDetectionCode,
+            20 => Self::GnupgAead,
             21 => Self::Padding,
-            i => Self::Other(i),
+            22..=39 => Self::UnassignedCritical(UnassignedCriticalTag(value)),
+            40..=59 => Self::UnassignedNonCritical(UnassignedNonCriticalTag(value)),
+            60..=63 => Self::Experimental(ExperimentalTag(value)),
+
+            0 | 15 | 16 | 64.. => Self::Invalid(InvalidTag(value)),
         }
+    }
+}
+
+impl Tag {
+    /// Packet Type ID encoded in OpenPGP format
+    /// (bits 7 and 6 set, bits 5-0 carry the packet type ID)
+    pub fn encode(self) -> u8 {
+        0b1100_0000 | u8::from(self)
     }
 }
 
