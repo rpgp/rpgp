@@ -860,9 +860,39 @@ mod tests {
             let _ = r.read_to_end(&mut out).expect("ok");
 
             assert_eq!(out, string.as_bytes());
+        }
+    }
 
-            drop(r);
-            drop(out);
+    #[test]
+    fn test_utf8_check_reader_bad() {
+        // (mostly) tests the "bad" case of Utf8CheckReader
+
+        pretty_env_logger::try_init().ok();
+
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+        for count in 1..10_000 {
+            // 10k tests on Vec<u8> of length 0-99
+            let len = count % 100;
+
+            let bytes: Vec<u8> = (1..=len).map(|_| rng.gen::<u8>()).collect();
+
+            let cr = ChaosReader::new(&mut rng, bytes.clone());
+            let mut r = Utf8CheckReader::new(cr);
+
+            let mut out = Vec::new();
+
+            match String::from_utf8(bytes.clone()) {
+                Ok(_) => {
+                    // the random bytes happen to be valid utf8
+                    let _ = r.read_to_end(&mut out).expect("ok");
+
+                    assert_eq!(out, bytes);
+                }
+                Err(_) => {
+                    // the random bytes are not valid utf8
+                    let _ = r.read_to_end(&mut out).expect_err("expect error");
+                }
+            }
         }
     }
 
@@ -875,9 +905,9 @@ mod tests {
         let mut rng = ChaCha20Rng::seed_from_u64(1);
         for len in (1..100_000).step_by(1000) {
             let string = random_string(&mut rng, len);
-            let norm = normalize_lines(&string, LineBreak::Crlf);
+            let crlf = normalize_lines(&string, LineBreak::Crlf);
 
-            let b: Bytes = Bytes::from(norm.to_string());
+            let b: Bytes = Bytes::from(crlf.to_string());
 
             let cr = ChaosReader::new(&mut rng, b);
             let mut r = CrLfCheckReader::new(cr);
@@ -885,7 +915,7 @@ mod tests {
             let mut out = Vec::new();
             let _ = r.read_to_end(&mut out).expect("ok");
 
-            assert_eq!(out, norm.as_bytes());
+            assert_eq!(out, crlf.as_bytes());
         }
     }
 
@@ -897,13 +927,16 @@ mod tests {
 
         let mut rng = ChaCha20Rng::seed_from_u64(1);
         for count in 1..10000 {
-            let string = random_string(&mut rng, count % 100);
+            // 10k tests on Unicode strings of length 0-99
+            let len = count % 100;
+
+            let string = random_string(&mut rng, len);
 
             if !string.contains('\n') && !string.contains('\r') {
                 continue;
             }
 
-            // normalize to either "just Cr" or "just Lf", expect failure
+            // normalize to either "just Cr" or "just Lf", then expect failure
             let norm = normalize_lines(
                 &string,
                 if rng.gen::<bool>() {
@@ -919,7 +952,7 @@ mod tests {
             let mut r = CrLfCheckReader::new(cr);
 
             let mut out = Vec::new();
-            let _ = r.read_to_end(&mut out).err().expect("should error");
+            let _ = r.read_to_end(&mut out).expect_err("should error");
         }
     }
 
