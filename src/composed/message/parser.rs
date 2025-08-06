@@ -33,14 +33,31 @@ pub(super) fn next(
         let tag = packet.packet_header().tag();
 
         match tag {
-            Tag::SymKeyEncryptedSessionKey | Tag::PublicKeyEncryptedSessionKey => {
+            Tag::SymKeyEncryptedSessionKey
+            | Tag::PublicKeyEncryptedSessionKey
+            | Tag::SymEncryptedData
+            | Tag::SymEncryptedProtectedData
+            | Tag::GnupgAead => {
                 // (a) Encrypted Message:
-                //   - ESK Seq
+                //   - ESK Seq (may be empty)
                 //   - Encrypted Data -> OpenPGP Message
 
                 let mut esks = Vec::new();
-                let esk = Esk::try_from_reader(&mut packet)?;
-                esks.push(esk);
+
+                if tag == Tag::SymKeyEncryptedSessionKey || tag == Tag::PublicKeyEncryptedSessionKey
+                {
+                    let esk = Esk::try_from_reader(&mut packet)?;
+                    esks.push(esk);
+                } else {
+                    // this message consists of just a bare encryption container
+                    let edata = Edata::try_from_reader(packet)?;
+
+                    return Ok(Some(Message::Encrypted {
+                        esk: esks, // empty
+                        edata,
+                        is_nested,
+                    }));
+                }
 
                 packets = crate::packet::PacketParser::new(packet.into_inner());
                 // Read ESKs unit we find the Encrypted Data
