@@ -16,12 +16,16 @@ const BUFFER_SIZE: usize = 8 * 1024;
 #[derive(derive_more::Debug)]
 pub enum SignatureOnePassReader<'a> {
     Init {
+        /// One Pass Signature packet
+        ops: OnePassSignature,
         /// Running hasher
         norm_hasher: Option<NormalizingHasher>,
         /// Data source
         source: Box<Message<'a>>,
     },
     Body {
+        /// One Pass Signature packet
+        ops: OnePassSignature,
         /// Running hasher
         norm_hasher: Option<NormalizingHasher>,
         /// Data source
@@ -64,6 +68,7 @@ impl<'a> SignatureOnePassReader<'a> {
         let norm_hasher = hasher.map(|hasher| NormalizingHasher::new(hasher, text_mode));
 
         Ok(Self::Init {
+            ops: ops.clone(),
             norm_hasher,
             source,
         })
@@ -122,6 +127,7 @@ impl<'a> SignatureOnePassReader<'a> {
         loop {
             match std::mem::replace(self, Self::Error) {
                 Self::Init {
+                    ops,
                     mut norm_hasher,
                     mut source,
                 } => {
@@ -141,12 +147,14 @@ impl<'a> SignatureOnePassReader<'a> {
                     }
 
                     *self = Self::Body {
+                        ops,
                         norm_hasher,
                         source,
                         buffer,
                     };
                 }
                 Self::Body {
+                    ops,
                     mut norm_hasher,
                     mut source,
                     mut buffer,
@@ -155,6 +163,7 @@ impl<'a> SignatureOnePassReader<'a> {
 
                     if buffer.has_remaining() {
                         *self = Self::Body {
+                            ops,
                             norm_hasher,
                             source,
                             buffer,
@@ -227,8 +236,15 @@ impl<'a> SignatureOnePassReader<'a> {
 
                         // calculate final hash
                         let hash = if let Some(mut hasher) = hasher {
-                            debug!("calculating final hash");
-                            if let Some(config) = signature.config() {
+                            if !ops.matches(&signature) {
+                                debug!("Ops and Signature don't match, rejecting this signature");
+
+                                // If Ops and Signature don't match, we consider the signature invalid.
+                                // Return an empty hash to model this.
+                                None
+                            } else if let Some(config) = signature.config() {
+                                debug!("calculating final hash");
+
                                 let len = config
                                     .hash_signature_data(&mut hasher)
                                     .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
@@ -256,6 +272,7 @@ impl<'a> SignatureOnePassReader<'a> {
                         };
                     } else {
                         *self = Self::Body {
+                            ops,
                             norm_hasher,
                             source,
                             buffer,
@@ -288,11 +305,13 @@ impl<'a> SignatureOnePassReader<'a> {
     pub(crate) fn decompress(self) -> Result<Self> {
         match self {
             Self::Init {
+                ops,
                 norm_hasher,
                 source,
             } => {
                 let source = source.decompress()?;
                 Ok(Self::Init {
+                    ops,
                     norm_hasher,
                     source: Box::new(source),
                 })
@@ -310,12 +329,14 @@ impl<'a> SignatureOnePassReader<'a> {
     ) -> Result<(Self, RingResult)> {
         match self {
             Self::Init {
+                ops,
                 norm_hasher,
                 source,
             } => {
                 let (source, fps) = source.decrypt_the_ring(ring, abort_early)?;
                 Ok((
                     Self::Init {
+                        ops,
                         norm_hasher,
                         source: Box::new(source),
                     },
