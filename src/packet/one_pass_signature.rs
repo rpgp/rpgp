@@ -2,13 +2,17 @@ use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
+use log::debug;
 #[cfg(test)]
 use proptest::prelude::*;
 
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::{bail, Result},
-    packet::{signature::SignatureType, PacketHeader, PacketTrait},
+    packet::{
+        signature::SignatureType, InnerSignature, PacketHeader, PacketTrait, Signature,
+        SignatureVersionSpecific,
+    },
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{KeyId, Tag},
@@ -114,6 +118,66 @@ impl OnePassSignature {
             OpsVersionSpecific::V6 { .. } => 6,
             OpsVersionSpecific::Unknown { version, .. } => version,
         }
+    }
+
+    /// Check if this OPS contains the same metadata as `sig`.
+    ///
+    /// This is used to determine if the Signature packet in a one pass signed message is acceptable
+    /// after having validated based on the preceding One Pass Signature packet.
+    ///
+    /// If this returns `false`, the signature in a one pass signed message is always considered
+    /// invalid.
+    pub fn matches(&self, sig: &Signature) -> bool {
+        let InnerSignature::Known {
+            config: sig_config, ..
+        } = &sig.inner
+        else {
+            // We don't know how to verify signatures for InnerSignature::Unknown, best to give up
+            return false;
+        };
+
+        if self.typ != sig_config.typ {
+            debug!(
+                "Unmatched signature type: Ops {:?}, Sig {:?}",
+                self.typ, sig_config.typ
+            );
+            return false;
+        }
+
+        if self.hash_algorithm != sig_config.hash_alg {
+            debug!(
+                "Unmatched hash algorithms: Ops {:?}, Sig {:?}",
+                self.hash_algorithm, sig_config.hash_alg
+            );
+            return false;
+        }
+
+        if self.pub_algorithm != sig_config.pub_alg {
+            debug!(
+                "Unmatched public key algorithms: Ops {:?}, Sig {:?}",
+                self.pub_algorithm, sig_config.pub_alg
+            );
+            return false;
+        }
+
+        match (&self.version_specific, &sig_config.version_specific) {
+            (OpsVersionSpecific::V3 { .. }, SignatureVersionSpecific::V4) => {}
+            (
+                OpsVersionSpecific::V6 { salt: ops_salt, .. },
+                SignatureVersionSpecific::V6 { salt: sig_salt, .. },
+            ) => {
+                if ops_salt != sig_salt {
+                    debug!("Salt mismatch between Ops and Signature: {ops_salt:02x?} / {sig_salt:02x?}");
+                    return false;
+                }
+            }
+            _ => {
+                debug!("Illegal combination of Ops and Signature version: {self:?}, {sig:?}");
+                return false;
+            }
+        }
+
+        true
     }
 }
 
