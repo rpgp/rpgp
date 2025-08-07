@@ -725,7 +725,7 @@ impl<'a> Message<'a> {
     /// The message must have been read to the end before calling this.
     ///
     /// The current recursion limit is `1024`.
-    pub fn verify_nested(&self, keys: &[&dyn PublicKeyTrait]) -> Result<Vec<VerificationResult>> {
+    pub fn verify_nested(&self, keys: &[&impl PublicKeyTrait]) -> Result<Vec<VerificationResult>> {
         let mut out = vec![VerificationResult::Invalid; keys.len()];
 
         let mut current_message = self;
@@ -776,7 +776,7 @@ impl<'a> Message<'a> {
     }
 
     /// Reads the contents and discards it, then verifies the message.
-    pub fn verify_read(&mut self, key: &dyn PublicKeyTrait) -> Result<&Signature> {
+    pub fn verify_read(&mut self, key: &impl PublicKeyTrait) -> Result<&Signature> {
         self.drain()?;
         let sig = self.verify(key)?;
         Ok(sig)
@@ -788,7 +788,7 @@ impl<'a> Message<'a> {
     /// The message must have been read to the end before calling this.
     ///
     /// If the signature is valid, returns the matching signature.
-    pub fn verify(&self, key: &dyn PublicKeyTrait) -> Result<&Signature> {
+    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<&Signature> {
         match self {
             Message::SignedOnePass { reader, .. } => {
                 let Some(calculated_hash) = reader.hash() else {
