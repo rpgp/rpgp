@@ -18,9 +18,9 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion,
-        Password, PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait,
-        SecretParams, SignatureBytes, Tag,
+        DecryptionTrait, EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails, KeyId,
+        KeyVersion, Password, PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams,
+        SecretKeyTrait, SecretParams, SignatureBytes, Tag,
     },
 };
 
@@ -89,7 +89,13 @@ impl SecretKey {
         self.secret_params.has_sha1_checksum()
     }
 
-    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
+    pub fn public_key(&self) -> &super::PublicKey {
+        &self.details
+    }
+}
+
+impl DecryptionTrait for SecretKey {
+    fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
@@ -101,10 +107,6 @@ impl SecretKey {
                 Ok(work(pub_params, &plain))
             }
         }
-    }
-
-    pub fn public_key(&self) -> &super::PublicKey {
-        &self.details
     }
 }
 
@@ -186,7 +188,13 @@ impl SecretSubkey {
         config.sign_primary_key_binding(self, &self.public_key(), key_pw, &pub_key)
     }
 
-    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
+    pub fn public_key(&self) -> &super::PublicSubkey {
+        &self.details
+    }
+}
+
+impl DecryptionTrait for SecretSubkey {
+    fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
@@ -198,10 +206,6 @@ impl SecretSubkey {
                 Ok(work(pub_params, &plain))
             }
         }
-    }
-
-    pub fn public_key(&self) -> &super::PublicSubkey {
-        &self.details
     }
 }
 

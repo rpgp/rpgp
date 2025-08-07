@@ -4,7 +4,9 @@ use crate::{
         public_key::PublicKeyAlgorithm,
     },
     errors::Result,
-    types::{Fingerprint, KeyId, KeyVersion, Password, PublicParams, SignatureBytes},
+    types::{
+        Fingerprint, KeyId, KeyVersion, Password, PlainSecretParams, PublicParams, SignatureBytes,
+    },
 };
 
 pub trait KeyDetails {
@@ -164,4 +166,10 @@ pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
     /// The recommended hash algorithm to calculate the signature hash digest with,
     /// when using this as a signer
     fn hash_alg(&self) -> HashAlgorithm;
+}
+
+pub trait DecryptionTrait {
+    fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
+    where
+        G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>;
 }
