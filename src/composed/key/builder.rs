@@ -612,7 +612,7 @@ mod tests {
     use crate::{
         composed::{Deserializable, SignedPublicKey, SignedSecretKey},
         packet::Features,
-        types::KeyVersion,
+        types::{DecryptionTrait, KeyVersion},
     };
 
     #[test]

@@ -24,8 +24,8 @@ use pgp::{
     },
     ser::Serialize,
     types::{
-        CompressionAlgorithm, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Mpi,
-        PacketHeaderVersion, PacketLength, PlainSecretParams, PublicKeyTrait, PublicParams,
+        CompressionAlgorithm, DecryptionTrait, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion,
+        Mpi, PacketHeaderVersion, PacketLength, PlainSecretParams, PublicKeyTrait, PublicParams,
         S2kParams, SecretParams, SignedUser, StringToKey, Tag,
     },
 };
