@@ -1,15 +1,30 @@
-use std::iter::Peekable;
+use std::{io::Read, iter::Peekable};
+
+use aead::rand_core::CryptoRng;
+use chrono::{SubsecRound, Utc};
+use rand::Rng;
 
 use crate::{
     armor,
     composed::{ArmorOptions, Deserializable},
-    errors::{format_err, Result},
-    packet::{Packet, PacketTrait, Signature},
+    crypto::hash::HashAlgorithm,
+    errors::{bail, format_err, Result},
+    packet::{
+        Packet, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
+    },
     ser::Serialize,
-    types::{PublicKeyTrait, Tag},
+    types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait, Tag},
 };
 
-/// Standalone signature as defined by the cleartext framework.
+/// An OpenPGP data signature that occurs outside an OpenPGP Message.
+///
+/// Can be used either for "detached signatures":
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#detached-signatures>.
+///
+/// Or in the context of a Cleartext Signature:
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-cleartext-signature-framewo>
+///
+/// All [StandaloneSignature]s are either of type [SignatureType::Binary] or [SignatureType::Text].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StandaloneSignature {
     pub signature: Signature,
@@ -18,6 +33,70 @@ pub struct StandaloneSignature {
 impl StandaloneSignature {
     pub fn new(signature: Signature) -> Self {
         StandaloneSignature { signature }
+    }
+
+    /// Create a "detached" data signature over `data`, with [SignatureType::Binary].
+    pub fn sign_binary_data<RNG: Rng + CryptoRng, R: Read>(
+        rng: RNG,
+        key: &impl SecretKeyTrait,
+        key_pw: &Password,
+        hash_algorithm: HashAlgorithm,
+        data: R,
+    ) -> Result<StandaloneSignature> {
+        Self::sign_data(
+            rng,
+            SignatureType::Binary,
+            key,
+            key_pw,
+            hash_algorithm,
+            data,
+        )
+    }
+
+    /// Create a "detached" data signature over `data`, with [SignatureType::Text].
+    ///
+    /// Using [SignatureType::Text] makes the signature stable against changes of line ending
+    /// encodings. The signature is not invalidated if the plaintext is e.g. changed between using
+    /// "LF" line endings or "CR+LF" line endings.
+    pub fn sign_text_data<RNG: Rng + CryptoRng, R: Read>(
+        rng: RNG,
+        key: &impl SecretKeyTrait,
+        key_pw: &Password,
+        hash_algorithm: HashAlgorithm,
+        data: R,
+    ) -> Result<StandaloneSignature> {
+        Self::sign_data(rng, SignatureType::Text, key, key_pw, hash_algorithm, data)
+    }
+
+    fn sign_data<RNG: Rng + CryptoRng, R: Read>(
+        rng: RNG,
+        typ: SignatureType,
+        key: &impl SecretKeyTrait,
+        key_pw: &Password,
+        hash_algorithm: HashAlgorithm,
+        data: R,
+    ) -> Result<StandaloneSignature> {
+        let mut config = match key.version() {
+            KeyVersion::V4 => SignatureConfig::v4(typ, key.algorithm(), hash_algorithm),
+            KeyVersion::V6 => SignatureConfig::v6(rng, typ, key.algorithm(), hash_algorithm)?,
+            v => bail!("unsupported key version: {:?}", v),
+        };
+
+        config.hashed_subpackets = vec![
+            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
+            Subpacket::critical(SubpacketData::SignatureCreationTime(
+                Utc::now().trunc_subsecs(0),
+            ))?,
+        ];
+
+        if key.version() < KeyVersion::V6 {
+            config.unhashed_subpackets =
+                vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+        }
+
+        let sig = config.sign(key, key_pw, data)?;
+
+        Ok(StandaloneSignature::new(sig))
     }
 
     pub fn to_armored_writer(
