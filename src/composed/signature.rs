@@ -40,6 +40,7 @@ impl StandaloneSignature {
         rng: RNG,
         key: &impl SecretKeyTrait,
         key_pw: &Password,
+        hash_algorithm: HashAlgorithm,
         data: R,
     ) -> Result<StandaloneSignature> {
         Self::sign_data(
@@ -47,7 +48,7 @@ impl StandaloneSignature {
             SignatureType::Binary,
             key,
             key_pw,
-            key.hash_alg(),
+            hash_algorithm,
             data,
         )
     }
@@ -61,9 +62,10 @@ impl StandaloneSignature {
         rng: RNG,
         key: &impl SecretKeyTrait,
         key_pw: &Password,
+        hash_algorithm: HashAlgorithm,
         data: R,
     ) -> Result<StandaloneSignature> {
-        Self::sign_data(rng, SignatureType::Text, key, key_pw, key.hash_alg(), data)
+        Self::sign_data(rng, SignatureType::Text, key, key_pw, hash_algorithm, data)
     }
 
     fn sign_data<RNG: Rng + CryptoRng, R: Read>(
