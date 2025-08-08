@@ -6,11 +6,10 @@ use std::{
 use bitfields::bitfield;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use bytes::Bytes;
-use chrono::{DateTime, Duration, SubsecRound, Utc};
+use chrono::{DateTime, Duration, Utc};
 use digest::DynDigest;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
-use rand::{CryptoRng, Rng};
 
 use crate::{
     crypto::{
@@ -31,7 +30,7 @@ use crate::{
     ser::Serialize,
     types::{
         self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength,
-        Password, PublicKeyTrait, SecretKeyTrait, SignatureBytes, Tag,
+        PublicKeyTrait, SignatureBytes, Tag,
     },
 };
 
@@ -990,62 +989,6 @@ impl Signature {
                 })
             })
             .unwrap_or(true)
-    }
-
-    /// Create a "detached" data signature over `data`, with `SignatureType::Binary`
-    pub fn sign_binary_data<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
-        key: &impl SecretKeyTrait,
-        key_pw: &Password,
-        data: R,
-    ) -> Result<Signature> {
-        Self::sign_data(
-            rng,
-            SignatureType::Binary,
-            key,
-            key_pw,
-            key.hash_alg(),
-            data,
-        )
-    }
-
-    /// Create a "detached" data signature over `data`, with `SignatureType::Text`
-    pub fn sign_text_data<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
-        key: &impl SecretKeyTrait,
-        key_pw: &Password,
-        data: R,
-    ) -> Result<Signature> {
-        Self::sign_data(rng, SignatureType::Text, key, key_pw, key.hash_alg(), data)
-    }
-
-    fn sign_data<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
-        typ: SignatureType,
-        key: &impl SecretKeyTrait,
-        key_pw: &Password,
-        hash_algorithm: HashAlgorithm,
-        data: R,
-    ) -> Result<Signature> {
-        let mut config = match key.version() {
-            KeyVersion::V4 => SignatureConfig::v4(typ, key.algorithm(), hash_algorithm),
-            KeyVersion::V6 => SignatureConfig::v6(rng, typ, key.algorithm(), hash_algorithm)?,
-            v => bail!("unsupported key version: {:?}", v),
-        };
-
-        config.hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
-            Subpacket::critical(SubpacketData::SignatureCreationTime(
-                Utc::now().trunc_subsecs(0),
-            ))?,
-        ];
-
-        if key.version() < KeyVersion::V6 {
-            config.unhashed_subpackets =
-                vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
-        }
-
-        config.sign(key, key_pw, data)
     }
 }
 
