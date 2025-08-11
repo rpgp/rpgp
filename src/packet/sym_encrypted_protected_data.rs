@@ -2,7 +2,7 @@ use std::io::{self, BufRead, Read};
 
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngCore};
 
 use crate::{
     crypto::{
@@ -94,8 +94,8 @@ impl SymEncryptedProtectedData {
     }
 
     /// Encrypts the data using the given symmetric key.
-    pub fn encrypt_seipdv1<R: CryptoRng + Rng>(
-        rng: R,
+    pub fn encrypt_seipdv1<R: CryptoRng + RngCore + ?Sized>(
+        rng: &mut R,
         alg: SymmetricKeyAlgorithm,
         key: &[u8],
         plaintext: &[u8],
@@ -114,8 +114,8 @@ impl SymEncryptedProtectedData {
     }
 
     /// Encrypts the data using the given symmetric key.
-    pub fn encrypt_seipdv2<R: CryptoRng + Rng>(
-        mut rng: R,
+    pub fn encrypt_seipdv2<R: CryptoRng + RngCore + ?Sized>(
+        rng: &mut R,
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
         chunk_size: ChunkSize,
