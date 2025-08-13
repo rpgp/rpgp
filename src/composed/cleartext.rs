@@ -11,7 +11,7 @@ use log::debug;
 
 use crate::{
     armor::{self, header_parser, read_from_buf, BlockType, DearmorOptions, Headers},
-    composed::{ArmorOptions, Deserializable, StandaloneSignature},
+    composed::{ArmorOptions, Deserializable, DetachedSignature},
     crypto::hash::HashAlgorithm,
     errors::{bail, ensure, ensure_eq, format_err, InvalidInputSnafu, Result},
     line_writer::LineBreak,
@@ -35,7 +35,7 @@ pub struct CleartextSignedMessage {
     hashes: Vec<HashAlgorithm>,
 
     /// The actual signature(s).
-    signatures: Vec<StandaloneSignature>,
+    signatures: Vec<DetachedSignature>,
 }
 
 impl CleartextSignedMessage {
@@ -51,7 +51,7 @@ where {
         let signature_text = NormalizedReader::new(&mut bytes, LineBreak::Crlf);
         let hash = config.hash_alg;
         let signature = config.sign(key, key_pw, signature_text)?;
-        let signature = StandaloneSignature::new(signature);
+        let signature = DetachedSignature::new(signature);
 
         Ok(Self {
             csf_encoded_text: dash_escape(text),
@@ -104,7 +104,7 @@ where {
                 .hash_alg()
                 .ok_or_else(|| InvalidInputSnafu {}.build())?;
             hashes.insert(hash_alg);
-            let signature = StandaloneSignature::new(signature);
+            let signature = DetachedSignature::new(signature);
             signatures.push(signature);
         }
 
@@ -116,14 +116,14 @@ where {
     }
 
     /// The signature on the message.
-    pub fn signatures(&self) -> &[StandaloneSignature] {
+    pub fn signatures(&self) -> &[DetachedSignature] {
         &self.signatures
     }
 
     /// Verify the signature against the normalized cleartext.
     ///
     /// On success returns the first signature that verified against this key.
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<&StandaloneSignature> {
+    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<&DetachedSignature> {
         let nt = self.signed_text();
         for signature in &self.signatures {
             if signature.verify(key, nt.as_bytes()).is_ok() {
@@ -137,7 +137,7 @@ where {
     /// Verify each signature, potentially against a different key.
     pub fn verify_many<F>(&self, verifier: F) -> Result<()>
     where
-        F: Fn(usize, &StandaloneSignature, &[u8]) -> Result<()>,
+        F: Fn(usize, &DetachedSignature, &[u8]) -> Result<()>,
     {
         let nt = self.signed_text();
         for (i, signature) in self.signatures.iter().enumerate() {
@@ -211,7 +211,7 @@ where {
         let mut bytes = Vec::new();
         dearmor.read_to_end(&mut bytes)?;
 
-        let signatures = StandaloneSignature::from_bytes_many(&bytes[..])?;
+        let signatures = DetachedSignature::from_bytes_many(&bytes[..])?;
         let signatures = signatures.collect::<Result<_>>()?;
 
         let (_, headers, _, b) = dearmor.into_parts();

@@ -1,8 +1,8 @@
 #![cfg(feature = "draft-pqc")]
 use pgp::{
     composed::{
-        Deserializable, KeyType, Message, MessageBuilder, SecretKeyParamsBuilder, SignedPublicKey,
-        SignedSecretKey, StandaloneSignature, SubkeyParamsBuilder,
+        Deserializable, DetachedSignature, KeyType, Message, MessageBuilder,
+        SecretKeyParamsBuilder, SignedPublicKey, SignedSecretKey, SubkeyParamsBuilder,
     },
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
     types::{KeyDetails, KeyVersion, Password},
@@ -327,7 +327,7 @@ fn test_a_3_4_detached_signature() -> TestResult {
 
     {
         let (sig, _) =
-            StandaloneSignature::from_armor_file("./tests/pqc/v6-mldsa-65-sample-signature.asc")?;
+            DetachedSignature::from_armor_file("./tests/pqc/v6-mldsa-65-sample-signature.asc")?;
 
         dbg!(&sig);
         sig.verify(&pub_key, &b"Testing\n"[..])?;
@@ -383,7 +383,7 @@ fn test_a_4_4_detached_signature() -> TestResult {
 
     {
         let (sig, _) =
-            StandaloneSignature::from_armor_file("./tests/pqc/v6-mldsa-87-sample-signature.asc")?;
+            DetachedSignature::from_armor_file("./tests/pqc/v6-mldsa-87-sample-signature.asc")?;
 
         dbg!(&sig);
         sig.verify(&pub_key, &b"Testing\n"[..])?;
@@ -440,9 +440,8 @@ fn test_a_5_4_detached_signature() -> TestResult {
     pub_key.verify()?;
 
     {
-        let (sig, _) = StandaloneSignature::from_armor_file(
-            "./tests/pqc/v6-slhdsa-128s-sample-signature.asc",
-        )?;
+        let (sig, _) =
+            DetachedSignature::from_armor_file("./tests/pqc/v6-slhdsa-128s-sample-signature.asc")?;
 
         dbg!(&sig);
         sig.verify(&pub_key, &b"Testing\n"[..])?;
@@ -487,9 +486,8 @@ fn test_a_6_3_detached_signature() -> TestResult {
     pub_key.verify()?;
 
     {
-        let (sig, _) = StandaloneSignature::from_armor_file(
-            "./tests/pqc/v6-slhdsa-128f-sample-signature.asc",
-        )?;
+        let (sig, _) =
+            DetachedSignature::from_armor_file("./tests/pqc/v6-slhdsa-128f-sample-signature.asc")?;
 
         dbg!(&sig);
         sig.verify(&pub_key, &b"Testing\n"[..])?;
@@ -534,9 +532,8 @@ fn test_a_7_3_detached_signature() -> TestResult {
     pub_key.verify()?;
 
     {
-        let (sig, _) = StandaloneSignature::from_armor_file(
-            "./tests/pqc/v6-slhdsa-256s-sample-signature.asc",
-        )?;
+        let (sig, _) =
+            DetachedSignature::from_armor_file("./tests/pqc/v6-slhdsa-256s-sample-signature.asc")?;
 
         dbg!(&sig);
         sig.verify(&pub_key, &b"Testing\n"[..])?;

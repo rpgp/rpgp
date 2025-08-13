@@ -1745,7 +1745,7 @@ mod tests {
 
     use proptest::prelude::*;
 
-    use crate::composed::StandaloneSignature;
+    use crate::composed::DetachedSignature;
 
     impl Arbitrary for KeyFlags {
         type Parameters = ();
@@ -1771,7 +1771,7 @@ mod tests {
 
         use crate::composed::Deserializable;
 
-        let mut sig = StandaloneSignature::from_armor_single(Cursor::new(
+        let mut sig = DetachedSignature::from_armor_single(Cursor::new(
             "-----BEGIN PGP SIGNATURE-----
 
 wpoEEBYIAEIFAmheZZEWIQT8Y2QNsPXIvVyHlK1LkdWvyoDDywIbAwIeAQQLCQgH

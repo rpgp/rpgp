@@ -3,8 +3,8 @@ use std::io::{BufRead, BufReader, Read};
 use crate::{
     armor::{self, BlockType, Dearmor, DearmorOptions},
     composed::{
-        cleartext::CleartextSignedMessage, Deserializable, Message, SignedPublicKey,
-        SignedSecretKey, StandaloneSignature,
+        cleartext::CleartextSignedMessage, Deserializable, DetachedSignature, Message,
+        SignedPublicKey, SignedSecretKey,
     },
     errors::{ensure, unimplemented_err, Result},
 };
@@ -17,7 +17,7 @@ pub enum Any<'a> {
     PublicKey(SignedPublicKey),
     SecretKey(SignedSecretKey),
     Message(Message<'a>),
-    Signature(StandaloneSignature),
+    Signature(DetachedSignature),
 }
 
 impl<'a> Any<'a> {
@@ -67,7 +67,7 @@ impl<'a> Any<'a> {
             }
             BlockType::Signature => {
                 let dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
-                let sig = StandaloneSignature::from_bytes(BufReader::new(dearmor))?;
+                let sig = DetachedSignature::from_bytes(BufReader::new(dearmor))?;
                 Ok((Self::Signature(sig), headers))
             }
             BlockType::CleartextMessage => {

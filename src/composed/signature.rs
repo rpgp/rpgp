@@ -9,15 +9,20 @@ use crate::{
     types::{PublicKeyTrait, Tag},
 };
 
-/// Standalone signature as defined by the cleartext framework.
+/// An OpenPGP data signature that occurs outside an OpenPGP Message,
+/// as a "detached signature":
+///
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#detached-signatures>.
+///
+/// All [DetachedSignature]s are either of type [SignatureType::Binary] or [SignatureType::Text].
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StandaloneSignature {
+pub struct DetachedSignature {
     pub signature: Signature,
 }
 
-impl StandaloneSignature {
+impl DetachedSignature {
     pub fn new(signature: Signature) -> Self {
-        StandaloneSignature { signature }
+        DetachedSignature { signature }
     }
 
     pub fn to_armored_writer(
@@ -53,7 +58,7 @@ impl StandaloneSignature {
     }
 }
 
-impl Serialize for StandaloneSignature {
+impl Serialize for DetachedSignature {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         self.signature.to_writer_with_header(writer)?;
         Ok(())
@@ -64,7 +69,7 @@ impl Serialize for StandaloneSignature {
     }
 }
 
-impl Deserializable for StandaloneSignature {
+impl Deserializable for DetachedSignature {
     /// Parse a signature.
     fn from_packets<'a, I: Iterator<Item = Result<Packet>> + 'a>(
         packets: std::iter::Peekable<I>,
@@ -82,7 +87,7 @@ pub struct SignatureParser<I: Sized + Iterator<Item = Result<Packet>>> {
 }
 
 impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for SignatureParser<I> {
-    type Item = Result<StandaloneSignature>;
+    type Item = Result<DetachedSignature>;
 
     fn next(&mut self) -> Option<Self::Item> {
         next(self.source.by_ref())
@@ -91,10 +96,10 @@ impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for SignatureParser<I>
 
 fn next<I: Iterator<Item = Result<Packet>>>(
     packets: &mut Peekable<I>,
-) -> Option<Result<StandaloneSignature>> {
+) -> Option<Result<DetachedSignature>> {
     match packets.by_ref().next() {
         Some(Ok(packet)) => match packet.tag() {
-            Tag::Signature => Some(packet.try_into().map(StandaloneSignature::new)),
+            Tag::Signature => Some(packet.try_into().map(DetachedSignature::new)),
             _ => Some(Err(format_err!("unexpected packet {:?}", packet.tag()))),
         },
         Some(Err(e)) => Some(Err(e)),
