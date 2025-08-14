@@ -16,12 +16,16 @@ const BUFFER_SIZE: usize = 8 * 1024;
 #[derive(derive_more::Debug)]
 pub enum SignatureOnePassReader<'a> {
     Init {
+        /// One Pass Signature packet
+        ops: OnePassSignature,
         /// Running hasher
         norm_hasher: Option<NormalizingHasher>,
         /// Data source
         source: Box<Message<'a>>,
     },
     Body {
+        /// One Pass Signature packet
+        ops: OnePassSignature,
         /// Running hasher
         norm_hasher: Option<NormalizingHasher>,
         /// Data source
@@ -42,7 +46,7 @@ pub enum SignatureOnePassReader<'a> {
 }
 
 impl<'a> SignatureOnePassReader<'a> {
-    pub(crate) fn new(ops: &OnePassSignature, source: Box<Message<'a>>) -> Result<Self> {
+    pub(crate) fn new(ops: OnePassSignature, source: Box<Message<'a>>) -> Result<Self> {
         let mut hasher = ops.hash_algorithm().new_hasher().ok();
         if let Some(ref mut hasher) = hasher {
             if let OpsVersionSpecific::V6 { salt, .. } = ops.version_specific() {
@@ -64,6 +68,7 @@ impl<'a> SignatureOnePassReader<'a> {
         let norm_hasher = hasher.map(|hasher| NormalizingHasher::new(hasher, text_mode));
 
         Ok(Self::Init {
+            ops,
             norm_hasher,
             source,
         })
@@ -122,6 +127,7 @@ impl<'a> SignatureOnePassReader<'a> {
         loop {
             match std::mem::replace(self, Self::Error) {
                 Self::Init {
+                    ops,
                     mut norm_hasher,
                     mut source,
                 } => {
@@ -141,12 +147,14 @@ impl<'a> SignatureOnePassReader<'a> {
                     }
 
                     *self = Self::Body {
+                        ops,
                         norm_hasher,
                         source,
                         buffer,
                     };
                 }
                 Self::Body {
+                    ops,
                     mut norm_hasher,
                     mut source,
                     mut buffer,
@@ -155,6 +163,7 @@ impl<'a> SignatureOnePassReader<'a> {
 
                     if buffer.has_remaining() {
                         *self = Self::Body {
+                            ops,
                             norm_hasher,
                             source,
                             buffer,
@@ -227,8 +236,15 @@ impl<'a> SignatureOnePassReader<'a> {
 
                         // calculate final hash
                         let hash = if let Some(mut hasher) = hasher {
-                            debug!("calculating final hash");
-                            if let Some(config) = signature.config() {
+                            if !ops.matches(&signature) {
+                                debug!("Ops and Signature don't match, rejecting this signature");
+
+                                // If Ops and Signature don't match, we consider the signature invalid.
+                                // Return an empty hash to model this.
+                                None
+                            } else if let Some(config) = signature.config() {
+                                debug!("calculating final hash");
+
                                 let len = config
                                     .hash_signature_data(&mut hasher)
                                     .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
@@ -256,6 +272,7 @@ impl<'a> SignatureOnePassReader<'a> {
                         };
                     } else {
                         *self = Self::Body {
+                            ops,
                             norm_hasher,
                             source,
                             buffer,
@@ -288,11 +305,13 @@ impl<'a> SignatureOnePassReader<'a> {
     pub(crate) fn decompress(self) -> Result<Self> {
         match self {
             Self::Init {
+                ops,
                 norm_hasher,
                 source,
             } => {
                 let source = source.decompress()?;
                 Ok(Self::Init {
+                    ops,
                     norm_hasher,
                     source: Box::new(source),
                 })
@@ -310,12 +329,14 @@ impl<'a> SignatureOnePassReader<'a> {
     ) -> Result<(Self, RingResult)> {
         match self {
             Self::Init {
+                ops,
                 norm_hasher,
                 source,
             } => {
                 let (source, fps) = source.decrypt_the_ring(ring, abort_early)?;
                 Ok((
                     Self::Init {
+                        ops,
                         norm_hasher,
                         source: Box::new(source),
                     },
@@ -365,5 +386,94 @@ impl Read for SignatureOnePassReader<'_> {
             Self::Done { .. } => Ok(0),
             Self::Error => Err(io::Error::other("SignatureOnePassReader errored")),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
+
+    use crate::{
+        armor,
+        armor::{BlockType, Headers},
+        composed::{Deserializable, DetachedSignature, Message, SignedSecretKey},
+        crypto::hash::HashAlgorithm,
+        packet::{LiteralData, OnePassSignature, Packet, SignatureType},
+        ser::Serialize,
+        types::{KeyDetails, Password},
+    };
+
+    const PLAIN: &str = "hello world\r\n";
+    const PLAIN_LF: &str = "hello world\n";
+
+    #[test]
+    fn message_with_deviating_ops() {
+        // Produces a doctored message, which should not validate as ok.
+        // It has the deviating signature type "Text" in the one pass signature packet.
+        // The message payload would verify as a correct message if the signature were indeed a text mode signature.
+        // However, only the OPS shows "Text", while the "main" Signature packets shows signature type "Binary".
+        // Therefore, the message should not show successful verification.
+
+        let _ = pretty_env_logger::try_init();
+
+        let rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (bob, _) =
+            SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+                .unwrap();
+
+        // Make a binary signature over "PLAIN"
+        let sig = DetachedSignature::sign_binary_data(
+            rng,
+            &bob.primary_key,
+            &Password::empty(),
+            HashAlgorithm::Sha256,
+            PLAIN.as_bytes(),
+        )
+        .unwrap();
+
+        let ops = OnePassSignature::v3(
+            SignatureType::Text, // Type deviates from the actual Signature!
+            HashAlgorithm::Sha256,
+            bob.primary_key.algorithm(),
+            bob.primary_key.key_id(),
+        );
+
+        // Payload uses different line ending!
+        let lit = LiteralData::from_bytes(&[][..], PLAIN_LF.as_bytes().into()).unwrap();
+
+        // Construct a binary representation of this hacked message
+        let packets: Vec<Packet> = vec![
+            Packet::OnePassSignature(ops),
+            Packet::LiteralData(lit),
+            Packet::Signature(sig.signature),
+        ];
+
+        let mut binary_msg = vec![];
+        for p in &packets {
+            p.to_writer(&mut binary_msg).unwrap();
+        }
+
+        // debug print armored version of the message
+        let mut armored = vec![];
+        armor::write(
+            &packets,
+            BlockType::Message,
+            &mut armored,
+            Some(&Headers::default()),
+            true,
+        )
+        .unwrap();
+        log::debug!("{}", String::from_utf8(armored).unwrap());
+
+        // Parse message from binary
+        let mut msg = Message::from_bytes(&*binary_msg).unwrap();
+
+        let _ = msg.as_data_vec().unwrap();
+
+        msg.verify(bob.primary_key.public_key())
+            .expect_err("this doctored message must not validate as ok");
     }
 }

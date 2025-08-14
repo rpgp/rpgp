@@ -12,8 +12,8 @@ use crate::{
     crypto::sym::SymmetricKeyAlgorithm,
     errors::{bail, ensure, ensure_eq, format_err, Error, Result},
     packet::{
-        InnerSignature, LiteralDataHeader, OnePassSignature, Packet, PacketHeader, PacketTrait,
-        ProtectedDataConfig, PublicKeyEncryptedSessionKey, Signature, SymKeyEncryptedSessionKey,
+        InnerSignature, LiteralDataHeader, Packet, PacketHeader, PacketTrait, ProtectedDataConfig,
+        PublicKeyEncryptedSessionKey, Signature, SymKeyEncryptedSessionKey,
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -168,8 +168,6 @@ pub enum Message<'a> {
     },
     /// One-Pass Signed Message: One-Pass Signature Packet, OpenPGP Message, Corresponding Signature Packet.
     SignedOnePass {
-        /// for signature packets that contain a one pass message
-        one_pass_signature: OnePassSignature,
         reader: SignatureOnePassReader<'a>,
         /// is this a nested message?
         is_nested: bool,
@@ -201,7 +199,6 @@ pub(crate) enum MessageParts {
         is_nested: bool,
     },
     SignedOnePass {
-        one_pass_signature: OnePassSignature,
         hash: Option<Box<[u8]>>,
         signature: Signature,
         parts: Box<MessageParts>,
@@ -263,11 +260,7 @@ impl<'a> Message<'a> {
                     },
                 )
             }
-            Message::SignedOnePass {
-                one_pass_signature,
-                reader,
-                is_nested,
-            } => {
+            Message::SignedOnePass { reader, is_nested } => {
                 let SignatureOnePassReader::Done {
                     hash,
                     source,
@@ -281,7 +274,6 @@ impl<'a> Message<'a> {
                 (
                     reader,
                     MessageParts::SignedOnePass {
-                        one_pass_signature,
                         hash,
                         signature,
                         parts: Box::new(parts),
@@ -380,7 +372,6 @@ impl MessageParts {
                 }
             }
             MessageParts::SignedOnePass {
-                one_pass_signature,
                 hash,
                 signature,
                 parts,
@@ -388,7 +379,6 @@ impl MessageParts {
             } => {
                 let source = parts.into_message(reader);
                 Message::SignedOnePass {
-                    one_pass_signature,
                     reader: SignatureOnePassReader::Done {
                         hash,
                         source: Box::new(source),
@@ -704,12 +694,7 @@ impl<'a> Message<'a> {
                 reader: reader.decompress()?,
                 is_nested,
             }),
-            Message::SignedOnePass {
-                one_pass_signature,
-                reader,
-                is_nested,
-            } => Ok(Message::SignedOnePass {
-                one_pass_signature,
+            Message::SignedOnePass { reader, is_nested } => Ok(Message::SignedOnePass {
                 reader: reader.decompress()?,
                 is_nested,
             }),
@@ -935,20 +920,9 @@ impl<'a> Message<'a> {
                 let (reader, res) = reader.decrypt_the_ring(ring, abort_early)?;
                 Ok((Message::Signed { reader, is_nested }, res))
             }
-            Message::SignedOnePass {
-                reader,
-                one_pass_signature,
-                is_nested,
-            } => {
+            Message::SignedOnePass { reader, is_nested } => {
                 let (reader, res) = reader.decrypt_the_ring(ring, abort_early)?;
-                Ok((
-                    Message::SignedOnePass {
-                        one_pass_signature,
-                        reader,
-                        is_nested,
-                    },
-                    res,
-                ))
+                Ok((Message::SignedOnePass { reader, is_nested }, res))
             }
             Message::Encrypted {
                 esk,

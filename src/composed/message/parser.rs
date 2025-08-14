@@ -161,12 +161,8 @@ pub(super) fn next(
                 };
 
                 let reader =
-                    SignatureOnePassReader::new(&one_pass_signature, Box::new(inner_message))?;
-                let message = Message::SignedOnePass {
-                    one_pass_signature,
-                    reader,
-                    is_nested,
-                };
+                    SignatureOnePassReader::new(one_pass_signature, Box::new(inner_message))?;
+                let message = Message::SignedOnePass { reader, is_nested };
                 return Ok(Some(message));
             }
             Tag::CompressedData => {
