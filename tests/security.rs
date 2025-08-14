@@ -305,7 +305,7 @@ fn rpg_010_standalone_signature_subtract_with_overflow1() {
     // expected bug behavior
     // thread '<unnamed>' panicked at src/packet/user_attribute.rs:165:41:
     // attempt to subtract with overflow
-    let _ = pgp::composed::StandaloneSignature::from_bytes(bad_input);
+    let _ = pgp::composed::DetachedSignature::from_bytes(bad_input);
 }
 
 /// RPG-009
@@ -350,6 +350,6 @@ fn oom_signature_1() {
         155, 6, 3, 72, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
     ];
 
-    let res = pgp::composed::StandaloneSignature::from_bytes(&bad_input[..]);
+    let res = pgp::composed::DetachedSignature::from_bytes(&bad_input[..]);
     assert!(res.is_err());
 }

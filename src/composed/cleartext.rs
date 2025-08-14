@@ -11,12 +11,16 @@ use log::debug;
 
 use crate::{
     armor::{self, header_parser, read_from_buf, BlockType, DearmorOptions, Headers},
-    composed::{ArmorOptions, Deserializable, StandaloneSignature},
+    composed::ArmorOptions,
     crypto::hash::HashAlgorithm,
     errors::{bail, ensure, ensure_eq, format_err, InvalidInputSnafu, Result},
     line_writer::LineBreak,
     normalize_lines::{normalize_lines, NormalizedReader},
-    packet::{Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
+    packet::{
+        Packet, PacketParser, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
+        SubpacketData,
+    },
+    ser::Serialize,
     types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
 };
 
@@ -35,7 +39,7 @@ pub struct CleartextSignedMessage {
     hashes: Vec<HashAlgorithm>,
 
     /// The actual signature(s).
-    signatures: Vec<StandaloneSignature>,
+    signatures: Vec<Signature>,
 }
 
 impl CleartextSignedMessage {
@@ -51,7 +55,6 @@ where {
         let signature_text = NormalizedReader::new(&mut bytes, LineBreak::Crlf);
         let hash = config.hash_alg;
         let signature = config.sign(key, key_pw, signature_text)?;
-        let signature = StandaloneSignature::new(signature);
 
         Ok(Self {
             csf_encoded_text: dash_escape(text),
@@ -104,7 +107,6 @@ where {
                 .hash_alg()
                 .ok_or_else(|| InvalidInputSnafu {}.build())?;
             hashes.insert(hash_alg);
-            let signature = StandaloneSignature::new(signature);
             signatures.push(signature);
         }
 
@@ -116,14 +118,14 @@ where {
     }
 
     /// The signature on the message.
-    pub fn signatures(&self) -> &[StandaloneSignature] {
+    pub fn signatures(&self) -> &[Signature] {
         &self.signatures
     }
 
     /// Verify the signature against the normalized cleartext.
     ///
     /// On success returns the first signature that verified against this key.
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<&StandaloneSignature> {
+    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<&Signature> {
         let nt = self.signed_text();
         for signature in &self.signatures {
             if signature.verify(key, nt.as_bytes()).is_ok() {
@@ -137,7 +139,7 @@ where {
     /// Verify each signature, potentially against a different key.
     pub fn verify_many<F>(&self, verifier: F) -> Result<()>
     where
-        F: Fn(usize, &StandaloneSignature, &[u8]) -> Result<()>,
+        F: Fn(usize, &Signature, &[u8]) -> Result<()>,
     {
         let nt = self.signed_text();
         for (i, signature) in self.signatures.iter().enumerate() {
@@ -207,12 +209,17 @@ where {
 
         ensure_eq!(typ, BlockType::Signature, "invalid block type");
 
-        // TODO: limited read to 1GiB
-        let mut bytes = Vec::new();
-        dearmor.read_to_end(&mut bytes)?;
+        let mut signatures = vec![];
 
-        let signatures = StandaloneSignature::from_bytes_many(&bytes[..])?;
-        let signatures = signatures.collect::<Result<_>>()?;
+        // TODO: limited read to 1GiB
+        let pp = PacketParser::new(BufReader::new(&mut dearmor));
+        for res in pp {
+            match res {
+                Ok(Packet::Signature(sig)) => signatures.push(sig),
+                Ok(p) => bail!("unexpected packet {:?}", p),
+                Err(e) => return Err(e),
+            }
+        }
 
         let (_, headers, _, b) = dearmor.into_parts();
 
@@ -251,15 +258,32 @@ where {
         writer.write_all(self.csf_encoded_text.as_bytes())?;
         writer.write_all(b"\n")?;
 
+        /// A signature wrapper that serializes complete with packet header
+        struct SerializableSignatures<'a>(&'a [Signature]);
+        impl Serialize for SerializableSignatures<'_> {
+            fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+                for sig in self.0 {
+                    sig.to_writer_with_header(writer)?;
+                }
+                Ok(())
+            }
+
+            fn write_len(&self) -> usize {
+                let mut sum = 0;
+                for sig in self.0 {
+                    sum += sig.write_len_with_header();
+                }
+                sum
+            }
+        }
+
         armor::write(
-            &self.signatures,
+            &SerializableSignatures(&self.signatures),
             armor::BlockType::Signature,
             writer,
             opts.headers,
             opts.include_checksum,
-        )?;
-
-        Ok(())
+        )
     }
 
     pub fn to_armored_bytes(&self, opts: ArmorOptions<'_>) -> Result<Vec<u8>> {
@@ -390,7 +414,7 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-    use crate::composed::{Any, SignedPublicKey, SignedSecretKey};
+    use crate::composed::{Any, Deserializable, SignedPublicKey, SignedSecretKey};
 
     #[test]
     fn test_cleartext_openpgp_1() {

@@ -673,7 +673,7 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
-    use crate::composed::{Deserializable, StandaloneSignature};
+    use crate::composed::{Deserializable, DetachedSignature};
 
     #[test]
     fn test_subpacket_pref_sym_alg() {
@@ -702,7 +702,7 @@ SW+kj0jFDKC2xb/o8hbkTpwPtsoI
 =0ajX
 -----END PGP SIGNATURE-----";
 
-        let (sig, _) = StandaloneSignature::from_armor_single(revocation.as_bytes()).unwrap();
+        let (sig, _) = DetachedSignature::from_armor_single(revocation.as_bytes()).unwrap();
 
         let rc = sig.signature.revocation_reason_code();
 
