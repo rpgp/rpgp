@@ -1020,6 +1020,78 @@ impl PublicKeyTrait for PublicSubkey {
     }
 }
 
+/// A public component key (either a public primary key, or a public subkey).
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ComponentKeyPublic {
+    Primary(PublicKey),
+    Subkey(PublicSubkey),
+}
+
+impl KeyDetails for ComponentKeyPublic {
+    fn version(&self) -> KeyVersion {
+        match self {
+            ComponentKeyPublic::Primary(pri) => pri.version(),
+            ComponentKeyPublic::Subkey(sub) => sub.version(),
+        }
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        match self {
+            ComponentKeyPublic::Primary(pri) => pri.fingerprint(),
+            ComponentKeyPublic::Subkey(sub) => sub.fingerprint(),
+        }
+    }
+
+    fn key_id(&self) -> KeyId {
+        match self {
+            ComponentKeyPublic::Primary(pri) => pri.key_id(),
+            ComponentKeyPublic::Subkey(sub) => sub.key_id(),
+        }
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        match self {
+            ComponentKeyPublic::Primary(pri) => pri.algorithm(),
+            ComponentKeyPublic::Subkey(sub) => sub.algorithm(),
+        }
+    }
+}
+
+impl PublicKeyTrait for ComponentKeyPublic {
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        match self {
+            ComponentKeyPublic::Primary(pri) => pri.created_at(),
+            ComponentKeyPublic::Subkey(sub) => sub.created_at(),
+        }
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        match self {
+            ComponentKeyPublic::Primary(pri) => pri.expiration(),
+            ComponentKeyPublic::Subkey(sub) => sub.expiration(),
+        }
+    }
+
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
+        match self {
+            ComponentKeyPublic::Primary(pri) => pri.verify_signature(hash, data, sig),
+            ComponentKeyPublic::Subkey(sub) => sub.verify_signature(hash, data, sig),
+        }
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        match self {
+            ComponentKeyPublic::Primary(pri) => pri.public_params(),
+            ComponentKeyPublic::Subkey(sub) => sub.public_params(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone;

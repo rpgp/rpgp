@@ -16,7 +16,7 @@ use crate::{
     errors::{ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType, SubpacketData},
     ser::Serialize,
-    types::{EskType, Imprint, Password, PkeskBytes, PublicKeyTrait, Tag},
+    types::{DecryptionTrait, EskType, Imprint, Password, PkeskBytes, PublicKeyTrait, Tag},
 };
 
 /// Represents a secret signed PGP key.
