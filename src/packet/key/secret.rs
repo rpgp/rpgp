@@ -18,9 +18,9 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion,
-        Password, PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait,
-        SecretParams, SignatureBytes, Tag,
+        DecryptionTrait, EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails, KeyId,
+        KeyVersion, Password, PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams,
+        SecretKeyTrait, SecretParams, SignatureBytes, Tag,
     },
 };
 
@@ -89,7 +89,13 @@ impl SecretKey {
         self.secret_params.has_sha1_checksum()
     }
 
-    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
+    pub fn public_key(&self) -> &super::PublicKey {
+        &self.details
+    }
+}
+
+impl DecryptionTrait for SecretKey {
+    fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
@@ -101,10 +107,6 @@ impl SecretKey {
                 Ok(work(pub_params, &plain))
             }
         }
-    }
-
-    pub fn public_key(&self) -> &super::PublicKey {
-        &self.details
     }
 }
 
@@ -186,7 +188,13 @@ impl SecretSubkey {
         config.sign_primary_key_binding(self, &self.public_key(), key_pw, &pub_key)
     }
 
-    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
+    pub fn public_key(&self) -> &super::PublicSubkey {
+        &self.details
+    }
+}
+
+impl DecryptionTrait for SecretSubkey {
+    fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
@@ -198,10 +206,6 @@ impl SecretSubkey {
                 Ok(work(pub_params, &plain))
             }
         }
-    }
-
-    pub fn public_key(&self) -> &super::PublicSubkey {
-        &self.details
     }
 }
 
@@ -642,6 +646,112 @@ where
 
     config.sign_key(key, key_pw, pub_key)
 }
+
+/// A component key with private key material (either a secret primary key, or a secret subkey).
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ComponentKeySecret {
+    Primary(SecretKey),
+    Subkey(SecretSubkey),
+}
+
+impl KeyDetails for ComponentKeySecret {
+    fn version(&self) -> KeyVersion {
+        match self {
+            Self::Primary(p) => p.version(),
+            Self::Subkey(s) => s.version(),
+        }
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        match self {
+            Self::Primary(p) => p.fingerprint(),
+            Self::Subkey(s) => s.fingerprint(),
+        }
+    }
+
+    fn key_id(&self) -> KeyId {
+        match self {
+            Self::Primary(p) => p.key_id(),
+            Self::Subkey(s) => s.key_id(),
+        }
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        match self {
+            Self::Primary(p) => p.algorithm(),
+            Self::Subkey(s) => s.algorithm(),
+        }
+    }
+}
+
+impl SecretKeyTrait for ComponentKeySecret {
+    fn create_signature(
+        &self,
+        key_pw: &Password,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<SignatureBytes> {
+        match self {
+            ComponentKeySecret::Primary(p) => p.create_signature(key_pw, hash, data),
+            ComponentKeySecret::Subkey(s) => s.create_signature(key_pw, hash, data),
+        }
+    }
+
+    fn hash_alg(&self) -> HashAlgorithm {
+        match self {
+            ComponentKeySecret::Primary(p) => p.hash_alg(),
+            ComponentKeySecret::Subkey(s) => s.hash_alg(),
+        }
+    }
+}
+
+impl DecryptionTrait for ComponentKeySecret {
+    fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
+    where
+        G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
+    {
+        match self {
+            ComponentKeySecret::Primary(p) => p.unlock(pw, work),
+            ComponentKeySecret::Subkey(s) => s.unlock(pw, work),
+        }
+    }
+}
+
+impl PublicKeyTrait for ComponentKeySecret {
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        match self {
+            ComponentKeySecret::Primary(pri) => pri.public_key().created_at(),
+            ComponentKeySecret::Subkey(sub) => sub.public_key().created_at(),
+        }
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        match self {
+            ComponentKeySecret::Primary(pri) => pri.public_key().expiration(),
+            ComponentKeySecret::Subkey(sub) => sub.public_key().expiration(),
+        }
+    }
+
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
+        match self {
+            ComponentKeySecret::Primary(pri) => pri.public_key().verify_signature(hash, data, sig),
+            ComponentKeySecret::Subkey(sub) => sub.public_key().verify_signature(hash, data, sig),
+        }
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        match self {
+            ComponentKeySecret::Primary(pri) => pri.public_key().public_params(),
+            ComponentKeySecret::Subkey(sub) => sub.public_key().public_params(),
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
