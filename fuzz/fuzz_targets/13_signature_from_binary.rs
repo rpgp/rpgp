@@ -10,7 +10,7 @@ fuzz_target!(|data: &[u8]| {
     //
     // FUZZER RESULT this triggers unsigned overflows, not visible in release profile
     // finding RPG-10 in ROS report 2024, fixed with 0.14.1
-    let signature_res = pgp::composed::StandaloneSignature::from_bytes(data);
+    let signature_res = pgp::composed::DetachedSignature::from_bytes(data);
 
     match signature_res {
         Ok(sig) => {
