@@ -13,12 +13,14 @@ use std::fs::File;
 
 use pgp::{
     composed::{
-        CleartextSignedMessage, Deserializable, Message, PlainSessionKey, SignedPublicKey,
-        SignedSecretKey,
+        CleartextSignedMessage, Deserializable, KeyType, Message, MessageBuilder, PlainSessionKey,
+        SecretKeyParamsBuilder, SignedPublicKey, SignedSecretKey,
     },
-    crypto::sym::SymmetricKeyAlgorithm,
+    crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
     types::{KeyDetails, KeyId, Password},
 };
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -1013,4 +1015,57 @@ fn message_parsing_pqc_pkesk() {
     };
 
     assert_eq!(esk.len(), 2);
+}
+
+#[test]
+fn message_many_signatures() {
+    // inline-sign a message with quite a lot of keys, producing a deeply nested message structure
+
+    pretty_env_logger::try_init().ok();
+
+    const PLAIN: &str = "hello";
+    // number of private keys to generate and sign with
+    const NUM: usize = 1000;
+
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    // make NUM keys that can produce data signatures
+    let keys: Vec<_> = (0..NUM)
+        .map(|count| {
+            // legal v4 key, with user id
+            let key_params = SecretKeyParamsBuilder::default()
+                .key_type(KeyType::Ed25519)
+                .can_sign(true)
+                .primary_user_id(format!("test{}", count))
+                .build()
+                .unwrap();
+
+            let key = key_params
+                .generate(&mut rng)
+                .expect("failed to generate secret key");
+
+            key.sign(&mut rng, &"".into()).expect("failed to sign key")
+        })
+        .collect();
+
+    let mut builder = MessageBuilder::from_bytes("", PLAIN.as_bytes());
+
+    // sign the message with all the keys
+    for skey in &keys {
+        builder.sign(&skey.primary_key, Password::empty(), HashAlgorithm::Sha256);
+    }
+
+    let signed = builder.to_vec(&mut rng).expect("writing");
+
+    // parse the message ...
+    let mut message = Message::from_bytes(&signed[..]).expect("reading");
+
+    let plain = message.as_data_string().unwrap();
+    assert_eq!(plain, PLAIN);
+
+    // ... and try to verify one of the signatures in it
+    assert!(message.is_one_pass_signed());
+    message
+        .verify(keys.first().unwrap().primary_key.public_key())
+        .expect("signed");
 }
