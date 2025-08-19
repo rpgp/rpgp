@@ -554,7 +554,7 @@ impl<'a> Edata<'a> {
                 let reader = SymEncryptedDataReader::new(reader)?;
                 Ok(Self::SymEncryptedData { reader })
             }
-            Tag::GnupgAead => {
+            Tag::GnupgAeadData => {
                 let reader = SymEncryptedProtectedDataReader::new_gnupg_aead(reader)?;
                 Ok(Self::GnupgAeadData { reader })
             }
