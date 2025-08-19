@@ -981,6 +981,9 @@ fn fuzz_msg_reader() {
         "./tests/fuzz/minimized-from-7585e756306047aba2218ebf70b24c6373e82e2a",
         // OPS SKESK SED
         "./tests/fuzz/minimized-from-82b02bbac39a10c7b98d020f78153ffb75c94607",
+        // many OPS, followed by some odd packet(s)
+        "./tests/fuzz/crash-1b1482d11c52075aabfc75256626a56c607787f3",
+        "./tests/fuzz/minimized-from-e2a02fea22523e47a4d74b66bda8f455533bcfbb",
     ] {
         let _ = Message::from_file(file).unwrap().as_data_vec();
     }
