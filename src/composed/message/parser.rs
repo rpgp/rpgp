@@ -37,7 +37,7 @@ pub(super) fn next(
             | Tag::PublicKeyEncryptedSessionKey
             | Tag::SymEncryptedData
             | Tag::SymEncryptedProtectedData
-            | Tag::GnupgAead => {
+            | Tag::GnupgAeadData => {
                 // (a) Encrypted Message:
                 //   - ESK Seq (may be empty)
                 //   - Encrypted Data -> OpenPGP Message
@@ -74,7 +74,9 @@ pub(super) fn next(
                             esks.push(esk);
                             packets = crate::packet::PacketParser::new(packet.into_inner());
                         }
-                        Tag::SymEncryptedData | Tag::SymEncryptedProtectedData | Tag::GnupgAead => {
+                        Tag::SymEncryptedData
+                        | Tag::SymEncryptedProtectedData
+                        | Tag::GnupgAeadData => {
                             let edata = Edata::try_from_reader(packet)?;
                             let esk = match edata {
                                 Edata::SymEncryptedData { .. } => {

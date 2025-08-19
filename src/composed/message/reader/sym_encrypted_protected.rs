@@ -43,7 +43,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
     }
 
     pub fn new_gnupg_aead(mut source: PacketBodyReader<R>) -> Result<Self> {
-        debug_assert_eq!(source.packet_header().tag(), Tag::GnupgAead);
+        debug_assert_eq!(source.packet_header().tag(), Tag::GnupgAeadData);
 
         let config = ProtectedDataConfig::GnupgAead(GnupgAeadConfig::try_from_reader(&mut source)?);
 

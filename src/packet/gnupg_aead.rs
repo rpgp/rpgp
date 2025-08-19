@@ -98,7 +98,7 @@ pub struct GnupgAeadData {
 
 impl GnupgAeadData {
     pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut data: B) -> Result<Self> {
-        ensure_eq!(packet_header.tag(), Tag::GnupgAead, "invalid tag");
+        ensure_eq!(packet_header.tag(), Tag::GnupgAeadData, "invalid tag");
 
         let config = Config::try_from_reader(&mut data)?;
         let data = data.rest()?;
@@ -169,7 +169,7 @@ mod tests {
                     let len = 1u32; // unused
                     let packet_header = PacketHeader::from_parts(
                         PacketHeaderVersion::New,
-                        Tag::GnupgAead,
+                        Tag::GnupgAeadData,
                         PacketLength::Fixed(len),
                     )
                     .unwrap();
