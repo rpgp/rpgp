@@ -981,6 +981,21 @@ fn fuzz_msg_reader() {
 }
 
 #[test]
+fn fuzz_msg_reader_fail() {
+    // those are fuzzer-generated "messages" that each contain a nonsensical series of packets
+    // (surely with nonsensical package contents, as well)
+    pretty_env_logger::try_init().ok();
+
+    for file in [
+        // many OPS, followed by some odd packet(s)
+        "./tests/fuzz/crash-1b1482d11c52075aabfc75256626a56c607787f3",
+        "./tests/fuzz/minimized-from-e2a02fea22523e47a4d74b66bda8f455533bcfbb",
+    ] {
+        let _ = Message::from_file(file).unwrap_err();
+    }
+}
+
+#[test]
 fn message_parsing_pqc_pkesk() {
     pretty_env_logger::try_init().ok();
 
