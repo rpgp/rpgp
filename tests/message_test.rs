@@ -981,11 +981,23 @@ fn fuzz_msg_reader() {
         "./tests/fuzz/minimized-from-7585e756306047aba2218ebf70b24c6373e82e2a",
         // OPS SKESK SED
         "./tests/fuzz/minimized-from-82b02bbac39a10c7b98d020f78153ffb75c94607",
+    ] {
+        let _ = Message::from_file(file).unwrap().as_data_vec();
+    }
+}
+
+#[test]
+fn fuzz_msg_reader_fail() {
+    // those are fuzzer-generated "messages" that each contain a nonsensical series of packets
+    // (surely with nonsensical package contents, as well)
+    pretty_env_logger::try_init().ok();
+
+    for file in [
         // many OPS, followed by some odd packet(s)
         "./tests/fuzz/crash-1b1482d11c52075aabfc75256626a56c607787f3",
         "./tests/fuzz/minimized-from-e2a02fea22523e47a4d74b66bda8f455533bcfbb",
     ] {
-        let _ = Message::from_file(file).unwrap().as_data_vec();
+        let _ = Message::from_file(file).unwrap_err();
     }
 }
 
