@@ -4,202 +4,272 @@ use std::{
 };
 
 use super::{
+    DebugBufRead, MessageReader, PacketBodyReader,
     reader::{
         CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassReader,
     },
-    DebugBufRead, MessageReader,
 };
 use crate::{
     armor::{BlockType, DearmorOptions},
-    composed::{message::Message, shared::is_binary, Edata, Esk},
-    errors::{bail, format_err, unimplemented_err, Result},
+    composed::{Edata, Esk, message::Message, shared::is_binary},
+    errors::{Result, bail, format_err, unimplemented_err},
     packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
     parsing_reader::BufReadParsing,
     types::{PkeskVersion, SkeskVersion, Tag},
 };
 
-/// Parses a single message level
-pub(super) fn next(
-    mut packets: crate::packet::PacketParser<MessageReader<'_>>,
-    is_nested: bool,
-) -> Result<Option<Message<'_>>> {
-    loop {
-        let Some(packet) = packets.next_owned() else {
-            return Ok(None);
-        };
-        let mut packet = packet?;
+struct MessageParser<'a> {
+    messages: Vec<OpenMessage>,
+    current: MessageParserState<'a>,
+}
+enum OpenMessage {
+    Ops {
+        signature: crate::packet::OnePassSignature,
+    },
+    Signature {
+        signature: crate::packet::Signature,
+    },
+}
 
-        // Handle 1 OpenPGP Message per loop iteration
-        let tag = packet.packet_header().tag();
+enum MessageParserState<'a> {
+    Start {
+        packets: crate::packet::PacketParser<MessageReader<'a>>,
+        is_nested: usize,
+    },
+    Error,
+}
 
-        match tag {
-            Tag::SymKeyEncryptedSessionKey
-            | Tag::PublicKeyEncryptedSessionKey
-            | Tag::SymEncryptedData
-            | Tag::SymEncryptedProtectedData
-            | Tag::GnupgAeadData => {
-                // (a) Encrypted Message:
-                //   - ESK Seq (may be empty)
-                //   - Encrypted Data -> OpenPGP Message
+impl<'a> MessageParser<'a> {
+    pub(super) fn new(
+        packets: crate::packet::PacketParser<MessageReader<'a>>,
+        is_nested: usize,
+    ) -> Self {
+        Self {
+            messages: Vec::new(),
+            current: MessageParserState::Start { packets, is_nested },
+        }
+    }
 
-                let mut esks = Vec::new();
-
-                if tag == Tag::SymKeyEncryptedSessionKey || tag == Tag::PublicKeyEncryptedSessionKey
-                {
-                    let esk = Esk::try_from_reader(&mut packet)?;
-                    esks.push(esk);
-                } else {
-                    // this message consists of just a bare encryption container
-                    let edata = Edata::try_from_reader(packet)?;
-
-                    return Ok(Some(Message::Encrypted {
-                        esk: esks, // empty
-                        edata,
-                        is_nested,
-                    }));
-                }
-
-                packets = crate::packet::PacketParser::new(packet.into_inner());
-                // Read ESKs unit we find the Encrypted Data
-                loop {
+    /// Parses a single message level
+    pub(super) fn run(mut self) -> Result<Option<Message<'a>>> {
+        loop {
+            match std::mem::replace(&mut self.current, MessageParserState::Error) {
+                MessageParserState::Start { packets, is_nested } => {
+                    log::debug!("next: nesting: {is_nested}");
                     let Some(packet) = packets.next_owned() else {
-                        bail!("missing encrypted data packet");
+                        return Ok(None);
                     };
-
                     let mut packet = packet?;
+
+                    // Handle 1 OpenPGP Message per loop iteration
                     let tag = packet.packet_header().tag();
+                    log::debug!("tag {:?}", tag);
                     match tag {
-                        Tag::SymKeyEncryptedSessionKey | Tag::PublicKeyEncryptedSessionKey => {
-                            let esk = Esk::try_from_reader(&mut packet)?;
-                            esks.push(esk);
-                            packets = crate::packet::PacketParser::new(packet.into_inner());
-                        }
-                        Tag::SymEncryptedData
+                        Tag::SymKeyEncryptedSessionKey
+                        | Tag::PublicKeyEncryptedSessionKey
+                        | Tag::SymEncryptedData
                         | Tag::SymEncryptedProtectedData
                         | Tag::GnupgAeadData => {
-                            let edata = Edata::try_from_reader(packet)?;
-                            let esk = match edata {
-                                Edata::SymEncryptedData { .. } => {
-                                    esk_filter(esks, PkeskVersion::V3, &[SkeskVersion::V4])
-                                }
-                                Edata::SymEncryptedProtectedData { ref reader } => {
-                                    match reader.config() {
-                                        ProtectedDataConfig::Seipd(
-                                            SymEncryptedProtectedDataConfig::V1,
-                                        ) => {
-                                            esk_filter(esks, PkeskVersion::V3, &[SkeskVersion::V4])
-                                        }
-
-                                        ProtectedDataConfig::Seipd(
-                                            SymEncryptedProtectedDataConfig::V2 { .. },
-                                        ) => {
-                                            esk_filter(esks, PkeskVersion::V6, &[SkeskVersion::V6])
-                                        }
-                                        ProtectedDataConfig::GnupgAead { .. } => {
-                                            bail!("GnupgAead config not allowed in SymEncryptedProtectedData")
-                                        }
-                                    }
-                                }
-                                Edata::GnupgAeadData { ref reader, .. } => match reader.config() {
-                                    ProtectedDataConfig::Seipd(_) => {
-                                        bail!("Seipd config not allowed in GnupgAeadData");
-                                    }
-                                    ProtectedDataConfig::GnupgAead { .. } => esk_filter(
-                                        esks,
-                                        PkeskVersion::V3,
-                                        &[SkeskVersion::V4, SkeskVersion::V5],
-                                    ),
-                                },
+                            return Self::visit_esk(tag, packet, is_nested);
+                        }
+                        Tag::Signature => {
+                            // (b) Signed Message
+                            //   (1) Signature Packet, OpenPGP Message
+                            //      - Signature Packet
+                            //      - OpenPGP Message
+                            let signature = crate::packet::Signature::try_from_reader(
+                                packet.packet_header(),
+                                &mut packet,
+                            )?;
+                            self.messages.push(OpenMessage::Signature { signature });
+                            self.current = MessageParserState::Start {
+                                packets: crate::packet::PacketParser::new(packet.into_inner()),
+                                is_nested: is_nested + 1,
                             };
-                            return Ok(Some(Message::Encrypted {
-                                esk,
-                                edata,
-                                is_nested,
-                            }));
+                        }
+                        Tag::OnePassSignature => {
+                            //   (2) One-Pass Signed Message.
+                            //      - OPS
+                            //      - OpenPgp Message
+                            //      - Signature Packet
+                            let signature = crate::packet::OnePassSignature::try_from_reader(
+                                packet.packet_header(),
+                                &mut packet,
+                            )?;
+                            self.messages.push(OpenMessage::Ops { signature });
+                            self.current = MessageParserState::Start {
+                                packets: crate::packet::PacketParser::new(packet.into_inner()),
+                                is_nested: is_nested + 1,
+                            };
+                        }
+                        Tag::CompressedData => {
+                            // (c) Compressed Message
+                            //   - Compressed Packet
+                            let reader = CompressedDataReader::new(packet, false)?;
+                            let message = Message::Compressed {
+                                reader,
+                                is_nested: is_nested > 0,
+                            };
+                            return self.finish(message, is_nested);
+                        }
+                        Tag::LiteralData => {
+                            // (d) Literal Message
+                            //   - Literal Packet
+                            let reader = LiteralDataReader::new(packet)?;
+                            let message = Message::Literal {
+                                reader,
+                                is_nested: is_nested > 0,
+                            };
+                            return self.finish(message, is_nested);
                         }
                         Tag::Padding => {
                             // drain reader
                             packet.drain()?;
-                            packets = crate::packet::PacketParser::new(packet.into_inner());
+                            self.current = MessageParserState::Start {
+                                packets: crate::packet::PacketParser::new(packet.into_inner()),
+                                is_nested,
+                            };
                         }
                         Tag::Marker => {
                             // drain reader
                             packet.drain()?;
-                            packets = crate::packet::PacketParser::new(packet.into_inner());
+                            self.current = MessageParserState::Start {
+                                packets: crate::packet::PacketParser::new(packet.into_inner()),
+                                is_nested,
+                            };
+                        }
+                        Tag::UnassignedNonCritical(_) | Tag::Experimental(_) => {
+                            // Skip "Unassigned Non-Critical" and "Private or Experimental Use" packets
+
+                            // drain reader
+                            packet.drain()?;
+                            self.current = MessageParserState::Start {
+                                packets: crate::packet::PacketParser::new(packet.into_inner()),
+                                is_nested,
+                            };
                         }
                         _ => {
-                            bail!("unexpected tag in an encrypted message: {:?}", tag);
+                            bail!("unexpected packet type: {:?}", tag);
                         }
                     }
                 }
+                MessageParserState::Error => panic!("invalid parser state"),
             }
-            Tag::Signature => {
-                // (b) Signed Message
-                //   (1) Signature Packet, OpenPGP Message
-                //      - Signature Packet
-                //      - OpenPGP Message
-                let signature =
-                    crate::packet::Signature::try_from_reader(packet.packet_header(), &mut packet)?;
-                packets = crate::packet::PacketParser::new(packet.into_inner());
-                let Some(inner_message) = next(packets, true)? else {
-                    bail!("missing next packet");
-                };
-                let reader = SignatureBodyReader::new(signature, Box::new(inner_message))?;
-                let message = Message::Signed { reader, is_nested };
-                return Ok(Some(message));
-            }
-            Tag::OnePassSignature => {
-                //   (2) One-Pass Signed Message.
-                //      - OPS
-                //      - OpenPgp Message
-                //      - Signature Packet
-                let one_pass_signature = crate::packet::OnePassSignature::try_from_reader(
-                    packet.packet_header(),
-                    &mut packet,
-                )?;
-                packets = crate::packet::PacketParser::new(packet.into_inner());
-                let Some(inner_message) = next(packets, true)? else {
-                    bail!("missing next packet");
-                };
+        }
+    }
 
-                let reader =
-                    SignatureOnePassReader::new(one_pass_signature, Box::new(inner_message))?;
-                let message = Message::SignedOnePass { reader, is_nested };
-                return Ok(Some(message));
-            }
-            Tag::CompressedData => {
-                // (c) Compressed Message
-                //   - Compressed Packet
-                let reader = CompressedDataReader::new(packet, false)?;
-                let message = Message::Compressed { reader, is_nested };
-                return Ok(Some(message));
-            }
-            Tag::LiteralData => {
-                // (d) Literal Message
-                //   - Literal Packet
-                let reader = LiteralDataReader::new(packet)?;
-                let message = Message::Literal { reader, is_nested };
-                return Ok(Some(message));
-            }
-            Tag::Padding => {
-                // drain reader
-                packet.drain()?;
-                packets = crate::packet::PacketParser::new(packet.into_inner());
-            }
-            Tag::Marker => {
-                // drain reader
-                packet.drain()?;
-                packets = crate::packet::PacketParser::new(packet.into_inner());
-            }
-            Tag::UnassignedNonCritical(_) | Tag::Experimental(_) => {
-                // Skip "Unassigned Non-Critical" and "Private or Experimental Use" packets
+    fn finish(mut self, mut message: Message<'a>, is_nested: usize) -> Result<Option<Message<'a>>> {
+        // collect previous opened messages
+        while let Some(open_message) = self.messages.pop() {
+            match open_message {
+                OpenMessage::Ops { signature } => {
+                    let reader = SignatureOnePassReader::new(signature, Box::new(message))?;
+                    message = Message::SignedOnePass {
+                        reader,
+                        is_nested: is_nested > 0, // TODO
+                    };
+                }
 
-                // drain reader
-                packet.drain()?;
-                packets = crate::packet::PacketParser::new(packet.into_inner());
+                OpenMessage::Signature { signature } => {
+                    let reader = SignatureBodyReader::new(signature, Box::new(message))?;
+                    message = Message::Signed {
+                        reader,
+                        is_nested: is_nested > 0, // TODO
+                    }
+                }
             }
-            _ => {
-                bail!("unexpected packet type: {:?}", tag);
+        }
+        Ok(Some(message))
+    }
+
+    fn visit_esk(
+        tag: Tag,
+        mut packet: PacketBodyReader<MessageReader<'a>>,
+        is_nested: usize,
+    ) -> Result<Option<Message<'a>>> {
+        // (a) Encrypted Message:
+        //   - ESK Seq (may be empty)
+        //   - Encrypted Data -> OpenPGP Message
+
+        let mut esks = Vec::new();
+
+        if tag == Tag::SymKeyEncryptedSessionKey || tag == Tag::PublicKeyEncryptedSessionKey {
+            let esk = Esk::try_from_reader(&mut packet)?;
+            esks.push(esk);
+        } else {
+            // this message consists of just a bare encryption container
+            let edata = Edata::try_from_reader(packet)?;
+
+            return Ok(Some(Message::Encrypted {
+                esk: esks, // empty
+                edata,
+                is_nested: is_nested > 0,
+            }));
+        }
+
+        let mut packets = crate::packet::PacketParser::new(packet.into_inner());
+        // Read ESKs unit we find the Encrypted Data
+        loop {
+            let Some(packet) = packets.next_owned() else {
+                bail!("missing encrypted data packet");
+            };
+
+            let mut packet = packet?;
+            let tag = packet.packet_header().tag();
+            match tag {
+                Tag::SymKeyEncryptedSessionKey | Tag::PublicKeyEncryptedSessionKey => {
+                    let esk = Esk::try_from_reader(&mut packet)?;
+                    esks.push(esk);
+                    packets = crate::packet::PacketParser::new(packet.into_inner());
+                }
+                Tag::SymEncryptedData | Tag::SymEncryptedProtectedData | Tag::GnupgAeadData => {
+                    let edata = Edata::try_from_reader(packet)?;
+                    let esk = match edata {
+                        Edata::SymEncryptedData { .. } => {
+                            esk_filter(esks, PkeskVersion::V3, &[SkeskVersion::V4])
+                        }
+                        Edata::SymEncryptedProtectedData { ref reader } => match reader.config() {
+                            ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::V1) => {
+                                esk_filter(esks, PkeskVersion::V3, &[SkeskVersion::V4])
+                            }
+
+                            ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::V2 {
+                                ..
+                            }) => esk_filter(esks, PkeskVersion::V6, &[SkeskVersion::V6]),
+                            ProtectedDataConfig::GnupgAead { .. } => {
+                                bail!("GnupgAead config not allowed in SymEncryptedProtectedData")
+                            }
+                        },
+                        Edata::GnupgAeadData { ref reader, .. } => match reader.config() {
+                            ProtectedDataConfig::Seipd(_) => {
+                                bail!("Seipd config not allowed in GnupgAeadData");
+                            }
+                            ProtectedDataConfig::GnupgAead { .. } => esk_filter(
+                                esks,
+                                PkeskVersion::V3,
+                                &[SkeskVersion::V4, SkeskVersion::V5],
+                            ),
+                        },
+                    };
+                    return Ok(Some(Message::Encrypted {
+                        esk,
+                        edata,
+                        is_nested: is_nested > 0,
+                    }));
+                }
+                Tag::Padding => {
+                    // drain reader
+                    packet.drain()?;
+                    packets = crate::packet::PacketParser::new(packet.into_inner());
+                }
+                Tag::Marker => {
+                    // drain reader
+                    packet.drain()?;
+                    packets = crate::packet::PacketParser::new(packet.into_inner());
+                }
+                _ => {
+                    bail!("unexpected tag in an encrypted message: {:?}", tag);
+                }
             }
         }
     }
@@ -228,7 +298,7 @@ impl<'a> Message<'a> {
     /// Parse a composed message.
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages>
     fn from_packets(packets: crate::packet::PacketParser<MessageReader<'a>>) -> Result<Self> {
-        match next(packets, false)? {
+        match MessageParser::new(packets, 0).run()? {
             Some(message) => Ok(message),
             None => {
                 bail!("no valid OpenPGP message found");
@@ -264,7 +334,7 @@ impl<'a> Message<'a> {
 
     fn internal_from_bytes(source: MessageReader<'a>, is_nested: bool) -> Result<Self> {
         let packets = crate::packet::PacketParser::new(source);
-        match next(packets, is_nested)? {
+        match MessageParser::new(packets, if is_nested { 1 } else { 0 }).run()? {
             Some(message) => Ok(message),
             None => {
                 bail!("no valid OpenPGP message found");
