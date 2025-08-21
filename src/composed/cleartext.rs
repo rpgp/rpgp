@@ -395,10 +395,13 @@ fn read_cleartext_body<B: BufRead>(b: &mut B) -> Result<(String, String)> {
         if let Some(pos) = out.rfind("\n-----") {
             // found our end
             let rest = out.split_off(pos + 1);
+
             // remove trailing line break
-            if let Some(pos) = out.rfind("\r\n") {
-                out.truncate(pos);
+            if out.ends_with("\r\n") {
+                // trailing line break is CR+LF
+                out.truncate(out.len() - 2);
             } else {
+                // trailing line break is a bare LF
                 out.truncate(out.len() - 1);
             }
             return Ok((out, rest));
@@ -700,6 +703,36 @@ mod tests {
         let cert_data =
             std::fs::read_to_string("./tests/unit-tests/csf-puppet/DEB-GPG-KEY-puppet-20250406")
                 .unwrap();
+        let (cert, _) = SignedPublicKey::from_string(&cert_data).unwrap();
+
+        msg.verify(&cert).expect("verify");
+    }
+
+    #[test]
+    fn test_csf_openpgp_js_mixed_line_endings() {
+        // Test message produced by OpenPGP.js (in the context of the interop suite).
+        // This message uses LF endings for the armor and CR+LF line endings in the message body.
+
+        const MSG: &str = "-----BEGIN PGP SIGNED MESSAGE-----\nHash: SHA512\n\nFrom the grocery store we need:\r\n\r\n- - tofu\r\n- - vegetables\r\n- - noodles\r\n\r\n\n-----BEGIN PGP SIGNATURE-----\n\nwsE5BAEBCgBtBYJopuHMCZD7/MgqAV5zMEUUAAAAAAAcACBzYWx0QG5vdGF0\naW9ucy5vcGVucGdwanMub3JnTWvVZT4F4hgd2Zg42zsHjK14PeMTkMPG/WTe\nLKma6FwWIQTRpm4aI7GCyZgPeIz7/MgqAV5zMAAAZSEMAJ+QLwErPIXfjg/f\n+vABGpNTmEIXaboUViPwvV7ycYt4vwCIfRW7L9+np0rGS/5KesVYBnlxiTOk\nfCsmJKsWSaUK1CK4AoLyCdf/+/wiU+2gkVw3pZ6aAylQzzdDQT+lJK1zgJ7+\n9gB3PGDirSm6Got3/8UB5pOn+Y7lg0e/NcKAKpOYp/rcURZJYDPZfGsfJTW7\nkR+nrMTLv9VQsflyzAz1u3aF7bblZDD/2A9+YfGrGm2TNQASo8oDFGqL3gUa\nun7JiQhFnjlwrSwT2oWDMKCbJfTR96lH9wjxc96Uw8SQL7VtKrgNBedxCynE\n3O35zF6MqtDHzAbypQ5RV0rWygucAZPSr4RbNQuSB2QN+IVhrkgiqUmzyDTz\nNq2502bLwya5V8qy3HaWBy+Zj1R5utCC1L7We2SEyxiaMkxlvZjyvuXvxTLQ\nMU/zWX4kb1kYf1RF+VnzyRhXqSIy4vsom86YKCvpWfk+mCFTJQ+g4x3elQxZ\ne6RGhJekTb22czK6Jw==\n=dVuf\n-----END PGP SIGNATURE-----\n";
+
+        let _ = pretty_env_logger::try_init();
+
+        let (Any::Cleartext(msg), headers) = Any::from_string(MSG).unwrap() else {
+            panic!("couldn't read msg")
+        };
+
+        assert_eq!(
+            msg.signed_text(),
+            "From the grocery store we need:\r\n\r\n- tofu\r\n- vegetables\r\n- noodles\r\n\r\n"
+        );
+
+        // superficially look at message
+        assert_eq!(headers.len(), 0);
+        assert_eq!(msg.signatures().len(), 1);
+
+        // validate signature
+        let cert_data =
+            std::fs::read_to_string("./tests/draft-bre-openpgp-samples-00/bob.pub.asc").unwrap();
         let (cert, _) = SignedPublicKey::from_string(&cert_data).unwrap();
 
         msg.verify(&cert).expect("verify");
