@@ -19,15 +19,15 @@ use crate::{
 /// a [crate::composed::SignedSecretKey].
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct KeyDetails {
-    primary_user_id: Option<UserId>,
-    non_primary_user_ids: Vec<UserId>,
-    user_attributes: Vec<UserAttribute>,
-    keyflags: KeyFlags,
-    features: Features,
-    preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
-    preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
-    preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
-    preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
+    pub primary_user_id: Option<UserId>,
+    pub non_primary_user_ids: Vec<UserId>,
+    pub user_attributes: Vec<UserAttribute>,
+    pub keyflags: KeyFlags,
+    pub features: Features,
+    pub preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
+    pub preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
+    pub preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
+    pub preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
 }
 
 impl KeyDetails {

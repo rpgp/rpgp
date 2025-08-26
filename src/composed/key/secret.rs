@@ -13,17 +13,17 @@ use crate::{
 /// (but without any Signature packets)
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SecretKey {
-    primary_key: packet::SecretKey,
-    details: KeyDetails,
-    public_subkeys: Vec<PublicSubkey>,
-    secret_subkeys: Vec<SecretSubkey>,
+    pub primary_key: packet::SecretKey,
+    pub details: KeyDetails,
+    pub public_subkeys: Vec<PublicSubkey>,
+    pub secret_subkeys: Vec<SecretSubkey>,
 }
 
 /// Wrapper for a SecretSubkey packet with associated KeyFlags
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SecretSubkey {
-    key: packet::SecretSubkey,
-    keyflags: KeyFlags,
+    pub key: packet::SecretSubkey,
+    pub keyflags: KeyFlags,
 
     /// Embedded primary key binding signature, required for signing-capable subkeys.
     ///
