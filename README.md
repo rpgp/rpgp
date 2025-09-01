@@ -141,6 +141,35 @@ fn main() -> pgp::errors::Result<()> {
 - Security Status: [STATUS_SECURITY.md](docs/SECURITY_STATUS.md)
 - Supported Platforms: [PLATFORMS.md](docs/PLATFORMS.md)
 
+## rPGP is a low-level OpenPGP library
+
+rPGP offers abstractions for handling the formats and mechanisms specified in RFC 9580.
+However, it offers them as relatively low-level building blocks, and doesn't attempt to ensure that users can not apply them unsafely.
+
+> rPGP tries to allow following most parts of the OpenPGP specification, but the APIs are low level building blocks and do not claim that using them is (a) secure or (b) following the OpenPGP specification
+
+Using the building blocks in rPGP correctly and safely requires a solid understanding of OpenPGP and at least a basic understanding of cryptography.
+In this sense, rPGP should be considered a "hazmat"-level cryptographic library. 
+
+### Legacy mechanisms are available (but using them may be insecure)
+
+rPGP implements support for most mechanisms in OpenPGP, both modern and legacy.
+
+It can handle a wide range of OpenPGP artifacts.
+This explicitly includes artifacts that use historical algorithms, which are now too weak to provide adequate safety.
+
+Users of rPGP must ensure that their software only relies on mechanisms that are appropriate for their use case.
+
+### Higher level OpenPGP semantics
+
+rPGP does not offer higher level abstractions to deal with the status of OpenPGP certificates or their components, such as *expiration* or *revocation*.
+
+Also, it doesn't offer convenient abstractions to determine the validity of component keys for a particular operation
+(such as: "which component key is valid for verification of data signatures?").
+
+NOTE: The [`rpgpie`] library implements some of these high level OpenPGP semantics.
+It may be useful either to incorporate in rPGP projects, or to study for reference.
+
 ## rPGP for application developers
 
 rPGP aims to make it easy for application developers to incorporate OpenPGP functionality into their projects.
