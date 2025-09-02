@@ -110,6 +110,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "13_signature_from_armor_single"
+path = "fuzz_targets/13_signature_from_armor_single.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "13_signature_from_binary"
 path = "fuzz_targets/13_signature_from_binary.rs"
 test = false

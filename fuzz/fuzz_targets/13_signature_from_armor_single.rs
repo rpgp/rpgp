@@ -1,14 +1,14 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use pgp::{types::SecretKeyTrait, Deserializable, SignedSecretKey};
+use pgp::composed::{Deserializable, SignedSecretKey};
 
-// build StandaloneSignature from single armor input, and try to verify it
+// build DetachedSignature from single armor input, and try to verify it
 fuzz_target!(|data: &[u8]| {
     // FUZZER RESULT this triggers ~4GB OOM with short inputs
     // finding RPG-8 in ROS report 2024, fixed with 0.14.2
     let signature_res =
-        pgp::composed::StandaloneSignature::from_armor_single(std::io::Cursor::new(data));
+        pgp::composed::DetachedSignature::from_armor_single(std::io::Cursor::new(data));
 
     match signature_res {
         Ok(signature) => {
@@ -56,7 +56,7 @@ QqrhcYJ4IBFau0avBvi7QjsSOvePvIKFO/DuDIECRpLZjRW+VKisag==
 
             let (decrypt_key, _headers) = SignedSecretKey::from_string(key_input).unwrap();
 
-            let _ = sig.verify(decrypt_key.public_key(), b"dummy");
+            let _ = sig.verify(&*decrypt_key.public_key(), b"dummy");
         }
         Err(_) => return,
     }
