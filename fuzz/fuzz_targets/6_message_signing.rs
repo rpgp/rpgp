@@ -3,9 +3,11 @@
 use std::io::Read;
 
 use libfuzzer_sys::fuzz_target;
-use pgp::composed::{ArmorOptions, Deserializable, Message, MessageBuilder, SignedSecretKey};
-use pgp::crypto::hash::HashAlgorithm;
-use pgp::types::Password;
+use pgp::{
+    composed::{ArmorOptions, Deserializable, Message, MessageBuilder, SignedSecretKey},
+    crypto::hash::HashAlgorithm,
+    types::Password,
+};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
@@ -64,7 +66,8 @@ QqrhcYJ4IBFau0avBvi7QjsSOvePvIKFO/DuDIECRpLZjRW+VKisag==
 
             // FUZZER OBSERVATION contrary to initial expectations, signing does not always succeed
             let mut builder = MessageBuilder::from_bytes("", data);
-            builder = builder.sign(&*decrypt_key, Password::from("test"), HashAlgorithm::Sha256);
+            builder.sign(&*decrypt_key, Password::from("test"), HashAlgorithm::Sha256);
+
             let armored = builder
                 .to_armored_string(rng, ArmorOptions::default())
                 .unwrap();
