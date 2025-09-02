@@ -47,13 +47,6 @@ doc = false
 bench = false
 
 [[bin]]
-name = "4_message_roundtrip_check"
-path = "fuzz_targets/4_message_roundtrip_check.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
 name = "5_message_decryption"
 path = "fuzz_targets/5_message_decryption.rs"
 test = false
