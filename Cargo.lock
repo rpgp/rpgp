@@ -717,8 +717,7 @@ dependencies = [
 [[package]]
 name = "dsa"
 version = "0.7.0-rc.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6abe56a5fd6e0006b67436d77180898a3792257917e417ab10f17ade085247ec"
+source = "git+https://github.com/RustCrypto/signatures.git#f6df3e250c7634bdb72bb2f11e3a4f142be06678"
 dependencies = [
  "crypto-bigint",
  "crypto-primes",
@@ -1242,7 +1241,7 @@ dependencies = [
 [[package]]
 name = "ml-dsa"
 version = "0.1.0-pre.2"
-source = "git+https://github.com/RustCrypto/signatures.git#51dd7d8a71e5e5bedd8f52258121c75f19a2e55c"
+source = "git+https://github.com/RustCrypto/signatures.git#f6df3e250c7634bdb72bb2f11e3a4f142be06678"
 dependencies = [
  "const-oid",
  "hybrid-array",
@@ -2036,7 +2035,7 @@ dependencies = [
 [[package]]
 name = "slh-dsa"
 version = "0.2.0-pre"
-source = "git+https://github.com/RustCrypto/signatures.git#51dd7d8a71e5e5bedd8f52258121c75f19a2e55c"
+source = "git+https://github.com/RustCrypto/signatures.git#f6df3e250c7634bdb72bb2f11e3a4f142be06678"
 dependencies = [
  "const-oid",
  "digest",

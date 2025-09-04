@@ -155,6 +155,7 @@ harness = false
 [patch.crates-io]
 kem = { git = "https://github.com/RustCrypto/traits.git" }
 
+dsa = { git = "https://github.com/RustCrypto/signatures.git" }
 ml-dsa  = { git = "https://github.com/RustCrypto/signatures.git" }
 slh-dsa = { git = "https://github.com/RustCrypto/signatures.git" }
 
