@@ -169,3 +169,5 @@ twofish  = { git = "https://github.com/RustCrypto/block-ciphers.git" }
 sha1-checked = { git = "https://github.com/RustCrypto/hashes.git" }
 
 ml-kem = { git = "https://github.com/RustCrypto/KEMs.git" }
+
+dsa = { git = "https://github.com/baloo/signatures.git", branch = "baloo/dsa/from_components_unchecked" }

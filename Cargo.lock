@@ -717,8 +717,7 @@ dependencies = [
 [[package]]
 name = "dsa"
 version = "0.7.0-rc.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6abe56a5fd6e0006b67436d77180898a3792257917e417ab10f17ade085247ec"
+source = "git+https://github.com/baloo/signatures.git?branch=baloo%2Fdsa%2Ffrom_components_unchecked#6a16b7288c7fe25d8ea9d4ab32f362025ee481ab"
 dependencies = [
  "crypto-bigint",
  "crypto-primes",
