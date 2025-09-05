@@ -47,13 +47,6 @@ doc = false
 bench = false
 
 [[bin]]
-name = "4_message_roundtrip_check"
-path = "fuzz_targets/4_message_roundtrip_check.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
 name = "5_message_decryption"
 path = "fuzz_targets/5_message_decryption.rs"
 test = false
@@ -105,6 +98,13 @@ bench = false
 [[bin]]
 name = "12_cleartext_signed_message_from_string"
 path = "fuzz_targets/12_cleartext_signed_message_from_string.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "13_signature_from_armor_single"
+path = "fuzz_targets/13_signature_from_armor_single.rs"
 test = false
 doc = false
 bench = false

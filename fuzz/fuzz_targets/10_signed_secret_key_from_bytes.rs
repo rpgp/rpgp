@@ -45,13 +45,16 @@ fuzz_target!(|data: &[u8]| {
             match signature_res {
                 Err(_) => {}
                 Ok(signature) => {
-                    let _verify_res = key.public_key().verify_signature(
-                        pgp::crypto::hash::HashAlgorithm::Sha256,
-                        &dummy_data,
-                        &signature,
-                    );
-                    // FUZZER TODO, not all verifications succeed
-                    // .expect("signature should verify");
+                    let _verify_res = key
+                        .public_key()
+                        .verify_signature(
+                            pgp::crypto::hash::HashAlgorithm::Sha256,
+                            &dummy_data,
+                            &signature,
+                        )
+                        // Verifications for "random" keys should never succeed,
+                        // because the private and public key material should never match.
+                        .expect_err("signature should probably not verify");
                 }
             }
 
