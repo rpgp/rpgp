@@ -721,21 +721,16 @@ impl KeyDetails for PubKeyInner {
 
     fn fingerprint(&self) -> Fingerprint {
         match self.version {
-            KeyVersion::V2 | KeyVersion::V3 => {
-                if self.version == KeyVersion::V2 {
-                    Fingerprint::V2(
-                        self.imprint::<Md5>()
-                            .expect("failure is not an option")
-                            .into(),
-                    )
-                } else {
-                    Fingerprint::V3(
-                        self.imprint::<Md5>()
-                            .expect("failure is not an option")
-                            .into(),
-                    )
-                }
-            }
+            KeyVersion::V2 => Fingerprint::V2(
+                self.imprint::<Md5>()
+                    .expect("failure is not an option")
+                    .into(),
+            ),
+            KeyVersion::V3 => Fingerprint::V3(
+                self.imprint::<Md5>()
+                    .expect("failure is not an option")
+                    .into(),
+            ),
             KeyVersion::V4 => Fingerprint::V4(
                 self.imprint::<Sha1>()
                     .expect("failure is not an option")
