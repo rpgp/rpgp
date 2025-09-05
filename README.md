@@ -49,6 +49,16 @@ See [`IMPL_STATUS.md`](docs/IMPL_STATUS.md) for more details on the implemented 
 rPGP offers a flexible low-level API and gives users the ability to build higher level PGP tooling in the most compatible way possible.
 Additionally, it fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification].
 
+## Users & Libraries built using rPGP
+
+- [Delta Chat]: Cross-platform messaging app that works over e-mail
+- [`rpm`]: A pure rust library for parsing and creating RPM files
+- [`rpgpie`]: An experimental high level OpenPGP API
+- [`rsop`]: A SOP CLI tool based on rPGP and rpgpie
+- [`debian-packaging`]: a library crate for dealing with Debian packages
+
+Don't see your project here? Please send a PR :)
+
 ## Usage
 
 ```sh
@@ -141,6 +151,10 @@ fn main() -> pgp::errors::Result<()> {
 - Security Status: [STATUS_SECURITY.md](docs/SECURITY_STATUS.md)
 - Supported Platforms: [PLATFORMS.md](docs/PLATFORMS.md)
 
+## FAQs
+
+Checkout [FAQ.md](docs/FAQ.md).
+
 ## rPGP is a low-level OpenPGP library
 
 rPGP offers abstractions for handling the formats and mechanisms specified in RFC 9580.
@@ -199,21 +213,6 @@ However, the OpenPGP format and its semantics are relatively complex, and there 
 The text ["OpenPGP for application developers"](https://openpgp.dev/) offers an introduction to OpenPGP, aimed mainly at application developers. We recommend it for initial orientation.
 
 Independently, we welcome questions in the rPGP issue tracker.
-
-## Users & Libraries built using rPGP
-
-- [Delta Chat]: Cross-platform messaging app that works over e-mail
-- [`rpm`]: A pure rust library for parsing and creating RPM files
-- [`rpgpie`]: An experimental high level OpenPGP API
-- [`rsop`]: A SOP CLI tool based on rPGP and rpgpie
-- [`debian-packaging`]: a library crate for dealing with Debian packages
-
-Don't see your project here? Please send a PR :)
-
-### FAQs
-
-Checkout [FAQ.md](docs/FAQ.md).
-
 
 ## Minimum Supported Rust Version (MSRV)
 
