@@ -335,8 +335,8 @@ fn aead_setup_gnupg(
     key: &[u8],
 ) -> ([u8; 13], Zeroizing<Vec<u8>>) {
     let info = [
-        Tag::GnupgAead.encode(), // packet type
-        0x01,                    // version
+        Tag::GnupgAeadData.encode(), // packet type
+        0x01,                        // version
         sym_alg.into(),
         aead.into(),
         chunk_size.into(),

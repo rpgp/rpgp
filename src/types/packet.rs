@@ -138,7 +138,7 @@ pub enum Tag {
     ///
     /// This format was initially outlined in RFC 4880-bis, but superseded by SEIPDv2 in RFC 9580.
     /// See <https://www.ietf.org/archive/id/draft-koch-librepgp-03.html#name-ocb-encrypted-data-packet-t>
-    GnupgAead = 20,
+    GnupgAeadData = 20,
     /// Padding Packet
     Padding = 21,
 
@@ -265,7 +265,7 @@ impl From<Tag> for u8 {
             Tag::UserAttribute => 17,
             Tag::SymEncryptedProtectedData => 18,
             Tag::ModDetectionCode => 19,
-            Tag::GnupgAead => 20,
+            Tag::GnupgAeadData => 20,
             Tag::Padding => 21,
 
             Tag::UnassignedCritical(id) => id.into(),
@@ -297,7 +297,7 @@ impl From<u8> for Tag {
             17 => Self::UserAttribute,
             18 => Self::SymEncryptedProtectedData,
             19 => Self::ModDetectionCode,
-            20 => Self::GnupgAead,
+            20 => Self::GnupgAeadData,
             21 => Self::Padding,
             22..=39 => Self::UnassignedCritical(UnassignedCriticalTag(value)),
             40..=59 => Self::UnassignedNonCritical(UnassignedNonCriticalTag(value)),

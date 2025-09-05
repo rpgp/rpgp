@@ -62,7 +62,7 @@ impl Packet {
                 ModDetectionCode::try_from_reader(packet_header, &mut body).map(Into::into)
             }
             Tag::Padding => Padding::try_from_reader(packet_header, &mut body).map(Into::into),
-            Tag::GnupgAead => {
+            Tag::GnupgAeadData => {
                 GnupgAeadData::try_from_reader(packet_header, &mut body).map(Into::into)
             }
 
