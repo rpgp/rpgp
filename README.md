@@ -141,6 +141,20 @@ fn main() -> pgp::errors::Result<()> {
 - Security Status: [STATUS_SECURITY.md](docs/SECURITY_STATUS.md)
 - Supported Platforms: [PLATFORMS.md](docs/PLATFORMS.md)
 
+## OpenPGP is a layered technology
+
+OpenPGP can be thought of as a multi-layered technology, roughly like this:
+
+1. Wire format: packets, armor, ...
+2. Cryptographic building blocks (e.g. OpenPGP signatures, encryption containers)
+3. Composite objects (e.g. certificates, messages)
+4. OpenPGP semantics (e.g.: expiration, revocation, key flags)
+
+Of these layers, the OpenPGP RFC specifies more or less 1-3, while 4 is not specified in any detail.
+
+Like the RFC, rPGP handles layers 1-3, but explicitly does not deal with 4.
+Applications that need OpenPGP semantics must implement them manually, or rely on additional libraries to deal with that layer.
+
 ## rPGP is a low-level OpenPGP library
 
 rPGP offers abstractions for handling the formats and mechanisms specified in RFC 9580.
