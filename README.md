@@ -153,10 +153,10 @@ In this sense, rPGP should be considered a "hazmat"-level cryptographic library.
 
 ### Legacy mechanisms are available (but using them may be insecure)
 
-rPGP implements support for most mechanisms in OpenPGP, both modern and legacy.
+rPGP implements support for most mechanisms in OpenPGP, both modern and those considered legacy.
 
 It can handle a wide range of OpenPGP artifacts.
-This explicitly includes artifacts that use historical algorithms, which are now too weak to provide adequate safety.
+This explicitly includes artifacts that use historical algorithms, which are considered to be insecure given today's understanding.
 
 Users of rPGP must ensure that their software only relies on mechanisms that are appropriate for their use case.
 
