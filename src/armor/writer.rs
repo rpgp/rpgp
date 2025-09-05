@@ -1,8 +1,8 @@
 use std::{hash::Hasher, io::Write};
 
 use base64::engine::{general_purpose, Engine as _};
+use cipher::typenum::U64;
 use crc24::Crc24Hasher;
-use generic_array::typenum::U64;
 
 use super::Headers;
 use crate::{
@@ -185,7 +185,7 @@ mod tests {
         let rng = &mut XorShiftRng::seed_from_u64(0);
 
         for i in 2..1024 {
-            let buf: Vec<u8> = (0..i).map(|_| rng.gen()).collect();
+            let buf: Vec<u8> = (0..i).map(|_| rng.random()).collect();
             let source = TestSource::new(buf);
 
             let mut dest = Vec::new();
@@ -215,7 +215,7 @@ mod tests {
         let mut rng = XorShiftRng::seed_from_u64(0);
 
         for i in 2..1024 {
-            let buf: Vec<u8> = (0..i).map(|_| rng.gen()).collect();
+            let buf: Vec<u8> = (0..i).map(|_| rng.random()).collect();
             let source = TestSource::new(buf);
 
             let mut dest = Vec::new();
