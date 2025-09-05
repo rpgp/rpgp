@@ -146,7 +146,7 @@ fn main() -> pgp::errors::Result<()> {
 rPGP offers abstractions for handling the formats and mechanisms specified in RFC 9580.
 However, it offers them as relatively low-level building blocks, and doesn't attempt to ensure that users can not apply them unsafely.
 
-> rPGP tries to allow following most parts of the OpenPGP specification, but the APIs are low level building blocks and do not claim that using them is (a) secure or (b) following the OpenPGP specification
+> rPGP allows following almost all parts of the OpenPGP specification, but the APIs are low level building blocks and do not claim that using them is (a) secure or (b) following the OpenPGP specification
 
 Using the building blocks in rPGP correctly and safely requires a solid understanding of OpenPGP and at least a basic understanding of cryptography.
 In this sense, rPGP should be considered a "hazmat"-level cryptographic library. 
