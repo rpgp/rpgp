@@ -141,20 +141,6 @@ fn main() -> pgp::errors::Result<()> {
 - Security Status: [STATUS_SECURITY.md](docs/SECURITY_STATUS.md)
 - Supported Platforms: [PLATFORMS.md](docs/PLATFORMS.md)
 
-## OpenPGP is a layered technology
-
-OpenPGP can be thought of as a multi-layered technology, roughly like this:
-
-1. Wire format: packets, armor, ...
-2. Cryptographic building blocks (e.g. OpenPGP signatures, encryption containers)
-3. Composite objects (e.g. certificates, messages)
-4. OpenPGP semantics (e.g.: expiration, revocation, key flags)
-
-Of these layers, the OpenPGP RFC specifies more or less 1-3, while 4 is not specified in any detail.
-
-Like the RFC, rPGP handles layers 1-3, but explicitly does not deal with 4.
-Applications that need OpenPGP semantics must implement them manually, or rely on additional libraries to deal with that layer.
-
 ## rPGP is a low-level OpenPGP library
 
 rPGP offers abstractions for handling the formats and mechanisms specified in RFC 9580.
@@ -163,26 +149,46 @@ However, it offers them as relatively low-level building blocks, and doesn't att
 > rPGP allows following almost all parts of the OpenPGP specification, but the APIs are low level building blocks and do not claim that using them is (a) secure or (b) following the OpenPGP specification
 
 Using the building blocks in rPGP correctly and safely requires a solid understanding of OpenPGP and at least a basic understanding of cryptography.
-In this sense, rPGP should be considered a "hazmat"-level cryptographic library. 
 
-### Legacy mechanisms are available (but using them may be insecure)
+### OpenPGP is a layered technology
 
-rPGP implements support for most mechanisms in OpenPGP, both modern and those considered legacy.
+For context, OpenPGP can be thought of as a multi-layered technology, roughly like this:
 
-It can handle a wide range of OpenPGP artifacts.
-This explicitly includes artifacts that use historical algorithms, which are considered to be insecure given today's understanding.
+1. Wire format: [Packet framing](https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-syntax), [Packet content](https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-types), [ASCII armor](https://www.rfc-editor.org/rfc/rfc9580.html#name-forming-ascii-armor), ...
+2. Composite objects (e.g. Certificates, Messages) constructed according to [grammars](https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-sequence-composition)
+3. Functionality to process data, such as calculation and validation of OpenPGP signatures and encryption and decryption of messages.
+4. OpenPGP semantics (e.g.: *Expiration* and *Revocation* of Certificates and their components, and *Key Flags* that define which semantical operations a given component key may be used for)
 
-Users of rPGP must ensure that their software only relies on mechanisms that are appropriate for their use case.
+Of these layers, the OpenPGP RFC specifies 1-3, while 4 is not specified in detail.
 
-### Higher level OpenPGP semantics
+Like the RFC, rPGP handles layers 1-3, but explicitly does not deal with 4.
+Applications that need OpenPGP semantics must implement them manually, or rely on additional libraries to deal with that layer.
 
-rPGP does not offer higher level abstractions to deal with the status of OpenPGP certificates or their components, such as *expiration* or *revocation*.
+Some work on formalizing OpenPGP semantics can be found in
+[draft-gallagher-openpgp-signatures](https://datatracker.ietf.org/doc/draft-gallagher-openpgp-signatures/) and
+[draft-dkg-openpgp-revocation](https://datatracker.ietf.org/doc/draft-dkg-openpgp-revocation/).
 
-Also, it doesn't offer convenient abstractions to determine the validity of component keys for a particular operation
-(such as: "which component key is valid for verification of data signatures?").
+### rPGP doesn't implement support for dealing with "OpenPGP semantics"
+
+As outlined above, rPGP does not deal with the "semantics layer" of OpenPGP
+(such as the *expiration* or *revocation* status of certificates, or their components).
+Applications in which these semantics are relevant must ensure that they implement them separately.
+
+The same applies for abstractions to determine the semantical validity of component keys for a particular operation
+(such as: "which component key, if any, is currently valid for the verification of data signatures?").
 
 NOTE: The [`rpgpie`] library implements some of these high level OpenPGP semantics.
 It may be useful either to incorporate in rPGP projects, or to study for reference.
+
+### Legacy mechanisms are available (but using them may be insecure)
+
+rPGP can handle a wide range of OpenPGP artifacts.
+It implements support for almost all mechanisms in OpenPGP, both modern and those considered legacy.
+
+This explicitly includes artifacts that use historical algorithms, which are considered to be insecure given today's understanding.
+
+rPGP doesn't attempt to ensure that application developers use appropriate cryptographic building blocks for their purposes
+(even though it generally produces appropriately modern artifacts, by default).
 
 ## rPGP for application developers
 
