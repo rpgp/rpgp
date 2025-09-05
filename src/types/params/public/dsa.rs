@@ -1,6 +1,10 @@
 use std::io::{self, BufRead};
 
-use crate::{errors::Result, ser::Serialize, types::Mpi};
+use crate::{
+    errors::{ensure, Result},
+    ser::Serialize,
+    types::Mpi,
+};
 
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -13,11 +17,36 @@ pub struct DsaPublicParams {
 impl Eq for DsaPublicParams {}
 
 impl DsaPublicParams {
+    // NIST <https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-4.pdf> (Section 4.2)
+    // limits L and N (the bit lengths of p and q, respectively) to 3072/256.
+    //
+    // However, some OpenPGP keys with 4096 seem to exist in practice, so we allow those.
+    const MAX_L_BITS: usize = 4096;
+    const MAX_N_BITS: usize = 256;
+
     pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         let p = Mpi::try_from_reader(&mut i)?;
         let q = Mpi::try_from_reader(&mut i)?;
         let g = Mpi::try_from_reader(&mut i)?;
         let y = Mpi::try_from_reader(&mut i)?;
+
+        // Cap the lengths of these Mpis to avoid inputs that could cause (slightly)
+        // expensive calculations.
+
+        // The prime `p` is limited to L, `q` to N
+        ensure!(
+            p.len() * 8 <= Self::MAX_L_BITS,
+            "p is too long ({} bytes)",
+            p.len()
+        );
+        ensure!(
+            q.len() * 8 <= Self::MAX_N_BITS,
+            "q is too long ({} bytes)",
+            q.len()
+        );
+        // `g` and `y` are both "mod p", so they are limited to the concrete length of `p`
+        ensure!(g.len() <= p.len(), "g is longer than p ({} bytes)", g.len());
+        ensure!(y.len() <= p.len(), "y is longer than p ({} bytes)", y.len());
 
         let params = DsaPublicParams::try_from_mpi(p, q, g, y)?;
         Ok(params)
