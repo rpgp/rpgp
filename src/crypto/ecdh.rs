@@ -304,15 +304,81 @@ impl Decryptor for SecretKey {
         };
 
         // obtain the session key from the shared secret
-        derive_session_key(
+        let res = derive_session_key(
             &shared_secret,
             data.encrypted_session_key,
             encrypted_key_len,
-            curve,
+            curve.clone(),
             hash,
             alg_sym,
             data.fingerprint,
-        )
+        );
+
+        if res.is_ok() {
+            return res;
+        }
+
+        #[cfg(feature = "malformed-artifact-compat")]
+        {
+            log::debug!("Attempting to decrypt erroneous ECDH encryption");
+
+            // Attempt alternative decryption variations for mal-encrypted ECDH ESKs.
+            //
+            // Context: Erroneous ESKs have been produced by historical versions of both
+            // OpenPGP.js and GopenPGP.
+            //
+            // This special handling code can decrypt technically "broken" messages by attempting
+            // to compensate for these two classes of encryption mistake to see if this yields
+            // successful decryption.
+            //
+            // Note that this class of problem should only occur with historical/archived messages!
+            // Encryption in both libraries was fixed in 2019:
+            //
+            // https://github.com/openpgpjs/openpgpjs/commit/1dd168e7a2ce6f9ba0fddf5d198e21baca9c042d
+            // https://github.com/openpgpjs/openpgpjs/commit/a9599fea4243f38f01a218a2948b26509a7a3587
+
+            // 1. Try with stripped leading zeroes (-> work around old go crypto bug)
+            let mut strip_leading = shared_secret.as_slice();
+            while strip_leading.starts_with(&[0]) {
+                strip_leading = &strip_leading[1..];
+            }
+
+            if let Ok(sk) = derive_session_key(
+                strip_leading,
+                data.encrypted_session_key,
+                encrypted_key_len,
+                curve.clone(),
+                hash,
+                alg_sym,
+                data.fingerprint,
+            ) {
+                log::info!("Decrypted erroneous ECDH session key by go crypto");
+
+                return Ok(sk);
+            }
+
+            // 2. Try with stripped trailing zeroes (-> work around old OpenPGP.js bug)
+            let mut strip_trailing = shared_secret.as_slice();
+            while strip_trailing.ends_with(&[0]) {
+                strip_trailing = &strip_trailing[..shared_secret.len() - 1];
+            }
+
+            if let Ok(sk) = derive_session_key(
+                strip_trailing,
+                data.encrypted_session_key,
+                encrypted_key_len,
+                curve,
+                hash,
+                alg_sym,
+                data.fingerprint,
+            ) {
+                log::info!("Decrypted erroneous ECDH session key by OpenPGP.js");
+
+                return Ok(sk);
+            }
+        }
+
+        res
     }
 }
 
@@ -678,6 +744,116 @@ mod tests {
 
             assert_eq!(data, "hello\n".as_bytes());
         }
+    }
+
+    #[test]
+    #[cfg(feature = "malformed-artifact-compat")]
+    /// Test custom decryption of incorrectly formed ECDH messages
+    /// "broken ECC message from old OpenPGP.js"
+    ///
+    /// From: https://github.com/openpgpjs/openpgpjs/blob/448418a6f56ece88dfb28c26a85107b887061d9d/test/general/openpgp.js#L337-L405
+    fn test_decrypt_bad_ecdh_openpgp_js() {
+        let _ = pretty_env_logger::try_init();
+
+        const PASSPHRASE: &str = "12345";
+
+        const MSG_OPENPGP_JS_PLAIN: &str = "\r\n";
+
+        let (decrypt_key, _headers) =
+            SignedSecretKey::from_armor_file("tests/bad_ecdh/openpgp_js.key")
+                .expect("failed to read decryption key");
+
+        let (message, _headers) = Message::from_armor_file("tests/bad_ecdh/openpgp_js.msg")
+            .expect("failed to parse message");
+
+        let mut dec = message
+            .decrypt(&Password::from(PASSPHRASE), &decrypt_key)
+            .expect("failed to decrypt")
+            .decompress()
+            .expect("failed to decompress");
+
+        let data = dec.as_data_vec().unwrap();
+
+        assert_eq!(data, MSG_OPENPGP_JS_PLAIN.as_bytes());
+    }
+
+    #[test]
+    #[cfg(feature = "malformed-artifact-compat")]
+    /// Test custom decryption of incorrectly formed ECDH messages
+    /// "broken ECC message from old go crypto"
+    ///
+    /// From: https://github.com/openpgpjs/openpgpjs/blob/448418a6f56ece88dfb28c26a85107b887061d9d/test/general/openpgp.js#L337-L405
+    fn test_decrypt_bad_ecdh_go_crypto() {
+        use std::io::Read;
+
+        use crate::{
+            composed::{Esk, PlainSessionKey},
+            types::EskType,
+        };
+
+        let _ = pretty_env_logger::try_init();
+
+        const PASSPHRASE: &str = "12345";
+
+        const MSG_GO_CRYPTO_PLAIN: &str =
+            "Tesssst<br><br><br>Sent from ProtonMail mobile<br><br><br>";
+
+        let (decrypt_key, _headers) =
+            SignedSecretKey::from_armor_file("tests/bad_ecdh/gocrypto.key")
+                .expect("failed to read decryption key");
+
+        let (message, _headers) = Message::from_armor_file("tests/bad_ecdh/gocrypto.msg")
+            .expect("failed to parse message");
+
+        {
+            // Note: The content of the Edata is technically malformed
+            // ("Illegal first partial body length 2 (shorter than 512 bytes)"), and thus rPGP
+            // refuses to handle it without setting handling of partial body encoding to lenient.
+            //
+            // As a first step (that should always work), we decrypt just the PKESK itself.
+
+            let Message::Encrypted { ref esk, .. } = &message else {
+                panic!("expect encrypted message")
+            };
+
+            assert_eq!(esk.len(), 1);
+
+            let Esk::PublicKeyEncryptedSessionKey(pkesk) = &esk[0] else {
+                panic!("expect PKESK")
+            };
+
+            let psk = decrypt_key.secret_subkeys[0]
+                .decrypt_session_key(
+                    &Password::from(PASSPHRASE),
+                    pkesk.values().unwrap(),
+                    EskType::V3_4,
+                )
+                .expect("failed to decrypt session key")
+                .expect("failed to unlock the key");
+
+            let PlainSessionKey::V3_4 { ref key, .. } = &psk else {
+                panic!("expect v3/4 session key")
+            };
+
+            // Having found the session key is good enough to show that decryption worked
+            assert_eq!(
+                key.as_ref(),
+                &[
+                    0xb6, 0xe1, 0xc2, 0xeb, 0x51, 0xad, 0xdd, 0xf3, 0x9a, 0x69, 0x6e, 0xbf, 0x0d,
+                    0xbb, 0x6b, 0x83, 0x87, 0xeb, 0x39, 0x81, 0x4f, 0x80, 0xf6, 0xaa, 0x97, 0xe6,
+                    0x88, 0xb6, 0x1d, 0xaa, 0x3e, 0xc4
+                ]
+            );
+        }
+
+        let Ok(mut dec) = message.decrypt(&Password::from(PASSPHRASE), &decrypt_key) else {
+            panic!("could not decrypt message")
+        };
+
+        let mut data = Vec::new();
+        dec.read_to_end(&mut data).unwrap();
+
+        assert_eq!(&data, MSG_GO_CRYPTO_PLAIN.as_bytes());
     }
 
     prop_compose! {

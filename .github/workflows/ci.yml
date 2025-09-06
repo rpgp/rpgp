@@ -55,6 +55,10 @@ jobs:
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       run: cargo nextest run --lib --bins --tests --all --features asm
 
+    - name: malformed-artifact-compat
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
+      run: cargo nextest run --lib --bins --tests --all --features malformed-artifact-compat
+
     - name: pqc
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       run: cargo nextest run --lib --bins --tests --all --features draft-pqc
