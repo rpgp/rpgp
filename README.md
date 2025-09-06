@@ -155,6 +155,10 @@ fn main() -> pgp::errors::Result<()> {
 
 Checkout [FAQ.md](docs/FAQ.md).
 
+## OpenPGP Versions and Features
+
+Checkout [openpgp.md](docs/openpgp.md).
+
 ## rPGP is a low-level OpenPGP library
 
 rPGP offers abstractions for handling the formats and mechanisms specified in RFC 9580.
