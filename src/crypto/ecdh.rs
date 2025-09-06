@@ -304,15 +304,66 @@ impl Decryptor for SecretKey {
         };
 
         // obtain the session key from the shared secret
-        derive_session_key(
+        match derive_session_key(
             &shared_secret,
             data.encrypted_session_key,
             encrypted_key_len,
-            curve,
+            curve.clone(),
             hash,
             alg_sym,
             data.fingerprint,
-        )
+        ) {
+            Ok(sk) => Ok(sk.to_vec()),
+            Err(e) => {
+                {
+                    // try alternative decryption variations for mal-encrypted ECDH messages
+
+                    let mut shared_secret = shared_secret.as_slice();
+
+                    // TODO: make conditional
+                    // strip leading zeroes (-> work around old go crypto bug)
+                    while shared_secret.starts_with(&[0]) {
+                        shared_secret = &shared_secret[1..];
+                    }
+
+                    if let Ok(sk) = derive_session_key(
+                        shared_secret,
+                        data.encrypted_session_key,
+                        encrypted_key_len,
+                        curve.clone(),
+                        hash,
+                        alg_sym,
+                        data.fingerprint,
+                    ) {
+                        return Ok(sk);
+                    }
+                }
+
+                {
+                    let mut shared_secret = shared_secret.as_slice();
+
+                    // TODO: make conditional
+                    // strip trailing zeroes (-> work around old OpenPGP.js bug)
+                    while shared_secret.ends_with(&[0]) {
+                        shared_secret = &shared_secret[..shared_secret.len() - 1];
+                    }
+
+                    if let Ok(sk) = derive_session_key(
+                        shared_secret,
+                        data.encrypted_session_key,
+                        encrypted_key_len,
+                        curve,
+                        hash,
+                        alg_sym,
+                        data.fingerprint,
+                    ) {
+                        return Ok(sk);
+                    }
+                }
+
+                Err(e)
+            }
+        }
     }
 }
 
@@ -595,7 +646,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{
+        fs,
+        io::{BufReader, Read},
+    };
 
     use proptest::prelude::*;
     use rand::{RngCore, SeedableRng};
@@ -603,8 +657,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        composed::{Deserializable, Message, SignedSecretKey},
-        types::Password,
+        composed::{Deserializable, Esk, Message, PlainSessionKey, SignedSecretKey},
+        types::{EskType, Password},
     };
 
     #[test]
@@ -678,6 +732,182 @@ mod tests {
 
             assert_eq!(data, "hello\n".as_bytes());
         }
+    }
+
+    #[test]
+    // Test custom decryption of incorrectly formed ECDH messages
+    // "broken ECC message from old OpenPGP.js"
+    //
+    // From: https://github.com/openpgpjs/openpgpjs/blob/448418a6f56ece88dfb28c26a85107b887061d9d/test/general/openpgp.js#L337-L405
+    fn test_decrypt_bad_ecdh_openpgp_js() {
+        let _ = pretty_env_logger::try_init();
+
+        const PASSPHRASE: &str = "12345";
+
+        const MSG_OPENPGP_JS: &str = "-----BEGIN PGP MESSAGE-----
+Version: ProtonMail
+Comment: https://protonmail.com
+
+wV4DlF328rtCW+wSAQdA9FsAz4rCdoxY/oZaa68WMPMXbO+wtHs4ZXtAOJOs
+SlwwDaABXYC2dt0hUS2zRAL3gBGf4udH/CKJ1vPE58sNeh0ERYLxPHgwrpqI
+oNVWOWH50kUBIdqd7by8RwLOk9GyV6008iFOlOG90mfjvt2g5DsnSB4wEeMg
+pVu3fXj8iAKvFxvihwv1M7gNtP14StP6CngvyGVVEHQ=
+=mvcB
+-----END PGP MESSAGE-----";
+
+        // const MSG_OPENPGP_JS_PLAIN: &str = "\n";
+        const MSG_OPENPGP_JS_PLAIN: &str = "\r\n";
+
+        const KEY_OPENPGP_JS: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+Version: OpenPGP.js v4.4.6
+Comment: https://openpgpjs.org
+
+xYYEXEBTPxYJKwYBBAHaRw8BAQdAbXBY+2lpOatB+ZLokS/JIWqrVOseja9S
+ewQxMKN6ueT+CQMIuUXr0XofC6VgJvFLyLwDlyyvT4I1HWGKZ6W9HUaslKvS
+rw362rbMZKKfUtfjRJvpqiIU3Dr7iDkHB5vT7Tp5S7AZ2tNKoh/bwfTKdHsT
+1803InFhX3Rlc3RlcjJAcHJvdG9ubWFpbC5jb20iIDxxYV90ZXN0ZXIyQHBy
+b3Rvbm1haWwuY29tPsJ3BBAWCgAfBQJcQFM/BgsJBwgDAgQVCAoCAxYCAQIZ
+AQIbAwIeAQAKCRClzcrGJTMHyTpjAQCJZ7p0TJBZyPQ8m64N24glaM6oM78q
+2Ogpc0e9LcrPowD6AssY2YfUwJNzVFVzR+Lulzu6XVPjn0pXGMhOl03SrQ3H
+iwRcQFM/EgorBgEEAZdVAQUBAQdAAgJJUhKvjGWMq1sDhrJgvqbHK1t1W5RF
+Xoet5noIlAADAQgH/gkDCOFdJ7Yv2cTZYETRT5+ak/ntmslcAqtk3ebd7Ok3
+tQIjO3TYUbkV1eqrpA4I42kGCUkU4Dy26wxuaLRSsO1u/RgXjExZLP9FlWFI
+h6lLS1bCYQQYFggACQUCXEBTPwIbDAAKCRClzcrGJTMHyfNBAP9sdyU3GHNR
+7+QdwYvQp7wN+2VUd8vIf7iwAHOK1Cj4ywD+NhzjFfGYESJ68nnkrYlYdf+u
+OBqYz6mzZAWQZqsjbg4=
+=zrks
+-----END PGP PRIVATE KEY BLOCK-----";
+
+        let (decrypt_key, _headers) = SignedSecretKey::from_armor_single(KEY_OPENPGP_JS.as_bytes())
+            .expect("failed to read decryption key");
+
+        let (message, _headers) = Message::from_armor(BufReader::new(MSG_OPENPGP_JS.as_bytes()))
+            .expect("failed to parse message");
+
+        let mut dec = message
+            .decrypt(&Password::from(PASSPHRASE), &decrypt_key)
+            .expect("failed to decrypt")
+            .decompress()
+            .expect("failed to decompress");
+
+        let data = dec.as_data_vec().unwrap();
+
+        assert_eq!(data, MSG_OPENPGP_JS_PLAIN.as_bytes());
+    }
+
+    #[test]
+    // Test custom decryption of incorrectly formed ECDH messages
+    // "broken ECC message from old go crypto"
+    //
+    // From: https://github.com/openpgpjs/openpgpjs/blob/448418a6f56ece88dfb28c26a85107b887061d9d/test/general/openpgp.js#L337-L405
+    fn test_decrypt_bad_ecdh_go_crypto() {
+        let _ = pretty_env_logger::try_init();
+
+        const PASSPHRASE: &str = "12345";
+
+        const MSG_GO_CRYPTO: &str = "-----BEGIN PGP MESSAGE-----
+Version: ProtonMail
+Comment: https://protonmail.com
+
+wV4DtM+8giJEGNISAQhA2rYu8+B41rJi6Gsr4TVeKyDtI0KjhhlLZs891rCG
+6X4wxNkxCuTJZax7gQZbDKh2kETK/RH75s9g7H/WV9kZ192NTGmMFiKiautH
+c5BGRGxM0sDfAQZb3ZsAUORHKPP7FczMv5aMU2Ko7O2FHc06bMdnZ/ag7GMF
+Bdl4EizttNTQ5sNCAdIXUoA8BJLHPgPiglnfTqqx3ynkBNMzfH46oKf08oJ+
+6CAQhJdif67/iDX8BRtaKDICBpv3b5anJht7irOBqf9XX13SGkmqKYF3T8eB
+W7ZV5EdCTC9KU+1BBPfPEi93F4OHsG/Jo80e5MDN24/wNxC67h7kUQiy3H4s
+al+5mSAKcIfZJA4NfPJg9zSoHgfRNGI8Q7ao+c8CLPiefGcMsakNsWUdRyBT
+SSLH3z/7AH4GxBvhDEEG3cZwmXzZAJMZmzTa+SrsxZzRpGB/aawyRntOWm8w
+6Lq9ntq4S8suj/YK62dJpJxFl8xs+COngpMDvCexX9lYlh/r/y4JRQl06oUK
+wv7trvi89TkK3821qHxr7XwI1Ncr2qDJVNlN4W+b6WFyLXnXaJAUMyZ/6inm
+RR8BoR2KkEAku3Ne/G5QI51ktNJ7cCodeVOkZj8+iip1/AGyjxZCybq/N8rc
+bpOWdMhJ6Hy+JzGNY1qNXcHJPw==
+=99Fs
+-----END PGP MESSAGE-----";
+
+        const MSG_GO_CRYPTO_PLAIN: &str =
+            "Tesssst<br><br><br>Sent from ProtonMail mobile<br><br><br>";
+
+        const KEY_GO_CRYPTO: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+Version: OpenPGP.js v4.4.9
+Comment: https://openpgpjs.org
+
+xYYEXEg93hYJKwYBBAHaRw8BAQdAeoA+T4vr3P0hFFsbzJpgy7/ZnKCrlehr
+Myk5QAsBYgf+CQMIQ76YL5sEx+Zgr7DLZ5fhQn1U9+8aLIQaIbaT51nEjEMD
+7h6mrJmp7oIr4PyijsIU+0LasXh/qlNeVQVWSygDq9L4nXDEGQhlMq3oH1FN
+NM07InBha292c2thdGVzdEBwcm90b25tYWlsLmNvbSIgPHBha292c2thdGVz
+dEBwcm90b25tYWlsLmNvbT7CdwQQFgoAHwUCXEg93gYLCQcIAwIEFQgKAgMW
+AgECGQECGwMCHgEACgkQp7+eOYEhwd6x5AD9E0LA62odFFDH76wjEYrPCvOH
+cYM56/5ZqZoGPPmbE98BAKCz/SQ90tiCMmlLEDXGX+a1bi6ttozqrnSQigic
+DI4Ix4sEXEg93hIKKwYBBAGXVQEFAQEHQPDXy2mDfbMKOpCBZB2Ic5bfoWGV
+iXvCFMnTLRWfGHUkAwEIB/4JAwhxMnjHjyALomBWSsoYxxB6rj6JKnWeikyj
+yjXZdZqdK5F+0rk4M0l7lF0wt5PhT2uMCLB7aH/mSFN1cz7sBeJl3w2soJsT
+ve/fP/8NfzP0wmEEGBYIAAkFAlxIPd4CGwwACgkQp7+eOYEhwd5MWQEAp0E4
+QTnEnG8lYXhOqnOw676oV2kEU6tcTj3DdM+cW/sA/jH3FQQjPf+mA/7xqKIv
+EQr2Mx42THr260IFYp5E/rIA
+=oA0b
+-----END PGP PRIVATE KEY BLOCK-----";
+
+        let (decrypt_key, _headers) = SignedSecretKey::from_armor_single(KEY_GO_CRYPTO.as_bytes())
+            .expect("failed to read decryption key");
+
+        let (message, _headers) = Message::from_armor(BufReader::new(MSG_GO_CRYPTO.as_bytes()))
+            .expect("failed to parse message");
+
+        // The content of the Edata is malformed
+        // ("Illegal first partial body length 2 (shorter than 512 bytes)"),
+        // and thus rPGP refuses to handle it.
+        //
+        // We'll decrypt it manually, for this test.
+
+        let Message::Encrypted {
+            mut esk, mut edata, ..
+        } = message
+        else {
+            panic!("expect encrypted message")
+        };
+
+        assert_eq!(esk.len(), 1);
+        let esk = esk.remove(0);
+
+        let Esk::PublicKeyEncryptedSessionKey(pkesk) = esk else {
+            panic!("expect PKESK")
+        };
+
+        let psk = decrypt_key.secret_subkeys[0]
+            .decrypt_session_key(
+                &Password::from(PASSPHRASE),
+                pkesk.values().unwrap(),
+                EskType::V3_4,
+            )
+            .expect("failed to decrypt session key")
+            .expect("failed to unlock the key");
+
+        let PlainSessionKey::V3_4 { ref key, .. } = &psk else {
+            panic!("expect v3/4 session key")
+        };
+
+        // Having found the session key is good enough to show that decryption worked
+        assert_eq!(
+            key.as_ref(),
+            &[
+                182, 225, 194, 235, 81, 173, 221, 243, 154, 105, 110, 191, 13, 187, 107, 131, 135,
+                235, 57, 129, 79, 128, 246, 170, 151, 230, 136, 182, 29, 170, 62, 196
+            ]
+        );
+
+        // ... however, we'll still try to decrypt the edata, because why not:
+        edata.decrypt(&psk).expect("decryption failed");
+
+        let mut data = Vec::new();
+        edata.read_to_end(&mut data).unwrap();
+
+        // We can't easily parse the inner message because it is malformed.
+        // And because the inner message uses partial encoding, the full plaintext is not contained
+        // as one contiguous slice.
+        //
+        // But the first 32 bytes of the plaintext happen to be there,
+        // and we expect to find them at byte 25.
+        assert_eq!(&data[25..25 + 32], &MSG_GO_CRYPTO_PLAIN.as_bytes()[0..32]);
     }
 
     prop_compose! {
