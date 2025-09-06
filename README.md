@@ -171,7 +171,7 @@ For context, OpenPGP can be thought of as a multi-layered technology, roughly li
 1. Wire format: [Packet framing](https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-syntax), [Packet content](https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-types), [ASCII armor](https://www.rfc-editor.org/rfc/rfc9580.html#name-forming-ascii-armor), ...
 2. Composite objects (e.g. Certificates, Messages) constructed according to [grammars](https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-sequence-composition)
 3. Functionality to process data, such as calculation and validation of OpenPGP signatures and encryption and decryption of messages.
-4. OpenPGP semantics (e.g.: *Expiration* and *Revocation* of Certificates and their components, and *Key Flags* that define which semantical operations a given component key may be used for)
+4. OpenPGP semantics (e.g.: *Expiration* and *Revocation* of Certificates and their components, *Key Flags* that define which semantical operations a given component key may be used for, signaling of algorithm preferences, ...)
 
 Of these layers, the OpenPGP RFC specifies 1-3, while 4 is not specified in detail.
 
