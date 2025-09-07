@@ -9,7 +9,7 @@ use crate::{
         hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{bail, ensure_eq, format_err, Result},
+    errors::{bail, ensure, ensure_eq, format_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::Mpi,
@@ -24,6 +24,9 @@ pub enum EcdhPublicParams {
         p: x25519_dalek::PublicKey,
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
+
+        /// https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke
+        replacement_fingerprint: Option<[u8; 20]>,
     },
     P256 {
         #[cfg_attr(test, proptest(strategy = "tests::ecdh_p256_gen()"))]
@@ -78,40 +81,45 @@ impl Serialize for EcdhPublicParams {
         writer.write_all(&oid)?;
 
         let tags = match self {
-            Self::Curve25519 { p, hash, alg_sym } => {
+            Self::Curve25519 {
+                p,
+                hash,
+                alg_sym,
+                replacement_fingerprint,
+            } => {
                 let mut mpi = Vec::with_capacity(33);
                 mpi.push(0x40);
                 mpi.extend_from_slice(p.as_bytes());
                 let mpi = Mpi::from_slice(&mpi);
                 mpi.to_writer(writer)?;
-                Some((hash, alg_sym))
+                Some((hash, alg_sym, *replacement_fingerprint))
             }
             Self::P256 { p, hash, alg_sym } => {
                 let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
                 p.to_writer(writer)?;
-                Some((hash, alg_sym))
+                Some((hash, alg_sym, None))
             }
             Self::P384 { p, hash, alg_sym } => {
                 let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
                 p.to_writer(writer)?;
-                Some((hash, alg_sym))
+                Some((hash, alg_sym, None))
             }
             Self::P521 { p, hash, alg_sym } => {
                 let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
                 p.to_writer(writer)?;
-                Some((hash, alg_sym))
+                Some((hash, alg_sym, None))
             }
             Self::Brainpool256 { p, hash, alg_sym } => {
                 p.to_writer(writer)?;
-                Some((hash, alg_sym))
+                Some((hash, alg_sym, None))
             }
             Self::Brainpool384 { p, hash, alg_sym } => {
                 p.to_writer(writer)?;
-                Some((hash, alg_sym))
+                Some((hash, alg_sym, None))
             }
             Self::Brainpool512 { p, hash, alg_sym } => {
                 p.to_writer(writer)?;
-                Some((hash, alg_sym))
+                Some((hash, alg_sym, None))
             }
             Self::Unsupported { opaque, .. } => {
                 writer.write_all(opaque)?;
@@ -119,12 +127,22 @@ impl Serialize for EcdhPublicParams {
             }
         };
 
-        if let Some((hash, alg_sym)) = tags {
-            writer.write_u8(0x03)?; // len of the following fields
-            writer.write_u8(0x01)?; // fixed tag
+        if let Some((hash, alg_sym, replacement_fingerprint)) = tags {
+            if let Some(replacement_fingerprint) = replacement_fingerprint {
+                writer.write_u8(0x17)?; // len of the following fields
+                writer.write_u8(0xff)?; // fixed tag for forwardee key (draft-wussler-openpgp-forwarding)
 
-            writer.write_u8((*hash).into())?;
-            writer.write_u8((*alg_sym).into())?;
+                writer.write_u8((*hash).into())?;
+                writer.write_u8((*alg_sym).into())?;
+
+                writer.write_all(&replacement_fingerprint)?; // 20 byte v4 fingerprint (draft-wussler-openpgp-forwarding)
+            } else {
+                writer.write_u8(0x03)?; // len of the following fields
+                writer.write_u8(0x01)?; // fixed tag
+
+                writer.write_u8((*hash).into())?;
+                writer.write_u8((*alg_sym).into())?;
+            }
         }
 
         Ok(())
@@ -134,13 +152,22 @@ impl Serialize for EcdhPublicParams {
         let mut sum = 1; // oid len
 
         match self {
-            Self::Curve25519 { p, .. } => {
+            Self::Curve25519 {
+                p,
+                replacement_fingerprint,
+                ..
+            } => {
                 sum += self.curve().oid().len();
                 let mut mpi = Vec::with_capacity(33);
                 mpi.push(0x40);
                 mpi.extend_from_slice(p.as_bytes());
                 let mpi = Mpi::from_slice(&mpi);
                 sum += mpi.write_len();
+
+                // https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke
+                if replacement_fingerprint.is_some() {
+                    sum += 20
+                }
             }
             Self::P256 { p, .. } => {
                 let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
@@ -230,7 +257,8 @@ impl EcdhPublicParams {
                 let _len2 = i.read_u8()?;
 
                 // a one-octet value 01, reserved for future extensions
-                i.read_tag(&[1])?;
+                let mode = i.read_u8()?;
+                ensure!(mode == 1 || mode == 0xff, "unexpected KDF mode {}", mode);
 
                 // a one-octet hash function ID used with a KDF
                 let hash = i.read_u8().map(HashAlgorithm::from)?;
@@ -239,7 +267,15 @@ impl EcdhPublicParams {
                 // the symmetric key used for the message encryption
                 let alg_sym = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
 
-                let params = Self::try_from_mpi(p, curve, hash, alg_sym)?;
+                let replacement_fingerprint = if mode == 0xff {
+                    let fingerprint: [u8; 20] =
+                        i.take_bytes(20)?.as_ref().try_into().expect("read 20");
+                    Some(fingerprint)
+                } else {
+                    None
+                };
+
+                let params = Self::try_from_mpi(p, curve, hash, alg_sym, replacement_fingerprint)?;
                 Ok(params)
             }
             _ => {
@@ -261,6 +297,7 @@ impl EcdhPublicParams {
         curve: ECCCurve,
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
+        replacement_fingerprint: Option<[u8; 20]>,
     ) -> Result<Self> {
         match curve {
             ECCCurve::Curve25519 => {
@@ -273,7 +310,12 @@ impl EcdhPublicParams {
                 public_key_arr[..].copy_from_slice(public_key);
 
                 let p = x25519_dalek::PublicKey::from(public_key_arr);
-                Ok(EcdhPublicParams::Curve25519 { p, hash, alg_sym })
+                Ok(EcdhPublicParams::Curve25519 {
+                    p,
+                    hash,
+                    alg_sym,
+                    replacement_fingerprint,
+                })
             }
             ECCCurve::P256 => {
                 let p = p256::PublicKey::from_sec1_bytes(p.as_ref())?;

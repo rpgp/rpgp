@@ -1246,6 +1246,10 @@ impl KeyFlags {
         self.known.authentication()
     }
 
+    pub fn decrypt_forwarded(&self) -> bool {
+        self.known.decrypt_forwarded()
+    }
+
     pub fn group(&self) -> bool {
         self.known.group()
     }
@@ -1313,7 +1317,7 @@ pub struct KnownKeyFlags {
     #[bits(1)]
     authentication: bool,
     #[bits(1)]
-    _padding0: u8,
+    decrypt_forwarded: bool,
     #[bits(1)]
     group: bool,
     #[bits(2)]

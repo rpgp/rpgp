@@ -436,10 +436,20 @@ impl PlainSecretParams {
                     }
                 };
 
+                let mut fingerprint = recipient.fingerprint().as_bytes().to_vec();
+
+                if let EcdhPublicParams::Curve25519 {
+                    replacement_fingerprint: Some(fp),
+                    ..
+                } = params
+                {
+                    fingerprint = fp.to_vec();
+                };
+
                 priv_key.decrypt(ecdh::EncryptionFields {
                     public_point: &public_point.to_owned(),
                     encrypted_session_key,
-                    fingerprint: recipient.fingerprint().as_bytes(),
+                    fingerprint: &fingerprint,
                     curve: params.curve(),
                     hash: *hash,
                     alg_sym: *alg_sym,

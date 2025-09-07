@@ -114,6 +114,7 @@ impl From<&SecretKey> for EcdhPublicParams {
                 p: PublicKey::from(&key.0),
                 hash,
                 alg_sym,
+                replacement_fingerprint: None,
             },
             SecretKey::P256 { ref secret } => Self::P256 {
                 p: secret.public_key(),
@@ -571,7 +572,12 @@ pub fn encrypt<R: CryptoRng + Rng>(
     );
 
     let (encoded_public, shared_secret, hash, alg_sym) = match params {
-        EcdhPublicParams::Curve25519 { p, hash, alg_sym } => {
+        EcdhPublicParams::Curve25519 {
+            p,
+            hash,
+            alg_sym,
+            replacement_fingerprint: _replacement_fingerprint,
+        } => {
             let their_public = p;
             let mut our_secret_key_bytes =
                 Zeroizing::new([0u8; ECCCurve::Curve25519.secret_key_length()]);
