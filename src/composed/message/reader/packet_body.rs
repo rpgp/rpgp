@@ -104,6 +104,7 @@ impl<R: BufRead> PacketBodyReader<R> {
 
                 // https://www.rfc-editor.org/rfc/rfc9580.html#section-4.2.1.4-5
                 // "The first partial length MUST be at least 512 octets long."
+                #[cfg(not(feature = "lenience"))]
                 if len < 512 {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,

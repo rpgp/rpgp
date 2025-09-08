@@ -304,7 +304,7 @@ impl Decryptor for SecretKey {
         };
 
         // obtain the session key from the shared secret
-        match derive_session_key(
+        let res = derive_session_key(
             &shared_secret,
             data.encrypted_session_key,
             encrypted_key_len,
@@ -312,58 +312,67 @@ impl Decryptor for SecretKey {
             hash,
             alg_sym,
             data.fingerprint,
-        ) {
-            Ok(sk) => Ok(sk.to_vec()),
-            Err(e) => {
-                {
-                    // try alternative decryption variations for mal-encrypted ECDH messages
+        );
 
-                    let mut shared_secret = shared_secret.as_slice();
+        if res.is_ok() {
+            return res;
+        }
 
-                    // TODO: make conditional
-                    // strip leading zeroes (-> work around old go crypto bug)
-                    while shared_secret.starts_with(&[0]) {
-                        shared_secret = &shared_secret[1..];
-                    }
+        #[cfg(feature = "lenience")]
+        {
+            // Attempt alternative decryption variations for mal-encrypted ECDH messages.
+            //
+            // Context: Messages with erroneously encrypted ECDH PKESK have been produced by historical
+            // versions of both OpenPGP.js and GopenPGP.
+            //
+            // This special handling code can decrypt technically "broken" messages by attempting to
+            // compensate for these two classes of encryption mistake to see if this yields successful
+            // decryption.
+            //
+            // Note that this class of problem should never occur with modern messages!
+            // Both libraries were fixed in 2019:
+            //
+            // https://github.com/openpgpjs/openpgpjs/commit/1dd168e7a2ce6f9ba0fddf5d198e21baca9c042d
+            // https://github.com/openpgpjs/openpgpjs/commit/a9599fea4243f38f01a218a2948b26509a7a3587
 
-                    if let Ok(sk) = derive_session_key(
-                        shared_secret,
-                        data.encrypted_session_key,
-                        encrypted_key_len,
-                        curve.clone(),
-                        hash,
-                        alg_sym,
-                        data.fingerprint,
-                    ) {
-                        return Ok(sk);
-                    }
-                }
+            // 1. Try with stripped leading zeroes (-> work around old go crypto bug)
+            let mut strip_leading = shared_secret.as_slice();
+            while strip_leading.starts_with(&[0]) {
+                strip_leading = &strip_leading[1..];
+            }
 
-                {
-                    let mut shared_secret = shared_secret.as_slice();
+            if let Ok(sk) = derive_session_key(
+                strip_leading,
+                data.encrypted_session_key,
+                encrypted_key_len,
+                curve.clone(),
+                hash,
+                alg_sym,
+                data.fingerprint,
+            ) {
+                return Ok(sk);
+            }
 
-                    // TODO: make conditional
-                    // strip trailing zeroes (-> work around old OpenPGP.js bug)
-                    while shared_secret.ends_with(&[0]) {
-                        shared_secret = &shared_secret[..shared_secret.len() - 1];
-                    }
+            // 2. Try with stripped trailing zeroes (-> work around old OpenPGP.js bug)
+            let mut strip_trailing = shared_secret.as_slice();
+            while strip_trailing.ends_with(&[0]) {
+                strip_trailing = &strip_trailing[..shared_secret.len() - 1];
+            }
 
-                    if let Ok(sk) = derive_session_key(
-                        shared_secret,
-                        data.encrypted_session_key,
-                        encrypted_key_len,
-                        curve,
-                        hash,
-                        alg_sym,
-                        data.fingerprint,
-                    ) {
-                        return Ok(sk);
-                    }
-                }
-
-                Err(e)
+            if let Ok(sk) = derive_session_key(
+                strip_trailing,
+                data.encrypted_session_key,
+                encrypted_key_len,
+                curve,
+                hash,
+                alg_sym,
+                data.fingerprint,
+            ) {
+                return Ok(sk);
             }
         }
+
+        res
     }
 }
 
@@ -646,10 +655,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs,
-        io::{BufReader, Read},
-    };
+    use std::fs;
 
     use proptest::prelude::*;
     use rand::{RngCore, SeedableRng};
@@ -657,8 +663,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        composed::{Deserializable, Esk, Message, PlainSessionKey, SignedSecretKey},
-        types::{EskType, Password},
+        composed::{Deserializable, Message, SignedSecretKey},
+        types::Password,
     };
 
     #[test]
@@ -735,11 +741,14 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "lenience")]
     // Test custom decryption of incorrectly formed ECDH messages
     // "broken ECC message from old OpenPGP.js"
     //
     // From: https://github.com/openpgpjs/openpgpjs/blob/448418a6f56ece88dfb28c26a85107b887061d9d/test/general/openpgp.js#L337-L405
     fn test_decrypt_bad_ecdh_openpgp_js() {
+        use std::io::BufReader;
+
         let _ = pretty_env_logger::try_init();
 
         const PASSPHRASE: &str = "12345";
@@ -796,11 +805,19 @@ OBqYz6mzZAWQZqsjbg4=
     }
 
     #[test]
+    #[cfg(feature = "lenience")]
     // Test custom decryption of incorrectly formed ECDH messages
     // "broken ECC message from old go crypto"
     //
     // From: https://github.com/openpgpjs/openpgpjs/blob/448418a6f56ece88dfb28c26a85107b887061d9d/test/general/openpgp.js#L337-L405
     fn test_decrypt_bad_ecdh_go_crypto() {
+        use std::io::{BufReader, Read};
+
+        use crate::{
+            composed::{Esk, PlainSessionKey},
+            types::EskType,
+        };
+
         let _ = pretty_env_logger::try_init();
 
         const PASSPHRASE: &str = "12345";
@@ -853,61 +870,54 @@ EQr2Mx42THr260IFYp5E/rIA
         let (message, _headers) = Message::from_armor(BufReader::new(MSG_GO_CRYPTO.as_bytes()))
             .expect("failed to parse message");
 
-        // The content of the Edata is malformed
-        // ("Illegal first partial body length 2 (shorter than 512 bytes)"),
-        // and thus rPGP refuses to handle it.
-        //
-        // We'll decrypt it manually, for this test.
+        {
+            // The content of the Edata is malformed
+            // ("Illegal first partial body length 2 (shorter than 512 bytes)"),
+            // and thus rPGP refuses to handle it.
+            //
+            // We'll decrypt it manually, for this test.
 
-        let Message::Encrypted {
-            mut esk, mut edata, ..
-        } = message
-        else {
-            panic!("expect encrypted message")
+            let Message::Encrypted { ref esk, .. } = &message else {
+                panic!("expect encrypted message")
+            };
+
+            assert_eq!(esk.len(), 1);
+
+            let Esk::PublicKeyEncryptedSessionKey(pkesk) = &esk[0] else {
+                panic!("expect PKESK")
+            };
+
+            let psk = decrypt_key.secret_subkeys[0]
+                .decrypt_session_key(
+                    &Password::from(PASSPHRASE),
+                    pkesk.values().unwrap(),
+                    EskType::V3_4,
+                )
+                .expect("failed to decrypt session key")
+                .expect("failed to unlock the key");
+
+            let PlainSessionKey::V3_4 { ref key, .. } = &psk else {
+                panic!("expect v3/4 session key")
+            };
+
+            // Having found the session key is good enough to show that decryption worked
+            assert_eq!(
+                key.as_ref(),
+                &[
+                    182, 225, 194, 235, 81, 173, 221, 243, 154, 105, 110, 191, 13, 187, 107, 131,
+                    135, 235, 57, 129, 79, 128, 246, 170, 151, 230, 136, 182, 29, 170, 62, 196
+                ]
+            );
+        }
+
+        let Ok(mut dec) = message.decrypt(&Password::from(PASSPHRASE), &decrypt_key) else {
+            panic!("could not decrypt message")
         };
-
-        assert_eq!(esk.len(), 1);
-        let esk = esk.remove(0);
-
-        let Esk::PublicKeyEncryptedSessionKey(pkesk) = esk else {
-            panic!("expect PKESK")
-        };
-
-        let psk = decrypt_key.secret_subkeys[0]
-            .decrypt_session_key(
-                &Password::from(PASSPHRASE),
-                pkesk.values().unwrap(),
-                EskType::V3_4,
-            )
-            .expect("failed to decrypt session key")
-            .expect("failed to unlock the key");
-
-        let PlainSessionKey::V3_4 { ref key, .. } = &psk else {
-            panic!("expect v3/4 session key")
-        };
-
-        // Having found the session key is good enough to show that decryption worked
-        assert_eq!(
-            key.as_ref(),
-            &[
-                182, 225, 194, 235, 81, 173, 221, 243, 154, 105, 110, 191, 13, 187, 107, 131, 135,
-                235, 57, 129, 79, 128, 246, 170, 151, 230, 136, 182, 29, 170, 62, 196
-            ]
-        );
-
-        // ... however, we'll still try to decrypt the edata, because why not:
-        edata.decrypt(&psk).expect("decryption failed");
 
         let mut data = Vec::new();
-        edata.read_to_end(&mut data).unwrap();
+        dec.read_to_end(&mut data).unwrap();
 
-        // We can't easily parse the inner message because it is malformed.
-        // And because the inner message uses partial encoding, the full plaintext is not contained
-        // as one contiguous slice.
-        //
-        // But the first 32 bytes of the plaintext happen to be there,
-        // and we expect to find them at byte 25.
-        assert_eq!(&data[25..25 + 32], &MSG_GO_CRYPTO_PLAIN.as_bytes()[0..32]);
+        assert_eq!(&data, MSG_GO_CRYPTO_PLAIN.as_bytes());
     }
 
     prop_compose! {
