@@ -871,11 +871,11 @@ EQr2Mx42THr260IFYp5E/rIA
             .expect("failed to parse message");
 
         {
-            // The content of the Edata is malformed
-            // ("Illegal first partial body length 2 (shorter than 512 bytes)"),
-            // and thus rPGP refuses to handle it.
+            // Note: The content of the Edata is technically malformed
+            // ("Illegal first partial body length 2 (shorter than 512 bytes)"), and thus rPGP
+            // refuses to handle it without setting handling of partial body encoding to lenient.
             //
-            // We'll decrypt it manually, for this test.
+            // As a first step (that should always work), we decrypt just the PKESK itself.
 
             let Message::Encrypted { ref esk, .. } = &message else {
                 panic!("expect encrypted message")
