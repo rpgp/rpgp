@@ -148,8 +148,9 @@ wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
 draft-pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
 
 # Be lenient towards some types of malformed artifacts:
+#
 # - Specific types of erroneously encoded ECDH PKESK (from historical OpenPGP.js and GopenPGP versions)
-# - Messages with invalidly short first partial body segment in a packet
+# - Messages with invalidly short first partial body segment in a packet (see https://github.com/ProtonMail/go-crypto/pull/14)
 #
 # Most users will NOT need this feature!
 # If you are not aware of a specific reason to enable it, you should leave it disabled.
