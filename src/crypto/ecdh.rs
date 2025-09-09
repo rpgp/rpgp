@@ -318,7 +318,7 @@ impl Decryptor for SecretKey {
             return res;
         }
 
-        #[cfg(feature = "lenience")]
+        #[cfg(feature = "malformed_artifact_lenience")]
         {
             // Attempt alternative decryption variations for mal-encrypted ECDH messages.
             //
@@ -741,7 +741,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "lenience")]
+    #[cfg(feature = "malformed_artifact_lenience")]
     // Test custom decryption of incorrectly formed ECDH messages
     // "broken ECC message from old OpenPGP.js"
     //
@@ -805,7 +805,7 @@ OBqYz6mzZAWQZqsjbg4=
     }
 
     #[test]
-    #[cfg(feature = "lenience")]
+    #[cfg(feature = "malformed_artifact_lenience")]
     // Test custom decryption of incorrectly formed ECDH messages
     // "broken ECC message from old go crypto"
     //

@@ -55,9 +55,9 @@ jobs:
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       run: cargo nextest run --lib --bins --tests --all --features asm
 
-    - name: lenience
+    - name: malformed_artifact_lenience
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      run: cargo nextest run --lib --bins --tests --all --features lenience
+      run: cargo nextest run --lib --bins --tests --all --features malformed_artifact_lenience
 
     - name: pqc
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}

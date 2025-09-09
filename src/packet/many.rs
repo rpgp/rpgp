@@ -312,7 +312,7 @@ mod tests {
             assert_eq!(message.as_data_vec().unwrap(), TEXT.as_bytes());
         }
 
-        #[cfg(not(feature = "lenience"))]
+        #[cfg(not(feature = "malformed_artifact_lenience"))]
         {
             // Literal Data Packet with illegal first partial length of 256 bytes
             let res = Message::from_armor_file(

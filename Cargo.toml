@@ -154,7 +154,7 @@ draft-pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
 #
 # Most users will NOT need this feature!
 # If you are not aware of a specific reason to enable it, you should leave it disabled.
-lenience = []
+malformed_artifact_lenience = []
 
 [profile.bench]
 debug = 2
