@@ -44,10 +44,21 @@ rPGP implements OpenPGP as specified in [RFC9580], including the commonly used v
 All formats specified in the historical RFCs [RFC4880] and [RFC6637], such as v3 keys and signatures, are supported as well.
 
 
-See [`IMPL_STATUS.md`](docs/IMPL_STATUS.md) for more details on the implemented PGP features.
+See [`IMPL_STATUS.md`](docs/IMPL_STATUS.md) for more details on the implemented PGP features and
+[`openpgp.md`](docs/openpgp.md) for a rough taxonomy.
 
 rPGP offers a flexible low-level API and gives users the ability to build higher level PGP tooling in the most compatible way possible.
 Additionally, it fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification].
+
+## Notable Users & Libraries built using rPGP
+
+- [Delta Chat]: Cross-platform messaging app that works over e-mail
+- [`rpm`]: A pure rust library for parsing and creating RPM files
+- [`rpgpie`]: An experimental high level OpenPGP API
+- [`rsop`]: A SOP CLI tool based on rPGP and rpgpie
+- [`debian-packaging`]: a library crate for dealing with Debian packages
+
+Don't see your project here? Please send a PR :)
 
 ## Usage
 
@@ -137,34 +148,68 @@ fn main() -> pgp::errors::Result<()> {
 
 > Last updated *September 2024*
 
-- Implementation Status: [IMPL_STATUS.md](docs/IMPL_STATUS.md)
-- Security Status: [STATUS_SECURITY.md](docs/SECURITY_STATUS.md)
-- Supported Platforms: [PLATFORMS.md](docs/PLATFORMS.md)
+- Implementation Status: [`IMPL_STATUS.md`](docs/IMPL_STATUS.md)
+- Security Status: [`STATUS_SECURITY.md`](docs/SECURITY_STATUS.md)
+- Supported Platforms: [`PLATFORMS.md`](docs/PLATFORMS.md)
 
-## rPGP for application developers
+## FAQs
+
+See [`FAQ.md`](docs/FAQ.md).
+
+## OpenPGP Versions and Features
+
+See [`openpgp.md`](docs/openpgp.md).
+
+## rPGP is a library for application developers
 
 rPGP aims to make it easy for application developers to incorporate OpenPGP functionality into their projects.
 
-However, the OpenPGP format and its semantics are relatively complex, and there has historically not been a reader-friendly introduction to the domain.
-
-The text ["OpenPGP for application developers"](https://openpgp.dev/) offers an introduction to OpenPGP, aimed mainly at application developers. We recommend it for initial orientation.
+Note that the OpenPGP format and its semantics are relatively complex.
+We recommend the text ["OpenPGP for application developers"](https://openpgp.dev/) for initial orientation.
 
 Independently, we welcome questions in the rPGP issue tracker.
 
-## Users & Libraries built using rPGP
+## rPGP is a low-level OpenPGP library
 
-- [Delta Chat]: Cross-platform messaging app that works over e-mail
-- [`rpm`]: A pure rust library for parsing and creating RPM files
-- [`rpgpie`]: An experimental high level OpenPGP API
-- [`rsop`]: A SOP CLI tool based on rPGP and rpgpie
-- [`debian-packaging`]: a library crate for dealing with Debian packages
+rPGP offers abstractions for handling the formats and mechanisms specified in RFC 9580.
+However, it offers them as relatively low-level building blocks, and doesn't attempt to ensure that users can not apply them unsafely.
 
-Don't see your project here? Please send a PR :)
+> rPGP allows following almost all parts of the OpenPGP specification, but the APIs are low level building blocks and do not claim that using them is (a) secure or (b) following the OpenPGP specification
 
-### FAQs
+Using the building blocks in rPGP correctly and safely requires a solid understanding of OpenPGP and at least a basic understanding of cryptography.
 
-Checkout [FAQ.md](docs/FAQ.md).
+### OpenPGP is a layered technology
 
+For context, OpenPGP can be thought of as a multi-layered technology, roughly like this:
+
+1. Wire format: [Packet framing](https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-syntax), [Packet content](https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-types), [ASCII armor](https://www.rfc-editor.org/rfc/rfc9580.html#name-forming-ascii-armor), ...
+2. Composite objects (e.g. Certificates, Messages) constructed according to [grammars](https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-sequence-composition)
+3. Functionality to process data, such as calculation and validation of OpenPGP signatures and encryption and decryption of messages.
+4. OpenPGP semantics (e.g.: *Expiration* and *Revocation* of Certificates and their components, *Key Flags* that define which semantical operations a given component key may be used for, signaling of algorithm preferences, ...)
+
+Of these layers, the OpenPGP RFC specifies 1-3, while 4 is not specified in detail.
+
+Some work on formalizing OpenPGP semantics can be found in
+[draft-gallagher-openpgp-signatures](https://datatracker.ietf.org/doc/draft-gallagher-openpgp-signatures/) and
+[draft-dkg-openpgp-revocation](https://datatracker.ietf.org/doc/draft-dkg-openpgp-revocation/).
+
+Analogous to the RFC, rPGP handles layers 1-3, but explicitly does not deal with 4.
+Applications that need OpenPGP semantics must implement them manually, or rely on additional libraries to deal with that layer.
+
+NOTE: The [`rpgpie`] library implements some of these high level OpenPGP semantics.
+It may be useful either to incorporate in rPGP projects, or to study for reference.
+
+#### Mechanisms in OpenPGP evolve over time
+
+rPGP can handle a wide range of OpenPGP artifacts.
+It offers support for almost all mechanisms in OpenPGP, both modern and those now considered legacy.
+
+This explicitly includes artifacts that use historical algorithms, which are considered insecure given today's understanding.
+
+rPGP doesn't ensure that application developers use appropriate cryptographic building blocks for their purposes
+(even though it generally produces appropriately modern artifacts, by default).
+
+See ["Overview of OpenPGP formats and mechanisms"](docs/openpgp.md) for more details on the evolution of OpenPGP over time.
 
 ## Minimum Supported Rust Version (MSRV)
 
