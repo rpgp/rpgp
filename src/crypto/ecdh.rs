@@ -320,6 +320,8 @@ impl Decryptor for SecretKey {
 
         #[cfg(feature = "malformed_artifact_lenience")]
         {
+            log::debug!("Attempting to decrypt erroneous ECDH encryption");
+
             // Attempt alternative decryption variations for mal-encrypted ECDH messages.
             //
             // Context: Messages with erroneously encrypted ECDH PKESK have been produced by historical
@@ -350,6 +352,8 @@ impl Decryptor for SecretKey {
                 alg_sym,
                 data.fingerprint,
             ) {
+                log::info!("Decrypted erroneous ECDH session key by go crypto");
+
                 return Ok(sk);
             }
 
@@ -368,6 +372,8 @@ impl Decryptor for SecretKey {
                 alg_sym,
                 data.fingerprint,
             ) {
+                log::info!("Decrypted erroneous ECDH session key by OpenPGP.js");
+
                 return Ok(sk);
             }
         }
