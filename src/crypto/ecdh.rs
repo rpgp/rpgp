@@ -322,17 +322,17 @@ impl Decryptor for SecretKey {
         {
             log::debug!("Attempting to decrypt erroneous ECDH encryption");
 
-            // Attempt alternative decryption variations for mal-encrypted ECDH messages.
+            // Attempt alternative decryption variations for mal-encrypted ECDH ESKs.
             //
-            // Context: Messages with erroneously encrypted ECDH PKESK have been produced by historical
-            // versions of both OpenPGP.js and GopenPGP.
+            // Context: Erroneous ESKs have been produced by historical versions of both
+            // OpenPGP.js and GopenPGP.
             //
-            // This special handling code can decrypt technically "broken" messages by attempting to
-            // compensate for these two classes of encryption mistake to see if this yields successful
-            // decryption.
+            // This special handling code can decrypt technically "broken" messages by attempting
+            // to compensate for these two classes of encryption mistake to see if this yields
+            // successful decryption.
             //
-            // Note that this class of problem should never occur with modern messages!
-            // Both libraries were fixed in 2019:
+            // Note that this class of problem should only occur with historical/archived messages!
+            // Encryption in both libraries was fixed in 2019:
             //
             // https://github.com/openpgpjs/openpgpjs/commit/1dd168e7a2ce6f9ba0fddf5d198e21baca9c042d
             // https://github.com/openpgpjs/openpgpjs/commit/a9599fea4243f38f01a218a2948b26509a7a3587
