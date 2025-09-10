@@ -312,10 +312,13 @@ mod tests {
             assert_eq!(message.as_data_vec().unwrap(), TEXT.as_bytes());
         }
 
-        // Literal Data Packet with illegal first partial length of 256 bytes
-        let res = Message::from_armor_file(
-            "./tests/unit-tests/partial-body-length/literal.packet-partial.256.asc",
-        );
-        assert!(res.is_err());
+        #[cfg(not(feature = "malformed_artifact_lenience"))]
+        {
+            // Literal Data Packet with illegal first partial length of 256 bytes
+            let res = Message::from_armor_file(
+                "./tests/unit-tests/partial-body-length/literal.packet-partial.256.asc",
+            );
+            assert!(res.is_err());
+        }
     }
 }
