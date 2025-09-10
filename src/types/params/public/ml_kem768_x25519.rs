@@ -47,7 +47,7 @@ impl Serialize for MlKem768X25519PublicParams {
 mod tests {
     use ml_kem::{KemCore, MlKem768};
     use proptest::prelude::*;
-    use rand::SeedableRng;
+    use rand::{RngCore, SeedableRng};
 
     use super::*;
     use crate::crypto::ecc_curve::ECCCurve;

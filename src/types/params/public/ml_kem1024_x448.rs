@@ -1,6 +1,5 @@
 use std::io::{self, BufRead};
 
-use cx448::x448;
 use ml_kem::{kem::EncapsulationKey, EncodedSizeUser, MlKem1024Params};
 
 use crate::{
