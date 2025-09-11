@@ -10,6 +10,7 @@ use crate::{
 };
 
 /// Trust Packet
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-trust-packet-type-id-12>
 ///
 /// Trust packets SHOULD NOT be emitted to output streams that are
