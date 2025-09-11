@@ -23,6 +23,7 @@ use crate::{
 };
 
 /// Symmetric-Key Encrypted Session Key Packet
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetric-key-encrypted-ses>
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub enum SymKeyEncryptedSessionKey {
