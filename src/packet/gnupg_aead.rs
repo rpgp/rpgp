@@ -87,6 +87,7 @@ impl Serialize for Config {
 }
 
 /// GnuPG's proprietary AEAD format "OCB Encrypted Data Packet" (packet type 20).
+///
 /// <https://www.ietf.org/archive/id/draft-koch-librepgp-03.html#name-ocb-encrypted-data-packet-t>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct GnupgAeadData {

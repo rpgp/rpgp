@@ -19,6 +19,7 @@ use crate::{
 };
 
 /// One-Pass Signature Packet
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-one-pass-signature-packet-t>
 ///
 /// A One-Pass Signature Packet acts as a companion to a Signature Packet. In modern OpenPGP

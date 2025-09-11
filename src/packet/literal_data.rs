@@ -19,6 +19,7 @@ use crate::{
 };
 
 /// Literal Data Packet
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-literal-data-packet-type-id>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
