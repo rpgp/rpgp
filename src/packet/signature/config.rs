@@ -20,6 +20,10 @@ use crate::{
     util::NormalizingHasher,
 };
 
+/// The metadata of an OpenPGP [`Signature`] packet.
+///
+/// An OpenPGP Signature packet is split into a `SignatureConfig` (this struct),
+/// a two byte excerpt of the signed hash value, and the cryptographic signature as such.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignatureConfig {
     pub typ: SignatureType,
@@ -702,6 +706,18 @@ impl SignatureConfig {
     }
 }
 
+/// Calculates the "hash value" of the signed data related to a particular [`Signature`] packet.
+///
+/// Its calculation involves choosing a specific hash algorithm, and optionally normalizing the
+/// line breaks in the payload, in the case of [`SignatureType::Text`].
+///
+/// Note that when producing an OpenPGP message, multiple signatures can be produced in parallel,
+/// possibly signed with different signing keys, using different hash algorithms, and with
+/// different [`SignatureType`]s.
+///
+/// Each of these is then calculated by a separate `SignatureHasher`.
+///
+/// Also see <https://www.rfc-editor.org/rfc/rfc9580.html#name-notes-on-signatures>
 pub struct SignatureHasher {
     norm_hasher: NormalizingHasher,
     config: SignatureConfig,

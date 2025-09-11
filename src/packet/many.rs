@@ -8,6 +8,7 @@ use crate::{
     packet::{Packet, PacketHeader},
 };
 
+/// A PacketParser reads an input stream and reader a series of [`Packet`]s from it.
 pub struct PacketParser<R: BufRead> {
     /// The reader that gets advanced through the original source
     reader: R,

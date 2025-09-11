@@ -233,6 +233,21 @@ impl Serialize for SubpacketLength {
     }
 }
 
+/// A subpacket encodes metadata that is included in an OpenPGP [`Signature`] packet.
+///
+/// An OpenPGP [`Signature`] contains two lists of subpackets (both stored in the [`SignatureConfig`]):
+/// - [`SignatureConfig::hashed_subpackets`] and
+/// - [`SignatureConfig::unhashed_subpackets`].
+///
+/// The subpackets in the list of `hashed_subpackets` are protected by the signature, they
+/// represent a part of the "semantics" of that signature.
+///
+/// The authenticity of `hashed_subpackets` is guaranteed if signature verification succeeds.
+///
+/// A [`Signature`] will usually include a subpacket with the
+/// [`SubpacketData::SignatureCreationTime`] in their hashed area.
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-subpacket-specifi>
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Subpacket {
     pub is_critical: bool,
