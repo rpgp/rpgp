@@ -25,6 +25,32 @@ use crate::{
 ///
 /// An OpenPGP Signature packet is split into a `SignatureConfig` (this struct),
 /// a two byte excerpt of the signed hash value, and the cryptographic signature as such.
+///
+/// A `SignatureConfig` specifies the "type" of a signature and the cryptographic algorithms
+/// that the signature uses.
+///
+/// In addition, it contains two lists of [`Subpacket`]s:
+///
+/// - [`SignatureConfig::hashed_subpackets`] and
+/// - [`SignatureConfig::unhashed_subpackets`].
+///
+/// The subpackets in the list of `hashed_subpackets` are protected by the signature, they
+/// represent a part of the "semantics" of that signature.
+///
+/// The authenticity of `hashed_subpackets` is guaranteed if signature verification succeeds.
+///
+/// A [`Signature`] will usually include a subpacket with the
+/// [`SubpacketData::SignatureCreationTime`] in their hashed area, and usually other subpackets.
+///
+/// The `unhashed_subpackets`, by contracts, are not covered by the cryptographic signature.
+/// The contents of this area are thus not protected against tampering.
+///
+/// Potential uses of the `unhashed_area`:
+/// - subpackets that can be independently verified by a recipient (e.g. [`SubpacketData::Issuer`],
+/// - annotations made on a signature by a third party, such as a key server
+///   (note that a third party can't add data to the hashed area without breaking the cryptographic
+///   signature), or
+/// - information that the sender wants to be able to plausibly deny
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignatureConfig {
     pub typ: SignatureType,
