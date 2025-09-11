@@ -38,6 +38,7 @@ const JPEG_HEADER_PREFIX: &[u8; 4] = &[
 ];
 
 /// User Attribute Packet
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-user-attribute-packet-type->
 #[derive(Clone, PartialEq, Eq, derive_more::Debug, derive_more::Display)]
 pub enum UserAttribute {

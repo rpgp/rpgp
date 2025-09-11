@@ -19,6 +19,7 @@ use crate::{
 };
 
 /// User ID Packet
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-user-id-packet-type-id-13>
 ///
 /// # Examples
