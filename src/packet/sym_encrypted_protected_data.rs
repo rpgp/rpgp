@@ -10,7 +10,7 @@ use crate::{
         sym::SymmetricKeyAlgorithm,
     },
     errors::{ensure_eq, format_err, InvalidInputSnafu, Result},
-    packet::{PacketHeader, PacketTrait, SymEncryptedProtectedDataConfig},
+    packet::{GnupgAeadDataConfig, PacketHeader, PacketTrait, SymEncryptedProtectedDataConfig},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::Tag,
@@ -20,7 +20,7 @@ use crate::{
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum ProtectedDataConfig {
     Seipd(SymEncryptedProtectedDataConfig),
-    GnupgAead(crate::packet::gnupg_aead::Config),
+    GnupgAead(GnupgAeadDataConfig),
 }
 
 /// Symmetrically Encrypted Integrity Protected Data Packet

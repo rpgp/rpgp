@@ -93,7 +93,7 @@ mod secret_key_parser;
 
 pub use self::{
     compressed_data::*,
-    gnupg_aead::{Config as GnupgAeadConfig, GnupgAeadData},
+    gnupg_aead::{Config as GnupgAeadDataConfig, GnupgAeadData},
     header::{NewPacketHeader, OldPacketHeader, PacketHeader},
     key::*,
     literal_data::*,

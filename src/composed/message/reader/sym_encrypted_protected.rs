@@ -6,7 +6,7 @@ use crate::{
     crypto::sym::SymmetricKeyAlgorithm,
     errors::{bail, ensure, ensure_eq, unsupported_err, Result},
     packet::{
-        GnupgAeadConfig, PacketHeader, ProtectedDataConfig, StreamDecryptor,
+        GnupgAeadDataConfig, PacketHeader, ProtectedDataConfig, StreamDecryptor,
         SymEncryptedProtectedDataConfig,
     },
     types::Tag,
@@ -45,7 +45,8 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
     pub fn new_gnupg_aead(mut source: PacketBodyReader<R>) -> Result<Self> {
         debug_assert_eq!(source.packet_header().tag(), Tag::GnupgAeadData);
 
-        let config = ProtectedDataConfig::GnupgAead(GnupgAeadConfig::try_from_reader(&mut source)?);
+        let config =
+            ProtectedDataConfig::GnupgAead(GnupgAeadDataConfig::try_from_reader(&mut source)?);
 
         Ok(Self {
             config,
@@ -85,7 +86,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                     },
                 )?;
             }
-            ProtectedDataConfig::GnupgAead(GnupgAeadConfig {
+            ProtectedDataConfig::GnupgAead(GnupgAeadDataConfig {
                 sym_alg,
                 aead,
                 chunk_size,
