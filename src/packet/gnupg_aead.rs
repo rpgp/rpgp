@@ -17,7 +17,7 @@ use crate::{
 
 const GNUPG_AEAD_VERSION_1: u8 = 0x01;
 
-/// Config for a [GnupgAeadData] encryption container.
+/// Configuration of a [GnupgAeadData] encryption container.
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct Config {
     pub sym_alg: SymmetricKeyAlgorithm,
