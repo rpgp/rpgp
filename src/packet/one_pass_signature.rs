@@ -22,8 +22,8 @@ use crate::{
 ///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-one-pass-signature-packet-t>
 ///
-/// A One-Pass Signature Packet acts as a companion to a Signature Packet. In modern OpenPGP
-/// messages, Ops and Signatures occur in pairs, bracketing the message payload.
+/// A One-Pass Signature (Ops) Packet acts as a companion to a [`Signature`] Packet.
+/// In modern OpenPGP messages, Ops and Signature packets occur in pairs, bracketing the message payload.
 ///
 /// The Ops packet contains all the information that a recipient needs to calculate the hash
 /// digest for the signature. This enables the recipient to process the message in "one pass",
