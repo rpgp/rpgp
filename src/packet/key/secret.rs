@@ -24,6 +24,9 @@ use crate::{
     },
 };
 
+/// Secret Key Packet
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-secret-key-packet-type-id-5>
 #[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
 pub struct SecretKey {
     #[zeroize(skip)]
@@ -33,6 +36,9 @@ pub struct SecretKey {
     secret_params: SecretParams,
 }
 
+/// Secret Subkey Packet
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-secret-subkey-packet-type-i>
 #[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
 pub struct SecretSubkey {
     #[zeroize(skip)]
