@@ -41,11 +41,10 @@ pub struct OnePassSignature {
     version_specific: OpsVersionSpecific,
 }
 
-/// Version-specific elements of a One-Pass Signature Packet:
+/// Version-specific data of a [`OnePassSignature`] packet
 ///
 /// - A v3 OPS contains the `key_id` of the signer.
-/// - A v6 OPS contains the v6 `fingerprint` of the signer, and the `salt` used in the corresponding
-///   signature packet.
+/// - A v6 OPS contains the v6 `fingerprint` of the signer, and the `salt` used in the signature.
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum OpsVersionSpecific {
