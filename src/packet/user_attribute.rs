@@ -60,6 +60,13 @@ pub enum UserAttribute {
     },
 }
 
+/// An image header is used in the image attribute subpacket.
+///
+/// This subpacket is used in [`UserAttribute`] packets.
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-image-attribute-subpacket>
+///
+/// Note that the Image Attribute subpacket are not commonly used.
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum ImageHeader {
     V1(ImageHeaderV1),
@@ -72,6 +79,9 @@ pub enum ImageHeader {
     },
 }
 
+/// Payload of a v1 [`ImageHeader`]
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-image-attribute-subpacket>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum ImageHeaderV1 {
     Jpeg {

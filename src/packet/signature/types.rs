@@ -1024,6 +1024,15 @@ impl Default for SignatureVersion {
     }
 }
 
+/// A signature type defines the meaning of an OpenPGP [`Signature`].
+///
+/// OpenPGP Signatures over data are either [`SignatureType::Binary`] or [`SignatureType::Text`].
+///
+/// Most other signature types are used to form certificates (aka OpenPGP public keys), e.g.
+/// to associate subkeys with a primary key, bind identities to a certificate, and specify
+/// various certificate metadata such as expiration/revocation status, and algorithm preferences.
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-types>
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
@@ -1505,7 +1514,7 @@ pub struct Notation {
     pub value: Bytes,
 }
 
-/// Codes for revocation reasons
+/// Value of a [`SubpacketData::RevocationReason`] signature subpacket
 ///
 /// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-reason-for-revocation>
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]

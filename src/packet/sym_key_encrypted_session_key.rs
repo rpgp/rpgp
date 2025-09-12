@@ -59,6 +59,7 @@ pub enum SymKeyEncryptedSessionKey {
     },
 }
 
+/// AEAD configuration for a v6 (or v5) [`SymKeyEncryptedSessionKey`] (SKESK)
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum AeadProps {
