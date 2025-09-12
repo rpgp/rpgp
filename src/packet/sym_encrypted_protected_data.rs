@@ -16,7 +16,9 @@ use crate::{
     types::Tag,
 };
 
-/// Either a standard OpenPGP SEIPD config or a Gnupg-specific AEAD config
+/// Configuration of a protected data packet (OpenPGP SEIPD v1/v2, or GnuPG-specific AEAD)
+///
+/// Used in [`SymEncryptedProtectedDataReader`](crate::composed::SymEncryptedProtectedDataReader)
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum ProtectedDataConfig {
     Seipd(SymEncryptedProtectedDataConfig),

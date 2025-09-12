@@ -106,6 +106,7 @@ impl LiteralDataHeader {
     }
 }
 
+/// Specifies what type of data is contained in a [`LiteralData`] packet.
 #[derive(Debug, Copy, Clone, FromPrimitive, IntoPrimitive, PartialEq, Eq)]
 #[repr(u8)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
