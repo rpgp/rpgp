@@ -154,6 +154,7 @@ impl SecretKeyTrait for Box<&dyn SecretKeyTrait> {
 }
 
 pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
+    /// Create a raw cryptographic signature over `data`
     fn create_signature(
         &self,
         key_pw: &Password,
