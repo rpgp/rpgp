@@ -50,7 +50,7 @@ See [`IMPL_STATUS.md`](docs/IMPL_STATUS.md) for more details on the implemented 
 rPGP offers a flexible low-level API and gives users the ability to build higher level PGP tooling in the most compatible way possible.
 Additionally, it fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification].
 
-Cargo features:
+### Cargo features
 
 - `bzip2`: Enables bzip2 support
 - `asm`: Enables assembly based optimizations
