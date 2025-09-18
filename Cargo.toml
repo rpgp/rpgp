@@ -135,18 +135,12 @@ testresult = "0.4.1"
 [features]
 default = ["bzip2"]
 
-# Enables bzip2 support
+# See README.md for features documentation
 bzip2 = ["dep:bzip2"]
-# Enables assembly based optimizations
 asm = ["dep:sha1-asm", "sha1/asm", "sha2/asm", "md-5/asm"]
-# Allows building for wasm
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
 
-# Enables implementation of draft-ietf-openpgp-pqc-12
-# This is unstable and can have breaking changes in patch releases.
-# DO NOT USE IN PRODUCTION!
 draft-pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
-
 
 [profile.bench]
 debug = 2
