@@ -105,6 +105,9 @@ impl<R: BufRead> PacketBodyReader<R> {
                 // https://www.rfc-editor.org/rfc/rfc9580.html#section-4.2.1.4-5
                 // "The first partial length MUST be at least 512 octets long."
                 if len < 512 {
+                    #[cfg(feature = "malformed-artifact-compat")]
+                    log::warn!("Illegal first partial body length {len} (shorter than 512 bytes)");
+                    #[cfg(not(feature = "malformed-artifact-compat"))]
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         format!("Illegal first partial body length {len} (shorter than 512 bytes)"),

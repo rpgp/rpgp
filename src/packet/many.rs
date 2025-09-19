@@ -316,6 +316,11 @@ mod tests {
         let res = Message::from_armor_file(
             "./tests/unit-tests/partial-body-length/literal.packet-partial.256.asc",
         );
+
+        #[cfg(not(feature = "malformed-artifact-compat"))]
         assert!(res.is_err());
+
+        #[cfg(feature = "malformed-artifact-compat")]
+        assert!(res.is_ok());
     }
 }
