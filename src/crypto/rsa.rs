@@ -236,7 +236,7 @@ mod tests {
     prop_compose! {
         pub fn key_gen()(seed: u64) -> RsaPrivateKey {
             let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            RsaPrivateKey::new(&mut rng, 512).unwrap()
+            RsaPrivateKey::new(&mut rng, 1024).unwrap()
         }
     }
 }
