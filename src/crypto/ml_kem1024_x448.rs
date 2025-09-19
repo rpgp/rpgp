@@ -7,7 +7,7 @@ use ml_kem::{
 };
 use rand::{CryptoRng, RngCore};
 use sha3::{Digest, Sha3_256};
-use x448::{PublicKey, Secret};
+use x448::{PublicKey, StaticSecret};
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::{
@@ -26,7 +26,7 @@ pub const ML_KEM1024_KEY_LEN: usize = 64;
 #[derive(Clone, derive_more::Debug)]
 pub struct SecretKey {
     #[debug("..")]
-    x448: Secret,
+    x448: StaticSecret,
     #[debug("..")]
     ml_kem: Box<DecapsulationKey<MlKem1024Params>>,
     /// Seed `d` and `z`
@@ -70,7 +70,7 @@ impl Serialize for SecretKey {
 impl SecretKey {
     /// Generate a `SecretKey`.
     pub fn generate<R: RngCore + CryptoRng + ?Sized>(rng: &mut R) -> Self {
-        let x448 = Secret::new(rng);
+        let x448 = StaticSecret::random_from_rng(rng);
 
         let mut d = Zeroizing::new([0u8; 32]);
         let mut z = Zeroizing::new([0u8; 32]);
@@ -97,7 +97,7 @@ impl SecretKey {
 
         let (ml_kem, _) = MlKem1024::generate_deterministic(&((*d).into()), &((*z).into()));
 
-        let x = Secret::from(x448);
+        let x = StaticSecret::from(x448);
 
         Ok(Self {
             x448: x,
@@ -164,13 +164,11 @@ impl Decryptor for SecretKey {
 /// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-x448-kem>
 fn x448_kem_decaps(
     their_public: &PublicKey,
-    ecdh_secret_key: &Secret,
+    ecdh_secret_key: &StaticSecret,
     _ecdh_public_key: &PublicKey,
 ) -> [u8; 56] {
     // derive shared secret
-    let shared_secret = ecdh_secret_key
-        .as_diffie_hellman(their_public)
-        .expect("point checked before");
+    let shared_secret = ecdh_secret_key.diffie_hellman(their_public);
 
     *shared_secret.as_bytes()
 }
@@ -261,10 +259,10 @@ fn x448_kem_encaps<R: CryptoRng + ?Sized>(
     public_key: &PublicKey,
 ) -> (PublicKey, [u8; 56]) {
     // Generate an ephemeral key pair {v, V} via V = X448(v,U(P)) where v is a randomly generated octet string with a length of 56 octets
-    let our_secret = Secret::new(rng);
+    let our_secret = StaticSecret::random_from_rng(rng);
 
     // Compute the shared coordinate X = X448(v, R) where R is the recipient's public key ecdhPublicKey
-    let shared_secret = our_secret.as_diffie_hellman(public_key).expect("checked");
+    let shared_secret = our_secret.diffie_hellman(public_key);
 
     let ephemeral_public = PublicKey::from(&our_secret);
     (ephemeral_public, *shared_secret.as_bytes())

@@ -2618,9 +2618,8 @@ dependencies = [
 
 [[package]]
 name = "x448"
-version = "0.14.0-pre.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c20e03d60707405e830d70c431a837b0df7a04450e50caee26a5a5a1bb78b7c9"
+version = "0.14.0-pre.1"
+source = "git+https://github.com/baloo/elliptic-curves.git?branch=baloo%2Fx448%2Fstatic-secrets#eb30f78dca3443a2d67e197324bd4c4bea73d438"
 dependencies = [
  "ed448-goldilocks",
  "rand_core 0.9.3",

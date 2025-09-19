@@ -64,7 +64,7 @@ mod tests {
             fn from_seed(seed: u64) -> MlKem1024X448PublicParams {
                 let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
 
-                let x = x448::Secret::new(&mut rng);
+                let x = x448::EphemeralSecret::random_from_rng(&mut rng);
                 let (_, ml) = MlKem1024::generate(&mut rng);
 
                 MlKem1024X448PublicParams {

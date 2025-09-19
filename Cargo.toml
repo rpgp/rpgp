@@ -94,7 +94,7 @@ eax = { version = "=0.6.0-pre", default-features = false }
 ocb3 = { version = "=0.2.0-pre", default-features = false }
 aes-kw = { version = "0.3.0-rc.1" }
 ed448-goldilocks = { version = "0.14.0-pre.4" }
-x448 = { version = "=0.14.0-pre.0" }
+x448 = { version = "0.14.0-pre.1", features = ["static_secrets"] }
 x25519-dalek = { version = "=3.0.0-pre.1", default-features = false, features = [
     "alloc",
     "precomputed-tables",
@@ -162,3 +162,6 @@ twofish  = { git = "https://github.com/RustCrypto/block-ciphers.git" }
 sha1-checked = { git = "https://github.com/RustCrypto/hashes.git" }
 
 ml-kem = { git = "https://github.com/RustCrypto/KEMs.git" }
+
+# https://github.com/RustCrypto/elliptic-curves/pull/1454
+x448 = { git = "https://github.com/baloo/elliptic-curves.git", branch = "baloo/x448/static-secrets" }

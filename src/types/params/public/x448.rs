@@ -51,7 +51,7 @@ mod tests {
             fn from_seed(seed: u64) -> X448PublicParams {
                 let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
 
-                let secret = x448::Secret::new(&mut rng);
+                let secret = x448::EphemeralSecret::random_from_rng(&mut rng);
                 X448PublicParams {
                     key: (&secret).into(),
                 }
