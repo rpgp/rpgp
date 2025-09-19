@@ -50,13 +50,6 @@ See [`IMPL_STATUS.md`](docs/IMPL_STATUS.md) for more details on the implemented 
 rPGP offers a flexible low-level API and gives users the ability to build higher level PGP tooling in the most compatible way possible.
 Additionally, it fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification].
 
-### Cargo features
-
-- `bzip2`: Enables bzip2 support
-- `asm`: Enables assembly based optimizations
-- `wasm`: Allows building for wasm
-- `draft-pqc`: Enables implementation of draft-ietf-openpgp-pqc-12 (This is unstable and can have breaking changes in patch releases. DO NOT USE IN PRODUCTION!)
-
 ## Notable Users & Libraries built using rPGP
 
 - [Delta Chat]: Cross-platform messaging app that works over e-mail
@@ -150,6 +143,13 @@ fn main() -> pgp::errors::Result<()> {
    Ok(())
 }
 ```
+
+### Cargo features
+
+- `bzip2`: Enables bzip2 support
+- `asm`: Enables assembly based optimizations
+- `wasm`: Allows building for wasm
+- `draft-pqc`: Enables implementation of draft-ietf-openpgp-pqc-12 (This is unstable and can have breaking changes in patch releases. DO NOT USE IN PRODUCTION!)
 
 ## Current Status
 
