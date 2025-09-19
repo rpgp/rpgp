@@ -144,6 +144,13 @@ fn main() -> pgp::errors::Result<()> {
 }
 ```
 
+### Cargo features
+
+- `bzip2`: Enables bzip2 support
+- `asm`: Enables assembly based optimizations
+- `wasm`: Allows building for wasm
+- `draft-pqc`: Enables implementation of draft-ietf-openpgp-pqc-12 (This is unstable and can have breaking changes in patch releases. DO NOT USE IN PRODUCTION!)
+
 ## Current Status
 
 > Last updated *September 2024*
