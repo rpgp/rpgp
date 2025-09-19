@@ -1,3 +1,5 @@
+//! Handle base64, as used in [`crate::armor`]
+
 mod decoder;
 mod reader;
 
