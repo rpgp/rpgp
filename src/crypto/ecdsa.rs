@@ -1,6 +1,6 @@
 use ecdsa::SigningKey;
 use p521::NistP521;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use signature::hazmat::{PrehashSigner, PrehashVerifier};
 use zeroize::ZeroizeOnDrop;
 
@@ -70,22 +70,25 @@ impl TryFrom<&SecretKey> for EcdsaPublicParams {
 
 impl SecretKey {
     /// Generate an ECDSA `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R, curve: &ECCCurve) -> Result<Self> {
+    pub fn generate<R: RngCore + CryptoRng + ?Sized>(
+        rng: &mut R,
+        curve: &ECCCurve,
+    ) -> Result<Self> {
         match curve {
             ECCCurve::P256 => {
-                let secret = p256::SecretKey::random(&mut rng);
+                let secret = p256::SecretKey::random(rng);
                 Ok(SecretKey::P256(secret))
             }
             ECCCurve::P384 => {
-                let secret = p384::SecretKey::random(&mut rng);
+                let secret = p384::SecretKey::random(rng);
                 Ok(SecretKey::P384(secret))
             }
             ECCCurve::P521 => {
-                let secret = p521::SecretKey::random(&mut rng);
+                let secret = p521::SecretKey::random(rng);
                 Ok(SecretKey::P521(secret))
             }
             ECCCurve::Secp256k1 => {
-                let secret = k256::SecretKey::random(&mut rng);
+                let secret = k256::SecretKey::random(rng);
                 Ok(SecretKey::Secp256k1(secret))
             }
             _ => unsupported_err!("curve {:?} for ECDSA", curve),
