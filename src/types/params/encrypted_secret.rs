@@ -151,7 +151,7 @@ impl EncryptedSecretParams {
                         }
 
                         // derive key
-                        let derived = s2k.derive_key(&pw.read(), 32)?;
+                        let derived = s2k.derive_key(&pw.read(), sym_alg.key_size())?;
 
                         let Some(secret_tag) = secret_tag else {
                             bail!("no secret_tag provided");
@@ -167,9 +167,10 @@ impl EncryptedSecretParams {
 
                         // AEAD decrypt
                         let mut ciphertext: BytesMut = self.data.clone().into();
+
                         aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, &mut ciphertext)?;
 
-                        // "decrypt" now contains the decrypted key material
+                        // "ciphertext" now contains the decrypted key material
                         PlainSecretParams::try_from_reader_no_checksum(
                             ciphertext.reader(),
                             pub_key.version(),

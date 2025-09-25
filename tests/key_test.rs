@@ -25,8 +25,8 @@ use pgp::{
     ser::Serialize,
     types::{
         CompressionAlgorithm, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Mpi,
-        PacketHeaderVersion, PacketLength, PlainSecretParams, PublicKeyTrait, PublicParams,
-        S2kParams, SecretParams, SignedUser, StringToKey, Tag,
+        PacketHeaderVersion, PacketLength, Password, PlainSecretParams, PublicKeyTrait,
+        PublicParams, S2kParams, SecretParams, SignedUser, StringToKey, Tag,
     },
 };
 use rand::SeedableRng;
@@ -1404,4 +1404,48 @@ fn key_imprint_sha256() {
         hex::decode("d9ac0b857da6d2c8be985b251a9e3db31e7a1d2d832d1f07ebe838a9edce9c24").unwrap();
 
     assert_eq!(sha256, expect);
+}
+
+#[test]
+fn test_locked_v6_go() {
+    let _ = pretty_env_logger::try_init();
+
+    let (pkey, _) =
+        SignedSecretKey::from_armor_single(File::open("./tests/locked-tsk-go.asc").unwrap())
+            .unwrap();
+
+    pkey.unlock(&Password::from("password"), |public, secret| {
+        assert_eq!(public.hash_alg(), HashAlgorithm::Sha3_512);
+        assert!(
+            matches!(secret, PlainSecretParams::Ed448(_)),
+            "{:?}",
+            secret
+        );
+
+        Ok(())
+    })
+    .unwrap()
+    .unwrap();
+}
+
+#[test]
+fn test_locked_v6_sq() {
+    let _ = pretty_env_logger::try_init();
+
+    let (pkey, _) =
+        SignedSecretKey::from_armor_single(File::open("./tests/locked-tsk-sq.asc").unwrap())
+            .unwrap();
+
+    pkey.unlock(&Password::from("password"), |public, secret| {
+        assert_eq!(public.hash_alg(), HashAlgorithm::Sha256);
+        assert!(
+            matches!(secret, PlainSecretParams::Ed25519(_)),
+            "{:?}",
+            secret
+        );
+
+        Ok(())
+    })
+    .unwrap()
+    .unwrap();
 }
