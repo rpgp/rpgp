@@ -154,10 +154,10 @@ fn main() -> pgp::errors::Result<()> {
 
 ## Current Status
 
-> Last updated *September 2024*
+> Last updated *September 2025*
 
 - Implementation Status: [`IMPL_STATUS.md`](docs/IMPL_STATUS.md)
-- Security Status: [`STATUS_SECURITY.md`](docs/SECURITY_STATUS.md)
+- Security Status: [`SECURITY_STATUS.md`](docs/SECURITY_STATUS.md)
 - Supported Platforms: [`PLATFORMS.md`](docs/PLATFORMS.md)
 
 ## FAQs
