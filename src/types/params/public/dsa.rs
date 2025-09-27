@@ -53,7 +53,7 @@ impl DsaPublicParams {
     }
 
     pub(crate) fn try_from_mpi(p: Mpi, q: Mpi, g: Mpi, y: Mpi) -> Result<Self> {
-        let components = dsa::Components::from_components(p.into(), q.into(), g.into())?;
+        let components = dsa::Components::from_components_unchecked(p.into(), q.into(), g.into())?;
         let key = dsa::VerifyingKey::from_components(components, y.into())?;
 
         Ok(DsaPublicParams { key })

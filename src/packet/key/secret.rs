@@ -1,9 +1,9 @@
 use std::io::BufRead;
 
 use chrono::SubsecRound;
-use generic_array::GenericArray;
+use hybrid_array::Array;
 use log::debug;
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 
 use super::public::{encrypt, PubKeyInner};
 use crate::{
@@ -158,9 +158,9 @@ impl SecretSubkey {
     ///
     /// This signature is used in an embedded signature subpacket to show that the subkey is
     /// willing to be associated with the primary.
-    pub fn sign_primary_key_binding<R: CryptoRng + Rng, P>(
+    pub fn sign_primary_key_binding<R: CryptoRng + ?Sized, P>(
         &self,
-        rng: R,
+        rng: &mut R,
         pub_key: &P,
         key_pw: &Password,
     ) -> Result<Signature>
@@ -244,7 +244,7 @@ impl KeyDetails for SecretKey {
 }
 
 impl Imprint for SecretKey {
-    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+    fn imprint<D: KnownDigest>(&self) -> Result<Array<u8, D::OutputSize>> {
         self.details.imprint::<D>()
     }
 }
@@ -266,7 +266,7 @@ impl KeyDetails for SecretSubkey {
 }
 
 impl Imprint for SecretSubkey {
-    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+    fn imprint<D: KnownDigest>(&self) -> Result<Array<u8, D::OutputSize>> {
         self.details.imprint::<D>()
     }
 }
@@ -361,9 +361,9 @@ impl SecretKey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password<R>(&mut self, rng: R, password: &Password) -> Result<()>
+    pub fn set_password<R>(&mut self, rng: &mut R, password: &Password) -> Result<()>
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: rand::RngCore + rand::CryptoRng + ?Sized,
     {
         let s2k = crate::types::S2kParams::new_default(rng, self.version());
         Self::set_password_with_s2k(self, password, s2k)
@@ -396,9 +396,9 @@ impl SecretKey {
         Ok(())
     }
 
-    pub fn encrypt<R: rand::Rng + rand::CryptoRng>(
+    pub fn encrypt<R: rand::RngCore + rand::CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
@@ -429,9 +429,9 @@ impl SecretSubkey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password<R>(&mut self, rng: R, password: &Password) -> Result<()>
+    pub fn set_password<R>(&mut self, rng: &mut R, password: &Password) -> Result<()>
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: rand::RngCore + rand::CryptoRng + ?Sized,
     {
         let s2k = crate::types::S2kParams::new_default(rng, self.version());
         Self::set_password_with_s2k(self, password, s2k)
@@ -465,9 +465,9 @@ impl SecretSubkey {
     }
 
     /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
-    pub fn sign<R: CryptoRng + Rng, K, P>(
+    pub fn sign<R: CryptoRng + ?Sized, K, P>(
         &self,
-        mut rng: R,
+        rng: &mut R,
         primary_sec_key: &K,
         primary_pub_key: &P,
         key_pw: &Password,
@@ -479,7 +479,7 @@ impl SecretSubkey {
         P: PublicKeyTrait + Serialize,
     {
         self.details.sign(
-            &mut rng,
+            rng,
             primary_sec_key,
             primary_pub_key,
             key_pw,
@@ -488,9 +488,9 @@ impl SecretSubkey {
         )
     }
 
-    pub fn encrypt<R: rand::Rng + rand::CryptoRng>(
+    pub fn encrypt<R: rand::CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
@@ -616,8 +616,8 @@ fn create_signature(
 /// Signs a direct key signature or a revocation.
 #[allow(dead_code)]
 // TODO: Expose in public API
-fn sign<R: CryptoRng + Rng, K, P>(
-    mut rng: R,
+fn sign<R: CryptoRng + ?Sized, K, P>(
+    rng: &mut R,
     key: &K,
     key_pw: &Password,
     sig_typ: SignatureType,
@@ -629,7 +629,7 @@ where
 {
     use chrono::SubsecRound;
 
-    let mut config = SignatureConfig::from_key(&mut rng, key, sig_typ)?;
+    let mut config = SignatureConfig::from_key(rng, key, sig_typ)?;
     config.hashed_subpackets = vec![
         Subpacket::regular(SubpacketData::SignatureCreationTime(
             chrono::Utc::now().trunc_subsecs(0),
