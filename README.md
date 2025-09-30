@@ -53,10 +53,16 @@ Additionally, it fully supports all functionality required by the [Autocrypt 1.1
 ## Notable Users & Libraries built using rPGP
 
 - [Delta Chat]: Cross-platform messaging app that works over e-mail
+- [`debian-packaging`]: A library crate for dealing with Debian packages
+- [`himalaya`]: CLI to manage emails (includes [`pgp-lib`] component)
+- [`oct-git`]: Git signing and verification backend (with a focus on OpenPGP cards)
+- [`prs-lib`]: A CLI password manager inspired by pass (with optional rPGP backend, including OpenPGP card support)
+- [`rpgpie`]: An experimental OpenPGP semantics library
 - [`rpm`]: A pure rust library for parsing and creating RPM files
-- [`rpgpie`]: An experimental high level OpenPGP API
-- [`rsop`]: A SOP CLI tool based on rPGP and rpgpie
-- [`debian-packaging`]: a library crate for dealing with Debian packages
+- [`rsop`]: A [SOP] CLI tool based on rPGP and rpgpie
+- [`rsop-oct`]: A [SOP] CLI tool for OpenPGP card devices (also based on rPGP and rpgpie)
+- [`signstar`]: A signing enclave framework for HSM backends
+- [`voa-openpgp`]: OpenPGP implementation for [VOA]
 
 Don't see your project here? Please send a PR :)
 
@@ -252,10 +258,18 @@ shall be dual licensed as above, without any additional terms or conditions.
 [RFC4880]: https://tools.ietf.org/html/rfc4880.html
 [RFC6637]: https://www.rfc-editor.org/rfc/rfc6637
 [RFC9580]: https://www.rfc-editor.org/rfc/rfc9580.html
+[SOP]: https://dkg.gitlab.io/openpgp-stateless-cli/
+[VOA]: https://uapi-group.org/specifications/specs/file_hierarchy_for_the_verification_of_os_artifacts/
 [Autocrypt 1.1 e-mail encryption specification]: https://autocrypt.org/level1.html
-[the `pgp` Crate]: https://crates.io/crates/pgp/
 [Delta Chat]: https://delta.chat
 [`rsop`]: https://crates.io/crates/rsop/
+[`rsop-oct`]: https://crates.io/crates/rsop-oct/
 [`rpgpie`]: https://crates.io/crates/rpgpie
 [`rpm`]: https://crates.io/crates/rpm
+[`signstar`]: https://gitlab.archlinux.org/archlinux/signstar/
 [`debian-packaging`]: https://crates.io/crates/debian-packaging
+[`himalaya`]: https://crates.io/crates/himalaya
+[`oct-git`]: https://crates.io/crates/openpgp-card-tool-git
+[`pgp-lib`]: https://crates.io/crates/pgp-lib
+[`prs-lib`]: https://crates.io/crates/prs-lib
+[`voa-openpgp`]: https://crates.io/crates/voa-openpgp
