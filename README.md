@@ -1,5 +1,7 @@
 # rPGP
 
+*OpenPGP implemented in pure Rust, permissively licensed*
+
 <div align="center">
   <!-- Crates version -->
   <a href="https://crates.io/crates/pgp">
@@ -36,18 +38,13 @@
 </div>
 <br/>
 
-> OpenPGP implemented in pure Rust, permissively licensed
+rPGP is a pure Rust implementation of OpenPGP as specified in [RFC9580].
+It supports the commonly used v4 formats, as well as the latest v6 key formats and AEAD encryption mechanisms.
+(All formats specified in the historical RFCs [RFC4880] and [RFC6637], including v3 keys and signatures, are supported as well.)
 
-rPGP is a pure Rust implementation of OpenPGP.
+See [`IMPL_STATUS`](docs/IMPL_STATUS.md) for more details on the implemented PGP features and ["Overview of OpenPGP formats and mechanisms"](docs/openpgp.md) for context about them.
 
-rPGP implements OpenPGP as specified in [RFC9580], including the commonly used v4 formats, as well as the latest v6 key formats and AEAD encryption mechanisms.
-All formats specified in the historical RFCs [RFC4880] and [RFC6637], such as v3 keys and signatures, are supported as well.
-
-
-See [`IMPL_STATUS.md`](docs/IMPL_STATUS.md) for more details on the implemented PGP features and
-[`openpgp.md`](docs/openpgp.md) for a rough taxonomy.
-
-rPGP offers a flexible low-level API and gives users the ability to build higher level PGP tooling in the most compatible way possible.
+rPGP offers a flexible low-level API. It gives users the ability to build higher level PGP tooling in the most compatible way possible.
 Additionally, it fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification].
 
 ## Notable Users & Libraries built using rPGP
@@ -75,76 +72,44 @@ Don't see your project here? Please send a PR :)
 ### Load a public key and verify an inline-signed message
 
 ```rust no_run
-use std::fs;
-
 use pgp::composed::{Deserializable, Message, SignedPublicKey};
 
-fn main() {
-   let pub_key_file = "key.asc";
-   let msg_file = "msg.asc";
-
-   let key_string = fs::read_to_string(pub_key_file).unwrap();
-   let (public_key, _headers_public) = SignedPublicKey::from_string(&key_string).unwrap();
-
-   let msg_string = fs::read_to_string(msg_file).unwrap();
-   let (mut msg, _headers_msg) = Message::from_string(&msg_string).unwrap();
-
-   // Verify this message
-   // NOTE: This assumes that the primary serves as the signing key, which is not always the case!
-   msg.verify(&public_key).unwrap();
-
-   let msg_string = msg.as_data_string().unwrap(); // actual message content
-   println!("Signed message: {msg_string:?}");
+fn main() -> pgp::errors::Result<()> {
+    let (public_key, _headers_public) = SignedPublicKey:: from_armor_file("key.asc")?;
+   
+    let (mut msg, _headers_msg) = Message::from_armor_file("msg.asc")?;
+    if msg.verify(&public_key).is_ok() { // Verify using the primary (NOTE: This is not always the right key!)
+        // Signature is correct, print message payload
+        println!("Signed message: {:?}", msg.as_data_string()?);
+    }
+   
+    Ok(())
 }
 ```
 
 ### Generate and verify a detached signature with an OpenPGP keypair
 
 ```rust no_run
-use std::time::SystemTime;
-
-use pgp::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
-use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
-use pgp::types::{KeyDetails, Password};
+use pgp::composed::{Deserializable, DetachedSignature, SignedPublicKey, SignedSecretKey};
+use pgp::crypto::hash::HashAlgorithm;
+use pgp::types::Password;
 
 fn main() -> pgp::errors::Result<()> {
-   let priv_key_file = "key.sec.asc";
+   const DATA: &[u8] = b"Hello world!";
 
-   let data = b"Hello world!";
-
-   // -- Create a new signature using the private key --
-   let signed_secret_key = SignedSecretKey::from_armor_file(priv_key_file)?.0;
-
-   // Set up a signature configuration to create a binary data signature
-   let mut config = SignatureConfig::from_key(
+   // Create a signature over DATA with the private key
+   let (private_key, _headers) = SignedSecretKey::from_armor_file("key.sec.asc")?;
+   let sig = DetachedSignature::sign_binary_data(
       rand::thread_rng(),
-      &signed_secret_key.primary_key,
-      SignatureType::Binary,
+      &private_key.primary_key, // Sign with the primary (NOTE: This is not always the right key!)
+      &Password::empty(),
+      HashAlgorithm::Sha256,
+      DATA,
    )?;
-   config.hashed_subpackets = vec![
-      Subpacket::regular(SubpacketData::IssuerFingerprint(
-         signed_secret_key.fingerprint(),
-      ))?,
-      Subpacket::critical(SubpacketData::SignatureCreationTime(
-         SystemTime::now().into(),
-      ))?,
-   ];
-   config.unhashed_subpackets =
-           vec![Subpacket::regular(SubpacketData::Issuer(signed_secret_key.key_id()))?];
 
-   // Generate an OpenPGP signature packet (which is used as a "detached signature", in this context)
-   let signature = config
-           .sign(
-              &signed_secret_key.primary_key,
-              &Password::empty(),
-              &data[..],
-           )?;
-
-   // -- Verify the signature using the public key --
-   let pub_key_file = "key.asc";
-   let public_key = SignedPublicKey::from_armor_file(pub_key_file)?.0;
-
-   signature.verify(&public_key, &data[..])?;
+   // Verify signature with the public key
+   let (public_key, _headers) = SignedPublicKey::from_armor_file("key.asc")?;
+   sig.verify(&public_key, DATA)?; // Verify with primary key (NOTE: This is not always the right key!)
 
    Ok(())
 }
@@ -169,10 +134,6 @@ fn main() -> pgp::errors::Result<()> {
 ## FAQs
 
 See [`FAQ.md`](docs/FAQ.md).
-
-## OpenPGP Versions and Features
-
-See [`openpgp.md`](docs/openpgp.md).
 
 ## rPGP is a library for application developers
 
@@ -213,7 +174,7 @@ Applications that need OpenPGP semantics must implement them manually, or rely o
 NOTE: The [`rpgpie`] library implements some of these high level OpenPGP semantics.
 It may be useful either to incorporate in rPGP projects, or to study for reference.
 
-#### Mechanisms in OpenPGP evolve over time
+### Mechanisms in OpenPGP evolve over time
 
 rPGP can handle a wide range of OpenPGP artifacts.
 It offers support for almost all mechanisms in OpenPGP, both modern and those now considered legacy.
