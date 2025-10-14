@@ -120,7 +120,7 @@ fn main() -> pgp::errors::Result<()> {
 - `bzip2`: Enables bzip2 support
 - `asm`: Enables assembly based optimizations
 - `wasm`: Allows building for wasm
-- `malformed-artifact-compat`: Be lenient towards some types of malformed artifacts (erroneously formed ECDH PKESK; invalidly short first partial body segments). Most users will NOT need this feature, should be disabled by default!
+- `malformed-artifact-compat`: Be lenient towards some types of malformed artifacts (erroneously formed ECDH PKESK; invalidly short first partial body segments), and allow use of large RSA keys (>4096 bit). Most users will NOT need this feature, should be disabled by default!
 - `draft-pqc`: Enables implementation of draft-ietf-openpgp-pqc-12 (This is unstable and can have breaking changes in patch releases. DO NOT USE IN PRODUCTION!)
 
 ## Current Status
