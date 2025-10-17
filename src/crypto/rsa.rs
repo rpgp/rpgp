@@ -19,11 +19,15 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::{
     crypto::{hash::HashAlgorithm, Decryptor, Signer},
-    errors::{format_err, unsupported_err, Result},
+    errors::{format_err, unsupported_err, Error, Result},
     ser::Serialize,
     types::{Mpi, PkeskBytes, RsaPublicParams, SignatureBytes},
 };
 
+/// The MAX_KEY_SIZE limit applies to parsing public key packets and generating a new SecretKey
+#[cfg(not(feature = "malformed-artifact-compat"))]
+pub(crate) const MAX_KEY_SIZE: usize = 4096;
+#[cfg(feature = "malformed-artifact-compat")]
 pub(crate) const MAX_KEY_SIZE: usize = 16384;
 
 /// Private Key for RSA.
@@ -40,6 +44,11 @@ impl SecretKey {
     ///
     /// Errors on unsupported `bit_size`s.
     pub fn generate<R: Rng + CryptoRng>(mut rng: R, bit_size: usize) -> Result<Self> {
+        if bit_size > MAX_KEY_SIZE {
+            log::warn!("rejecting SecretKey::generate for RSA key size: {bit_size}");
+            return Err(Error::InvalidKeyLength);
+        }
+
         let key = RsaPrivateKey::new(&mut rng, bit_size)?;
 
         Ok(SecretKey(key))
