@@ -203,9 +203,10 @@ impl NormalizingHasher {
             let mut buf = buffer;
 
             if self.last_was_cr {
-                self.hasher.update(b"\n");
-
+                // detect and handle a LF that follows a CR
+                // (it should not be normalized)
                 if buf[0] == b'\n' {
+                    self.hasher.update(b"\n");
                     buf = &buf[1..];
                 }
 
@@ -234,14 +235,14 @@ impl NormalizingHasher {
                                 buf = &buf[1..];
                             }
                             (b'\r', false) => {
-                                self.hasher.update(b"\r\n");
-
                                 // we are guaranteed to have at least two bytes
                                 if buf[1] == b'\n' {
                                     // there was a '\n' in the stream, we consume it as well
+                                    self.hasher.update(b"\r\n");
                                     buf = &buf[2..];
                                 } else {
-                                    // this was a lone '\r', we have normalized it
+                                    // this was a lone '\r', we don't normalize it
+                                    self.hasher.update(b"\r");
                                     buf = &buf[1..];
                                 }
                             }
@@ -250,6 +251,8 @@ impl NormalizingHasher {
                                 self.hasher.update(b"\r");
                                 buf = &[];
 
+                                // remember that the last character was a CR.
+                                // if the next character is a LF, we want to *not* normalize it
                                 self.last_was_cr = true;
                             }
                             _ => unreachable!("buf.position gave us either a '\n or a '\r'"),

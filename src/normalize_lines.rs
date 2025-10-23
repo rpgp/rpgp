@@ -7,7 +7,7 @@ use bytes::{Buf, BytesMut};
 use crate::{line_writer::LineBreak, util::fill_buffer};
 
 static RE: LazyLock<regex::bytes::Regex> =
-    LazyLock::new(|| regex::bytes::Regex::new(r"(\r\n?|\n)").expect("valid regex"));
+    LazyLock::new(|| regex::bytes::Regex::new(r"(\r\n|\n)").expect("valid regex"));
 
 /// This struct wraps a reader and normalize line endings.
 pub struct NormalizedReader<R>
@@ -113,7 +113,7 @@ mod tests {
 
         check_strings(
             out,
-            "This is a string \n with \n some \n\n random newlines\n\n\n",
+            "This is a string \n with \r some \n\n random newlines\r\n\n",
         );
     }
 
@@ -142,7 +142,7 @@ mod tests {
             .unwrap();
 
         check_strings(
-            "This is a string \r\n with \r\n some \r\n\r\n random newlines\r\n\r\n\r\n",
+            "This is a string \r\n with \r some \r\n\r\n random newlines\r\r\n\r\n",
             out,
         );
     }
