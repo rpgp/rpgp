@@ -169,6 +169,9 @@ pub enum StringToKey {
         count: u8,
     },
     /// Type ID 4
+    ///
+    /// - [RFC 9106 &sect; 4.5 - Argon2 Parameter Choice](https://www.rfc-editor.org/rfc/rfc9106#section-4-5)
+    /// - [RFC 9580 &sect; 3.7.1.4 - Argon2 S2K Specifier Type 4](https://www.rfc-editor.org/rfc/rfc9580#section-3.7.1.4)
     Argon2 {
         #[debug("{}", hex::encode(salt))]
         salt: [u8; 16],
@@ -215,6 +218,27 @@ impl StringToKey {
         }
     }
 
+    /// Create a new [Argon2 S2K][StringToKey::Argon2].
+    ///
+    /// # Arguments
+    ///
+    /// * `t`: one-octet number of passes t
+    /// * `p`: one-octet degree of parallelism p
+    /// * `m_enc`: one-octet encoded_m, specifying the exponent of the memory size
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use pgp::types::StringToKey;
+    ///
+    /// // First (high memory = 2 GiB) recommended parameter choice
+    /// let s2k = StringToKey::new_argon2(rand::thread_rng(), 1, 4, 21);
+    /// // Second (low memory = 64 MiB) recommended parameter choice
+    /// let s2k = StringToKey::new_argon2(rand::thread_rng(), 3, 4, 16);
+    /// ```
+    ///
+    /// - [RFC 9106 &sect; 4.5 - Argon2 Parameter Choice](https://www.rfc-editor.org/rfc/rfc9106#section-4-5)
+    /// - [RFC 9580 &sect; 3.7.1.4 - Argon2 S2K Specifier Type 4](https://www.rfc-editor.org/rfc/rfc9580#section-3.7.1.4)
     pub fn new_argon2<R: CryptoRng + Rng>(mut rng: R, t: u8, p: u8, m_enc: u8) -> Self {
         let mut salt = [0u8; 16];
         rng.fill(&mut salt[..]);

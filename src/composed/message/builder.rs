@@ -397,12 +397,48 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     }
 
     /// Encrypt to a public key
+    ///
+    /// Adds a [PK ESK] packet to the message for a given public key. Call this function multiple
+    /// times in order to add multiple ESKs.
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use pgp::composed::MessageBuilder;
+    /// use pgp::types::PublicKeyTrait;
+    /// use pgp::crypto::sym::SymmetricKeyAlgorithm;
+    ///
+    /// # use pgp::types::{KeyDetails, SignatureBytes, PublicParams, KeyId, Fingerprint, KeyVersion};
+    /// # use pgp::crypto::hash::HashAlgorithm;
+    /// # use pgp::crypto::public_key::PublicKeyAlgorithm;
+    /// # use pgp::errors::Result;
+    /// fn get_encryption_key(_lookup: &str) -> pgp::packet::PublicSubkey {
+    ///     // [...]
+    /// #   panic!("dummy getter");
+    /// }
+    ///
+    /// let public_key_1 = get_encryption_key("alice");
+    /// let public_key_2 = get_encryption_key("bob");
+    ///
+    /// let message = "Hello, world!";
+    ///
+    /// let mut rng = rand::thread_rng();
+    /// let mut builder = MessageBuilder::from_bytes("", message.as_bytes())
+    ///    .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+    ///
+    /// builder.encrypt_to_key(&mut rng, &public_key_1);
+    /// // Optionally, you can also encrypt to multiple keys
+    /// builder.encrypt_to_key(&mut rng, &public_key_2);
+    /// ```
+    ///
+    /// [PK ESK]: https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio
+    /// # References
+    /// [RFC 9580 &sect; 5.1 - Public Key Encrypted Session Key Packet](https://www.rfc-editor.org/rfc/rfc9580#section-5.1)
     pub fn encrypt_to_key<RAND, K>(&mut self, mut rng: RAND, pkey: &K) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
         K: crate::types::PublicKeyTrait,
     {
-        // Encrypt (sym) the session key using the provided password.
+        // Encrypt (asym) the session key using the provided public key.
         let pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
             &mut rng,
             &self.encryption.session_key,
@@ -414,6 +450,8 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     }
 
     /// Encrypt to a public key, but leave the recipient field unset
+    ///
+    /// See [encrypt_to_key][Self::encrypt_to_key] for more information
     pub fn encrypt_to_key_anonymous<RAND, K>(
         &mut self,
         mut rng: RAND,
@@ -423,7 +461,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
         RAND: CryptoRng + Rng,
         K: crate::types::PublicKeyTrait,
     {
-        // Encrypt (sym) the session key using the provided password.
+        // Encrypt (asym) the session key using the provided public key.
         let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
             &mut rng,
             &self.encryption.session_key,
@@ -440,6 +478,37 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     }
 
     /// Encrypt to a password.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use pgp::{
+    ///     composed::{ArmorOptions, Message, MessageBuilder},
+    ///     crypto::sym::SymmetricKeyAlgorithm,
+    ///     types::{CompressionAlgorithm, StringToKey},
+    /// };
+    ///
+    /// let message = "Hello, world!";
+    /// let password = "password";
+    ///
+    /// let mut rng = rand::thread_rng();
+    /// let mut msg = MessageBuilder::from_bytes("", message.as_bytes())
+    ///     .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+    ///
+    /// msg.encrypt_with_password(
+    ///     StringToKey::new_argon2(&mut rng, 1, 4, 21),
+    ///     &password.into(),
+    /// )
+    /// .unwrap();
+    ///
+    /// let armor = msg
+    ///     .to_armored_string(&mut rng, ArmorOptions::default())
+    ///     .unwrap();
+    /// ```
+    ///
+    /// # See Also
+    /// - [StringToKey]
+    /// - [ArmorOptions]
     pub fn encrypt_with_password(
         &mut self,
         s2k: StringToKey,
@@ -493,12 +562,48 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     }
 
     /// Encrypt to a public key
+    ///
+    /// Adds a [PK ESK] packet to the message for a given public key. Call this function multiple
+    /// times in order to add multiple ESKs.
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use pgp::composed::MessageBuilder;
+    /// use pgp::types::PublicKeyTrait;
+    /// use pgp::crypto::sym::SymmetricKeyAlgorithm;
+    ///
+    /// # use pgp::types::{KeyDetails, SignatureBytes, PublicParams, KeyId, Fingerprint, KeyVersion};
+    /// # use pgp::crypto::hash::HashAlgorithm;
+    /// # use pgp::crypto::public_key::PublicKeyAlgorithm;
+    /// # use pgp::errors::Result;
+    /// fn get_encryption_key(_lookup: &str) -> pgp::packet::PublicSubkey {
+    ///     // [...]
+    /// #   panic!("dummy getter");
+    /// }
+    ///
+    /// let public_key_1 = get_encryption_key("alice");
+    /// let public_key_2 = get_encryption_key("bob");
+    ///
+    /// let message = "Hello, world!";
+    ///
+    /// let mut rng = rand::thread_rng();
+    /// let mut builder = MessageBuilder::from_bytes("", message.as_bytes())
+    ///    .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+    ///
+    /// builder.encrypt_to_key(&mut rng, &public_key_1);
+    /// // Optionally, you can also encrypt to multiple keys
+    /// builder.encrypt_to_key(&mut rng, &public_key_2);
+    /// ```
+    ///
+    /// [PK ESK]: https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio
+    /// # References
+    /// [RFC 9580 &sect; 5.1 - Public Key Encrypted Session Key Packet](https://www.rfc-editor.org/rfc/rfc9580#section-5.1)
     pub fn encrypt_to_key<RAND, K>(&mut self, mut rng: RAND, pkey: &K) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
         K: crate::types::PublicKeyTrait,
     {
-        // Encrypt (sym) the session key using the provided password.
+        // Encrypt (asym) the session key using the provided public key.
         let pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
             &mut rng,
             &self.encryption.session_key,
@@ -509,6 +614,8 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     }
 
     /// Encrypt to a public key, but leave the recipient field unset
+    ///
+    /// See [encrypt_to_key][Self::encrypt_to_key] for more information
     pub fn encrypt_to_key_anonymous<RAND, K>(
         &mut self,
         mut rng: RAND,
@@ -518,7 +625,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
         RAND: CryptoRng + Rng,
         K: crate::types::PublicKeyTrait,
     {
-        // Encrypt (sym) the session key using the provided password.
+        // Encrypt (asym) the session key using the provided public key.
         let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
             &mut rng,
             &self.encryption.session_key,
@@ -534,6 +641,43 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     }
 
     /// Encrypt to a password.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use pgp::{
+    ///     composed::{ArmorOptions, Message, MessageBuilder},
+    ///     crypto::{
+    ///         aead::{AeadAlgorithm, ChunkSize},
+    ///         sym::SymmetricKeyAlgorithm,
+    ///     },
+    ///     types::{CompressionAlgorithm, StringToKey},
+    /// };
+    ///
+    /// let message = "Hello, world!";
+    /// let password = "password";
+    ///
+    /// let mut rng = rand::thread_rng();
+    /// let mut msg = MessageBuilder::from_bytes("", message.as_bytes()).seipd_v2(
+    ///     &mut rng,
+    ///     SymmetricKeyAlgorithm::AES256,
+    ///     AeadAlgorithm::Ocb,
+    ///     ChunkSize::default(),
+    /// );
+    ///
+    /// // need to wait for the &mut rng to avoid double borrow
+    /// let s2k = StringToKey::new_argon2(&mut rng, 1, 4, 21);
+    /// msg.encrypt_with_password(&mut rng, s2k, &password.into())
+    ///     .unwrap();
+    ///
+    /// let armor = msg
+    ///     .to_armored_string(&mut rng, ArmorOptions::default())
+    ///     .unwrap();
+    /// ```
+    ///
+    /// # See Also
+    /// - [StringToKey]
+    /// - [ArmorOptions]
     pub fn encrypt_with_password<RAND>(
         &mut self,
         mut rng: RAND,
