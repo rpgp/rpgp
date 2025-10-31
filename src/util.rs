@@ -176,7 +176,7 @@ pub struct NormalizingHasher {
 }
 
 impl NormalizingHasher {
-    pub(crate) fn new(hasher: Box<dyn DynDigest + Send>, text_mode: bool) -> Self {
+    pub fn new(hasher: Box<dyn DynDigest + Send>, text_mode: bool) -> Self {
         Self {
             hasher,
             text_mode,
@@ -184,7 +184,7 @@ impl NormalizingHasher {
         }
     }
 
-    pub(crate) fn done(mut self) -> Box<dyn DynDigest + Send> {
+    pub fn done(mut self) -> Box<dyn DynDigest + Send> {
         if self.text_mode && self.last_was_cr {
             self.hasher.update(b"\n")
         }
@@ -192,7 +192,7 @@ impl NormalizingHasher {
         self.hasher
     }
 
-    pub(crate) fn hash_buf(&mut self, buffer: &[u8]) {
+    pub fn hash_buf(&mut self, buffer: &[u8]) {
         if buffer.is_empty() {
             return;
         }

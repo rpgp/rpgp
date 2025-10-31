@@ -33,6 +33,10 @@ impl<R: std::io::Read> NormalizedReader<R> {
         }
     }
 
+    pub fn into_inner(self) -> R {
+        self.source
+    }
+
     /// Fills the buffer, and then normalizes it
     fn fill_buffer(&mut self) -> std::io::Result<()> {
         // edge case, if the last byte of the previous buffer was `\r` and the first of the new is `\n`
