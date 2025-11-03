@@ -304,13 +304,6 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let len = self.source.read(buf)?;
 
-        // If the previous read ended with a CR, an LF must follow now
-        if self.last_was_cr && (len == 0 || buf[0] != b'\n') {
-            return Err(io::Error::other(
-                "Illegal line ending (CR without matching LF)",
-            ));
-        }
-
         // Reading is done, no more checks required
         if len == 0 {
             return Ok(0);
@@ -318,27 +311,25 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
 
         // Check the body of this read for any illegal linebreaks
 
-        // Skip the first byte if it was a matching LF
-        let mut pos = if self.last_was_cr { 1 } else { 0 };
+        // Skip the first byte if it is a matching LF
+        let mut pos = if self.last_was_cr && buf[0] == b'\n' {
+            1
+        } else {
+            0
+        };
 
         // Inspect data from the start until the second-to-last byte
         // (because we want to look ahead one byte, if "pos" is a CR)
         while pos < len - 1 {
-            // bare linefeed is not ok
+            // A standalone linefeed is not ok
             if buf[pos] == b'\n' {
                 return Err(io::Error::other(
                     "Illegal line ending (LF without preceding CR)",
                 ));
             }
 
-            // CR must be followed by LF
-            if buf[pos] == b'\r' {
-                if buf[pos + 1] != b'\n' {
-                    return Err(io::Error::other(
-                        "Illegal line ending (CR without matching LF)",
-                    ));
-                }
-
+            // Skip CR followed by LF in one go
+            if buf[pos] == b'\r' && buf[pos + 1] == b'\n' {
                 pos += 2;
             } else {
                 pos += 1;
@@ -354,7 +345,7 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
         }
 
         // Remember if the last character is a CR.
-        // If so, we'll check for a matching LF at the start of the next read.
+        // If so, we'll allow a matching LF at the start of the next read.
         self.last_was_cr = buf[len - 1] == b'\r';
 
         Ok(len)
@@ -940,21 +931,28 @@ mod tests {
 
             let string = random_string(&mut rng, len);
 
-            if !string.contains('\n') && !string.contains('\r') {
+            // Our goal in this test is to produce strings in `test` that have "illegal" linebreaks,
+            // and to make sure that `CrLfCheckReader` reliably errors for all of them.
+            //
+            // `string` is a precursor. The `normalize_lines` step below transforms CR+LF in
+            // `string` to LF in `test`.
+            //
+            // Test strings for this case need to contain "freestanding" LF
+            // (which do not form CR+LF pairs).
+            //
+            // Here we skip all `string` that won't lead to illegal line endings in `test`:
+            //
+            // So we reject `string` if it contains no LF at all, or if it contains CR+CR+LF
+            // segments (those would get transformed into "legal" CR+LF pairs).
+            if !string.contains('\n') || string.contains("\r\r\n") {
+                // Statistical observation: This filter skips ~60% of the random `string`s
                 continue;
             }
 
-            // normalize to either "just Cr" or "just Lf", then expect failure
-            let norm = normalize_lines(
-                &string,
-                if rng.gen::<bool>() {
-                    LineBreak::Cr
-                } else {
-                    LineBreak::Lf
-                },
-            );
+            // transform "CR+LF" to "just LF", then expect failure
+            let test = normalize_lines(&string, LineBreak::Lf);
 
-            let b: Bytes = Bytes::from(norm.to_string());
+            let b: Bytes = Bytes::from(test.to_string());
 
             let cr = ChaosReader::new(&mut rng, b);
             let mut r = CrLfCheckReader::new(cr);
