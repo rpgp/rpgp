@@ -412,7 +412,12 @@ impl SignatureConfig {
             self.version(),
             signing_key.version()
         );
-        debug!("signing key (revocation): {self:#?} - {key:#?}");
+        debug!("signing key ({:?}): {self:#?} - {key:#?}", self.typ);
+
+        ensure!(
+            [SignatureType::Key, SignatureType::KeyRevocation].contains(&self.typ),
+            "signature type must be suitable for direct signatures"
+        );
 
         let mut hasher = self.hash_alg.new_hasher()?;
 
@@ -754,5 +759,97 @@ impl std::io::Write for SignatureHasher {
 
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::SubsecRound;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
+
+    use crate::{
+        composed::{ArmorOptions, KeyType, SecretKeyParamsBuilder, SignedPublicKey},
+        packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData},
+        types::{KeyDetails, Password},
+    };
+
+    #[test]
+    fn test_third_party_direct_key_signature() {
+        // Create a third-party direct key signature, then verify it
+
+        pretty_env_logger::try_init().ok();
+
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        // initialize alice
+        let mut key_params = SecretKeyParamsBuilder::default();
+        key_params
+            .key_type(KeyType::Ed25519Legacy)
+            .can_certify(true)
+            .primary_user_id("alice".into());
+        let secret_key_params = key_params
+            .build()
+            .expect("Must be able to create secret key params");
+        let alice = secret_key_params.generate(&mut rng).expect("generate");
+        let alice = alice.sign(&mut rng, &Password::empty()).expect("sign");
+
+        // initialize bob
+        let mut key_params = SecretKeyParamsBuilder::default();
+        key_params
+            .key_type(KeyType::Ed25519Legacy)
+            .can_certify(true)
+            .primary_user_id("bob".into());
+        let secret_key_params = key_params
+            .build()
+            .expect("Must be able to create secret key params");
+        let bob = secret_key_params.generate(&mut rng).expect("generate");
+        let mut bob = bob.sign(&mut rng, &Password::empty()).expect("sign");
+
+        // alice makes a third party direct signature over bob's key
+        let mut config =
+            SignatureConfig::from_key(&mut rng, &alice.primary_key, SignatureType::Key)
+                .expect("config");
+
+        config.hashed_subpackets = vec![
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                chrono::Utc::now().trunc_subsecs(0),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                alice.primary_key.fingerprint(),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::TrustSignature(5, 120)).unwrap(),
+        ];
+
+        let dks = config
+            .sign_key(
+                &alice.primary_key,
+                &Password::empty(),
+                &bob.primary_key.public_key(),
+            )
+            .expect("sign key");
+
+        bob.details.direct_signatures.push(dks.clone());
+
+        // transform to public keys
+        let alice_pub: SignedPublicKey = alice.into();
+        let bob_pub: SignedPublicKey = bob.into();
+
+        log::debug!(
+            "alice:\n{}",
+            alice_pub
+                .to_armored_string(ArmorOptions::default())
+                .unwrap()
+        );
+        log::debug!(
+            "bob:\n{}",
+            bob_pub.to_armored_string(ArmorOptions::default()).unwrap()
+        );
+
+        // verify dks signature packet over bob, check with alice's key
+        dks.verify_key_third_party(&bob_pub.primary_key, &alice_pub.primary_key)
+            .unwrap();
     }
 }
