@@ -19,9 +19,9 @@
       alt="docs.rs docs" />
   </a>
   <!-- msrv -->
-  <a href="https://img.shields.io/badge/rustc-1.85+-blue.svg?style=flat-square">
-    <img src="https://img.shields.io/badge/rustc-1.85+-blue.svg?style=flat-square"
-      alt="MSRV 1.85" />
+  <a href="https://img.shields.io/badge/rustc-1.88+-blue.svg?style=flat-square">
+    <img src="https://img.shields.io/badge/rustc-1.88+-blue.svg?style=flat-square"
+      alt="MSRV 1.88" />
   </a>
 </div>
 
@@ -188,7 +188,7 @@ See ["Overview of OpenPGP formats and mechanisms"](docs/openpgp.md) for more det
 
 ## Minimum Supported Rust Version (MSRV)
 
-All crates in this repository support Rust 1.85 or higher. In future minimally supported
+All crates in this repository support Rust 1.88 or higher. In future minimally supported
 version of Rust can be changed, but it will be done with a minor version bump.
 
 ## Funding
