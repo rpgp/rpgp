@@ -15,7 +15,7 @@ categories = ["cryptography", "email"]
 exclude = ["tests/tests/*"]
 
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.88"
 
 [lib]
 bench = false
