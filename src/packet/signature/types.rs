@@ -689,7 +689,15 @@ impl Signature {
     where
         P: PublicKeyTrait + Serialize,
     {
-        debug!("verifying key (revocation): {self:#?} - {key:#?}");
+        self.verify_key_third_party(key, key)
+    }
+
+    /// Verifies a third-party direct key signature or a revocation.
+    pub fn verify_key_third_party<P>(&self, signee: &P, signer: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
+        debug!("verifying key (revocation): {self:#?} - signer {signer:#?} - {signee:#?}");
 
         let InnerSignature::Known {
             ref config,
@@ -699,13 +707,13 @@ impl Signature {
         else {
             unsupported_err!("signature version {:?}", self.version());
         };
-        Self::check_signature_key_version_alignment(&key, config)?;
+        Self::check_signature_key_version_alignment(&signer, config)?;
         Self::check_signature_hash_strength(config)?;
 
         ensure!(
-            Self::match_identity(self, key),
+            Self::match_identity(self, signer),
             "verify_key: No matching issuer or issuer_fingerprint for Key ID: {:?}",
-            &key.key_id(),
+            &signer.key_id(),
         );
 
         let mut hasher = config.hash_alg.new_hasher()?;
@@ -714,7 +722,7 @@ impl Signature {
             hasher.update(salt.as_ref())
         }
 
-        serialize_for_hashing(key, &mut hasher)?;
+        serialize_for_hashing(signee, &mut hasher)?;
 
         let len = config.hash_signature_data(&mut hasher)?;
         hasher.update(&config.trailer(len)?);
@@ -726,7 +734,7 @@ impl Signature {
             "key: invalid signed hash value"
         );
 
-        key.verify_signature(config.hash_alg, hash, signature)
+        signer.verify_signature(config.hash_alg, hash, signature)
     }
 
     /// Returns if the signature is a certification or not.
