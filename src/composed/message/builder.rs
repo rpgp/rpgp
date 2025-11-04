@@ -1,6 +1,6 @@
 use std::{
     collections::VecDeque,
-    io::{BufReader, BufWriter, Read, Write},
+    io::{BufReader, BufWriter, Cursor, Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -49,7 +49,11 @@ pub type DummyReader = std::io::Cursor<Vec<u8>>;
 /// (encryption, compression, literal data).
 ///
 /// If the total data fits into a single chunk, a single fixed packet is generated.
-pub struct Builder<'a, R = DummyReader, E = NoEncryption> {
+pub struct Builder<'a, R = DummyReader, E = NoEncryption>
+where
+    R: 'a,
+    E: 'a,
+{
     source: Source<R>,
     compression: Option<CompressionAlgorithm>,
     signing: Vec<SigningConfig<'a>>,
@@ -73,7 +77,6 @@ pub struct Builder<'a, R = DummyReader, E = NoEncryption> {
     sign_typ: SignatureType,
 }
 
-#[derive(Clone)]
 enum Source<R = DummyReader> {
     Bytes { name: Bytes, bytes: Bytes },
     File(PathBuf),
@@ -104,6 +107,17 @@ pub struct EncryptionSeipdV2 {
 }
 
 pub trait Encryption: PartialEq {
+    fn encrypting_reader<R, READ>(
+        self,
+        rng: R,
+        generator: READ,
+        partial_chunk_size: u32,
+        len: Option<u32>,
+    ) -> Result<impl std::io::Read>
+    where
+        R: Rng + CryptoRng,
+        READ: std::io::Read;
+
     fn encrypt<R, READ, W>(
         self,
         rng: R,
@@ -863,6 +877,77 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         let out = std::string::String::from_utf8(out).expect("ascii armor is utf8");
         Ok(out)
     }
+
+    /// Returns a reader that can be used to read the encrypted message from.
+    pub fn reader<RAND>(self, rng: RAND) -> Result<Box<dyn std::io::Read + 'a>>
+    where
+        RAND: Rng + CryptoRng + 'a,
+    {
+        let sign_typ = self.sign_typ;
+
+        match self.source {
+            Source::Bytes { name, bytes } => {
+                debug!("sourcing bytes {:?}: {} bytes", name, bytes.len());
+                // If the size is larger than u32::MAX switch to None, as
+                // fixed packets can only be at most u32::MAX size large
+                let len = bytes.len().try_into().ok();
+                let source = bytes.reader();
+                reader_inner(
+                    rng,
+                    name,
+                    source,
+                    len,
+                    sign_typ,
+                    self.signing,
+                    self.data_mode,
+                    self.partial_chunk_size,
+                    self.compression,
+                    self.encryption,
+                )
+            }
+            Source::File(ref path) => {
+                let in_file = std::fs::File::open(path)?;
+                let in_meta = in_file.metadata()?;
+
+                let Some(in_file_name) = path.file_name() else {
+                    bail!("{}: is not a valid input file", path.display());
+                };
+                let file_name: Bytes = in_file_name.as_encoded_bytes().to_vec().into();
+
+                debug!("sourcing file {:?}: {} bytes", file_name, in_meta.len());
+
+                let in_file = BufReader::new(in_file);
+                // If the size is larger than u32::MAX switch to None, as
+                // fixed packets can only be at most u32::MAX size large
+                let in_file_size = in_meta.len().try_into().ok();
+
+                reader_inner(
+                    rng,
+                    file_name,
+                    in_file,
+                    in_file_size,
+                    sign_typ,
+                    self.signing,
+                    self.data_mode,
+                    self.partial_chunk_size,
+                    self.compression,
+                    self.encryption,
+                )
+            }
+            Source::Reader { file_name, reader } => reader_inner(
+                rng,
+                file_name,
+                reader,
+                None,
+                sign_typ,
+                self.signing,
+                self.data_mode,
+                self.partial_chunk_size,
+                self.compression,
+                self.encryption,
+            ),
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -914,6 +999,55 @@ where
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+fn reader_inner<'a, RAND, R, E>(
+    mut rng: RAND,
+    _name: Bytes,
+    source: R,
+    source_len: Option<u32>,
+    sign_typ: SignatureType,
+    signers: Vec<SigningConfig<'a>>,
+    data_mode: DataMode,
+    partial_chunk_size: u32,
+    compression: Option<CompressionAlgorithm>,
+    encryption: E,
+) -> Result<Box<dyn std::io::Read + 'a>>
+where
+    RAND: Rng + CryptoRng + 'a,
+    R: std::io::Read + 'a,
+    E: Encryption + 'a,
+{
+    // Construct Literal Data Packet (inner)
+    let literal_data_header = LiteralDataHeader::new(data_mode);
+
+    let sign_generator = SignGenerator::new(
+        &mut rng,
+        sign_typ,
+        literal_data_header,
+        partial_chunk_size,
+        source,
+        signers,
+        source_len,
+    )?;
+
+    match compression {
+        Some(compression) => {
+            let len = sign_generator.len();
+            let generator =
+                CompressedDataGenerator::new(compression, sign_generator, len, partial_chunk_size)?;
+
+            let reader = encryption.encrypting_reader(rng, generator, partial_chunk_size, None)?;
+            Ok(Box::new(reader))
+        }
+        None => {
+            let len = sign_generator.len();
+            let reader =
+                encryption.encrypting_reader(rng, sign_generator, partial_chunk_size, len)?;
+            Ok(Box::new(reader))
+        }
+    }
+}
+
 impl Encryption for NoEncryption {
     fn encrypt<R, READ, W>(
         self,
@@ -934,6 +1068,20 @@ impl Encryption for NoEncryption {
 
     fn is_plaintext(&self) -> bool {
         true
+    }
+
+    fn encrypting_reader<R, READ>(
+        self,
+        _rng: R,
+        generator: READ,
+        _partial_chunk_size: u32,
+        _len: Option<u32>,
+    ) -> Result<impl std::io::Read>
+    where
+        R: Rng + CryptoRng,
+        READ: std::io::Read,
+    {
+        Ok(Box::new(generator))
     }
 }
 
@@ -984,6 +1132,43 @@ impl Encryption for EncryptionSeipdV1 {
 
     fn is_plaintext(&self) -> bool {
         false
+    }
+
+    fn encrypting_reader<R, READ>(
+        self,
+        rng: R,
+        generator: READ,
+        partial_chunk_size: u32,
+        _len: Option<u32>,
+    ) -> Result<impl std::io::Read>
+    where
+        R: Rng + CryptoRng,
+        READ: std::io::Read,
+    {
+        let EncryptionSeipdV1 {
+            session_key,
+            sym_esks,
+            pub_esks,
+            sym_alg,
+        } = self;
+
+        let total_write_len = sym_esks.iter().map(|esk| esk.write_len()).sum::<usize>()
+            + pub_esks.iter().map(|esk| esk.write_len()).sum::<usize>();
+        let mut esks_buffer = Vec::with_capacity(total_write_len);
+
+        for sym_esk in sym_esks {
+            Esk::SymKeyEncryptedSessionKey(sym_esk).to_writer(&mut esks_buffer)?;
+        }
+        for pub_esk in pub_esks {
+            Esk::PublicKeyEncryptedSessionKey(pub_esk).to_writer(&mut esks_buffer)?;
+        }
+
+        let config = SymEncryptedProtectedDataConfig::V1;
+        let encrypted = sym_alg.stream_encryptor(rng, session_key.as_ref(), generator)?;
+        Ok(EncryptingReader::new(
+            esks_buffer,
+            PartialLengthReader::new(config, partial_chunk_size as usize, encrypted),
+        ))
     }
 }
 
@@ -1056,6 +1241,66 @@ impl Encryption for EncryptionSeipdV2 {
 
     fn is_plaintext(&self) -> bool {
         false
+    }
+
+    fn encrypting_reader<R, READ>(
+        self,
+        _rng: R,
+        generator: READ,
+        partial_chunk_size: u32,
+        _len: Option<u32>,
+    ) -> Result<impl std::io::Read>
+    where
+        R: Rng + CryptoRng,
+        READ: std::io::Read,
+    {
+        let EncryptionSeipdV2 {
+            session_key,
+            sym_esks,
+            pub_esks,
+            sym_alg,
+            aead,
+            chunk_size,
+            salt,
+        } = self;
+        ensure_eq!(
+            session_key.len(),
+            sym_alg.key_size(),
+            "Unexpected session key length for {:?}",
+            sym_alg
+        );
+
+        let total_write_len = sym_esks.iter().map(|esk| esk.write_len()).sum::<usize>()
+            + pub_esks.iter().map(|esk| esk.write_len()).sum::<usize>();
+        let mut esks_buffer = Vec::with_capacity(total_write_len);
+
+        for sym_esk in sym_esks {
+            Esk::SymKeyEncryptedSessionKey(sym_esk).to_writer(&mut esks_buffer)?;
+        }
+        for pub_esk in pub_esks {
+            Esk::PublicKeyEncryptedSessionKey(pub_esk).to_writer(&mut esks_buffer)?;
+        }
+
+        let config = SymEncryptedProtectedDataConfig::V2 {
+            sym_alg,
+            aead,
+            chunk_size,
+            salt,
+        };
+
+        let encrypted = SymEncryptedProtectedData::encrypt_seipdv2_stream(
+            sym_alg,
+            aead,
+            chunk_size,
+            session_key.as_ref(),
+            salt,
+            generator,
+        )?;
+
+        Ok(EncryptingReader::new(
+            esks_buffer,
+            PartialLengthReader::new(config, partial_chunk_size as usize, encrypted),
+        ))
     }
 }
 
@@ -1379,10 +1624,205 @@ impl<R: std::io::Read> std::io::Read for SignGenerator<'_, R> {
     }
 }
 
+pub struct EncryptingReader<R>
+where
+    R: std::io::Read,
+{
+    esks: Cursor<Vec<u8>>,
+    data_packet_reader: R,
+}
+
+impl<R: std::io::Read> EncryptingReader<R> {
+    pub fn new(esks: Vec<u8>, inner_reader: R) -> Self {
+        Self {
+            esks: Cursor::new(esks),
+            data_packet_reader: inner_reader,
+        }
+    }
+}
+
+impl<R: std::io::Read> std::io::Read for EncryptingReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.esks.remaining() > 0 {
+            let to_write = buf.len().min(self.esks.remaining());
+            self.esks.copy_to_slice(&mut buf[..to_write]);
+            if to_write < buf.len() {
+                return self
+                    .data_packet_reader
+                    .read(&mut buf[to_write..])
+                    .map(|r| r + to_write);
+            }
+            return Ok(to_write);
+        }
+        self.data_packet_reader.read(buf)
+    }
+}
+
+pub struct PartialLengthReader<R>
+where
+    R: std::io::Read,
+{
+    config: SymEncryptedProtectedDataConfig,
+    header_buffer: Cursor<Vec<u8>>,
+    data_buffer: DataSourceBuffer,
+    partial_chunk_size: usize,
+    first: bool,
+    last: bool,
+    source: R,
+}
+
+impl<R: std::io::Read> PartialLengthReader<R> {
+    pub(crate) fn new(
+        config: SymEncryptedProtectedDataConfig,
+        partial_chunk_size: usize,
+        source: R,
+    ) -> Self {
+        Self {
+            config,
+            header_buffer: Cursor::new(Vec::with_capacity(64)),
+            data_buffer: DataSourceBuffer::new(partial_chunk_size),
+            partial_chunk_size,
+            first: true,
+            last: false,
+            source,
+        }
+    }
+
+    fn load_from_source(&mut self) -> Result<()> {
+        let (bytes_to_read, include_config) = if self.first {
+            (self.partial_chunk_size - self.config.write_len(), true)
+        } else {
+            (self.partial_chunk_size, false)
+        };
+
+        // Read from the source and fill the data buffer
+        let read = self
+            .data_buffer
+            .fill_buffer(&mut self.source, Some(bytes_to_read))?;
+
+        self.last = read < bytes_to_read;
+
+        let pkt_len = if self.last {
+            let size = if include_config {
+                read + self.config.write_len()
+            } else {
+                read
+            };
+            PacketLength::Fixed(size.try_into()?)
+        } else {
+            PacketLength::Partial(self.partial_chunk_size.try_into()?)
+        };
+
+        // Write the header to the header buffer
+        self.header_buffer.get_mut().clear();
+        self.header_buffer.set_position(0);
+        if self.first {
+            let packet_header = PacketHeader::from_parts(
+                PacketHeaderVersion::New,
+                Tag::SymEncryptedProtectedData,
+                pkt_len,
+            )?;
+            packet_header.to_writer(&mut self.header_buffer)?;
+            self.config.to_writer(&mut self.header_buffer)?;
+            self.first = false;
+        } else {
+            pkt_len.to_writer_new(&mut self.header_buffer)?;
+        }
+        self.header_buffer.set_position(0);
+        Ok(())
+    }
+}
+
+impl<R: std::io::Read> std::io::Read for PartialLengthReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let mut buf_pos = 0;
+        let buf_len = buf.len();
+
+        loop {
+            if self.header_buffer.has_remaining() && buf_pos < buf_len {
+                let to_write = (buf_len - buf_pos).min(self.header_buffer.remaining());
+                self.header_buffer
+                    .copy_to_slice(&mut buf[buf_pos..buf_pos + to_write]);
+                buf_pos += to_write;
+            }
+
+            if self.data_buffer.has_remaining() && buf_pos < buf_len {
+                let to_write = (buf_len - buf_pos).min(self.data_buffer.remaining());
+                self.data_buffer
+                    .copy_to_slice(&mut buf[buf_pos..buf_pos + to_write]);
+                buf_pos += to_write;
+            }
+
+            if !self.last
+                && buf_pos < buf.len()
+                && !self.data_buffer.has_remaining()
+                && !self.header_buffer.has_remaining()
+            {
+                self.load_from_source().map_err(std::io::Error::other)?;
+            }
+
+            if buf_pos >= buf_len
+                || (self.last
+                    && !self.header_buffer.has_remaining()
+                    && !self.data_buffer.has_remaining())
+            {
+                break;
+            }
+        }
+
+        Ok(buf_pos)
+    }
+}
+
+pub(crate) struct DataSourceBuffer {
+    buffer: Vec<u8>,
+    pos: usize,
+    data_len: usize,
+}
+
+impl DataSourceBuffer {
+    pub(crate) fn new(buffer_size: usize) -> Self {
+        Self {
+            buffer: vec![0u8; buffer_size],
+            pos: 0,
+            data_len: 0,
+        }
+    }
+
+    pub(crate) fn fill_buffer<R>(
+        &mut self,
+        source: &mut R,
+        chunk_size: Option<usize>,
+    ) -> std::io::Result<usize>
+    where
+        R: std::io::Read,
+    {
+        let read = fill_buffer(source, &mut self.buffer[..], chunk_size)?;
+        self.pos = 0;
+        self.data_len = read;
+        Ok(read)
+    }
+}
+
+impl Buf for DataSourceBuffer {
+    fn remaining(&self) -> usize {
+        self.data_len - self.pos
+    }
+
+    fn chunk(&self) -> &[u8] {
+        &self.buffer[self.pos..self.pos + self.remaining()]
+    }
+
+    fn advance(&mut self, cnt: usize) {
+        self.pos += cnt;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha20Rng;
+    use std::io;
     use testresult::TestResult;
 
     use super::*;
@@ -1476,6 +1916,52 @@ mod tests {
 
             // decrypt it
             let message = Message::from_bytes(&encrypted[..]).unwrap();
+            let mut decrypted = message
+                .decrypt_with_password(&"hello world".into())
+                .unwrap();
+
+            assert!(decrypted.is_literal());
+
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
+        }
+    }
+
+    #[test]
+    fn binary_message_fixed_size_no_compression_roundtrip_password_seipdv1_reader_with_reader() {
+        let _ = pretty_env_logger::try_init();
+
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            println!("Size {file_size}"); // Generate a file
+
+            let mut buf = vec![0u8; file_size];
+            rng.fill(&mut buf[..]);
+            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+
+            // encrypt it
+            let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
+
+            let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
+            builder.partial_chunk_size(chunk_size).unwrap();
+            let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+            builder
+                .set_session_key(RawSessionKey::from(vec![0u8; 16]))
+                .unwrap();
+            builder
+                .encrypt_with_password(s2k, &"hello world".into())
+                .unwrap();
+
+            let mut encrypted = builder.reader(&mut rng).unwrap();
+            let mut output_buffer = Vec::new();
+            io::copy(&mut encrypted, &mut output_buffer).unwrap();
+
+            // decrypt it
+            let message = Message::from_bytes(&output_buffer[..]).unwrap();
             let mut decrypted = message
                 .decrypt_with_password(&"hello world".into())
                 .unwrap();
@@ -1754,7 +2240,7 @@ mod tests {
         let chunk_size = 512u32;
         let max_file_size = 5 * chunk_size as usize + 100;
 
-        for file_size in (1..=max_file_size).step_by(10) {
+        for file_size in (1..=max_file_size).step_by(max_file_size) {
             println!("Size {file_size}");
 
             // Generate data
@@ -1770,6 +2256,52 @@ mod tests {
 
             // decrypt it
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
+            let mut decrypted = message.decrypt(&"".into(), &skey).expect("decryption");
+
+            assert!(decrypted.is_literal());
+
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+
+            check_strings(
+                decrypted.as_data_string().unwrap(),
+                buf, // normalize_lines(&buf, LineBreak::Crlf),
+            );
+        }
+    }
+
+    #[test]
+    fn utf8_reader_partial_size_no_compression_roundtrip_public_key_x25519_seipdv1_with_reader() {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            std::fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+        // subkey[0] is the encryption key
+        let pkey = skey.secret_subkeys[0].public_key();
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            println!("Size {file_size}");
+
+            // Generate data
+            let buf = random_string(&mut rng, file_size);
+            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+
+            let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
+            builder.sign_text().partial_chunk_size(chunk_size).unwrap();
+            let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+            builder.encrypt_to_key(&mut rng, &pkey).expect("encryption");
+
+            let mut reader = builder.reader(&mut rng).expect("writing");
+            let mut output_buffer = Vec::new();
+            io::copy(&mut reader, &mut output_buffer).unwrap();
+
+            // decrypt it
+            let message = Message::from_bytes(&output_buffer[..]).expect("reading");
             let mut decrypted = message.decrypt(&"".into(), &skey).expect("decryption");
 
             assert!(decrypted.is_literal());
@@ -1883,6 +2415,53 @@ mod tests {
     }
 
     #[test]
+    fn utf8_reader_partial_size_no_compression_roundtrip_x25519_seipdv1_sign_with_reader() {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            std::fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            println!("-- Size {file_size}");
+
+            // Generate data
+            let buf = random_string(&mut rng, file_size);
+            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+
+            println!("data:\n{}", hex::encode(buf.as_bytes()));
+
+            let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
+            builder
+                .sign_text()
+                .partial_chunk_size(chunk_size)
+                .unwrap()
+                .sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
+
+            let mut reader = builder.reader(&mut rng).expect("writing");
+            let mut output_buffer = Vec::new();
+            io::copy(&mut reader, &mut output_buffer).unwrap();
+            let mut message = Message::from_bytes(&output_buffer[..]).expect("reading");
+
+            check_strings(
+                message.as_data_string().unwrap(),
+                buf, // normalize_lines(&buf, LineBreak::Crlf),
+            );
+
+            // verify signature
+            assert!(message.is_one_pass_signed());
+            message.verify(&*skey.public_key()).expect("signed");
+
+            assert_eq!(message.literal_data_header().unwrap().file_name(), "");
+        }
+    }
+
+    #[test]
     fn utf8_reader_partial_size_compression_zip_roundtrip_public_key_x25519_seipdv1_sign() {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
@@ -1979,6 +2558,53 @@ mod tests {
 
             // decrypt it
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
+            let mut decrypted = message
+                .decrypt_with_password(&"hello world".into())
+                .expect("decryption");
+
+            assert!(decrypted.is_literal());
+
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
+        }
+    }
+
+    #[test]
+    fn binary_reader_partial_size_no_compression_roundtrip_password_seipdv2_with_reader() {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            println!("Size {file_size}");
+
+            // Generate data
+            let mut buf = vec![0u8; file_size];
+            rng.fill(&mut buf[..]);
+
+            // encrypt it
+            let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
+
+            let mut builder = Builder::from_reader("plaintext.txt", &buf[..]);
+            builder.partial_chunk_size(chunk_size).unwrap();
+            let mut builder = builder.seipd_v2(
+                &mut rng,
+                SymmetricKeyAlgorithm::AES128,
+                AeadAlgorithm::Gcm,
+                ChunkSize::default(),
+            );
+            builder
+                .encrypt_with_password(&mut rng, s2k, &"hello world".into())
+                .expect("encryption");
+
+            let mut reader = builder.reader(&mut rng).expect("writing");
+            let mut output_buffer = Vec::new();
+            io::copy(&mut reader, &mut output_buffer).unwrap();
+
+            // decrypt it
+            let message = Message::from_bytes(&output_buffer[..]).expect("reading");
             let mut decrypted = message
                 .decrypt_with_password(&"hello world".into())
                 .expect("decryption");
