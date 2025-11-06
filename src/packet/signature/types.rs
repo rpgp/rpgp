@@ -745,9 +745,13 @@ impl Signature {
     }
 
     /// If the hashed area contains any KeyExpirationTime subpacket, then this
-    /// returns `Some(duration)` of the first KeyExpirationTime subpacket encountered.
+    /// returns `Some(Duration)` of the first KeyExpirationTime subpacket encountered.
     ///
-    /// If the hashed area contains no KeyExpirationTime subpacket, this returns `None`
+    /// If the hashed area contains no KeyExpirationTime subpacket, this returns `None`.
+    ///
+    /// (Note that a return value of `Some(Duration(0))` also means that no key expiration time
+    /// applies to the target component. This corresponds to a different wire-format
+    /// representation, but is semantically equivalent to `None`.)
     pub fn key_expiration_time(&self) -> Option<&Duration> {
         self.config().and_then(|h| {
             h.hashed_subpackets().find_map(|p| match &p.data {
