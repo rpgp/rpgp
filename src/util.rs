@@ -6,6 +6,9 @@ use bytes::{Buf, BufMut, BytesMut};
 use digest::DynDigest;
 use nom::Input;
 
+/// This function will fill `buffer` to its full capacity, until the underlying reader is depleted.
+///
+/// If this function returns fewer bytes than `buffer.len()` the underlying reader is finished.
 pub(crate) fn fill_buffer<R: std::io::Read>(
     mut source: R,
     buffer: &mut [u8],
