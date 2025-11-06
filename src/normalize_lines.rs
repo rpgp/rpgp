@@ -2,7 +2,7 @@
 
 use std::sync::LazyLock;
 
-use bytes::{Buf, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 
 use crate::{line_writer::LineBreak, util::fill_buffer};
 
@@ -37,29 +37,47 @@ impl<R: std::io::Read> NormalizedReader<R> {
     fn fill_buffer(&mut self) -> std::io::Result<()> {
         // edge case, if the last byte of the previous buffer was `\r` and the first of the new is `\n`
         // we need to make sure to correctly handle it.
-        let last_was_cr = self.in_buffer[self.in_buffer.len() - 1] == b'\r';
+        let last_char = self.in_buffer[self.in_buffer.len() - 1];
         let read = fill_buffer(&mut self.source, &mut self.in_buffer, None)?;
-        if read == 0 {
+        if read < self.in_buffer.len() {
             self.is_done = true;
         }
-
-        let first_is_lf = self.in_buffer[0] == b'\n';
-
-        self.cleanup_buffer(read, last_was_cr && first_is_lf);
+        self.cleanup_buffer(read, last_char);
         Ok(())
     }
 
     /// Normalizes the line endings in the current buffer
-    fn cleanup_buffer(&mut self, read: usize, have_split_crlf: bool) {
-        let in_buffer = if have_split_crlf && read > 0 {
-            // skip the first byte of the buffer, which is a `\n` as it was already handled before
-            &self.in_buffer[1..read]
-        } else {
-            &self.in_buffer[..read]
-        };
+    fn cleanup_buffer(&mut self, read: usize, last_char: u8) {
+        const CR: u8 = b'\r';
+        const LF: u8 = b'\n';
 
-        let res = RE.replace_all(in_buffer, self.line_break.as_ref());
         self.replaced.clear();
+        let mut start = 0;
+        let mut end = read;
+
+        if read >= self.in_buffer.len() && self.in_buffer[self.in_buffer.len() - 1] == CR {
+            // The next boundary could be an edge case, so we are not including it.
+            end = read - 1;
+        }
+
+        // Handle edge case where the last byte of the previous buffer was `\r`.
+        let edge_case = [last_char, self.in_buffer[0]];
+        match (edge_case, read > 0) {
+            ([CR, LF], true) => {
+                // Edge case, we need to normalize it separately.
+                let res = RE.replace_all(&edge_case, self.line_break.as_ref());
+                self.replaced.extend_from_slice(&res);
+                start = 1;
+            }
+            ([CR, _], _) => {
+                // The last `\r` was not included and normalization is not needed.
+                self.replaced.put_u8(CR);
+            }
+            _ => {}
+        }
+
+        // Normalize the buffer.
+        let res = RE.replace_all(&self.in_buffer[start..end], self.line_break.as_ref());
         self.replaced.extend_from_slice(&res);
     }
 }
@@ -164,5 +182,21 @@ mod tests {
             let normalized_input = normalize_lines(&input, LineBreak::Crlf);
             check_strings(&normalized_input, out);
         }
+    }
+
+    #[test]
+    fn reader_normalized_crlf_then_lf_edge_case() {
+        let input_string = "a \n ".repeat(512);
+
+        let mut out_crlf = String::new();
+        NormalizedReader::new(input_string.as_bytes(), LineBreak::Crlf)
+            .read_to_string(&mut out_crlf)
+            .unwrap();
+
+        let mut reverted = String::new();
+        NormalizedReader::new(out_crlf.as_bytes(), LineBreak::Lf)
+            .read_to_string(&mut reverted)
+            .unwrap();
+        check_strings(input_string, reverted);
     }
 }
