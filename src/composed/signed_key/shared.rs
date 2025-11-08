@@ -1,6 +1,5 @@
 use std::io;
 
-use chrono::Duration;
 use log::warn;
 use smallvec::SmallVec;
 use snafu::Snafu;
@@ -58,23 +57,6 @@ impl SignedKeyDetails {
             users,
             user_attributes,
         }
-    }
-
-    /// Get the key expiration time as a duration.
-    ///
-    /// This method finds the signature with the maximum
-    /// `KeyExpirationTime` offset (which should only occur in
-    /// self-signed signatures) and converts it into a duration.
-    /// The function returns `None` if the key has an infinite
-    /// validity.
-    pub fn key_expiration_time(&self) -> Option<Duration> {
-        // Find the maximum key_expiration_time in all signatures of all user ids.
-        self.users
-            .iter()
-            .flat_map(|user| &user.signatures)
-            .filter_map(|sig| sig.key_expiration_time())
-            .max()
-            .cloned()
     }
 
     fn verify_users<P>(&self, key: &P) -> Result<()>

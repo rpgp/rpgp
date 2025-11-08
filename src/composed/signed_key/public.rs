@@ -1,6 +1,5 @@
 use std::io;
 
-use chrono::{DateTime, Utc};
 use log::warn;
 use rand::{CryptoRng, Rng};
 
@@ -109,12 +108,6 @@ impl SignedPublicKey {
             details,
             public_subkeys,
         }
-    }
-
-    /// Get the public key expiration as a date.
-    pub fn expires_at(&self) -> Option<DateTime<Utc>> {
-        let expiration = self.details.key_expiration_time()?;
-        Some(*self.primary_key.created_at() + expiration)
     }
 
     fn verify_public_subkeys(&self) -> Result<()> {
