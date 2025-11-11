@@ -68,38 +68,38 @@ fn test_forwarding_v4() {
 
     let (forwardee, _) = SignedSecretKey::from_string(FORWARDEE_KEY).expect("FORWARDEE_KEY");
 
-    eprintln!("{:#?}", forwardee);
+    {
+        // inspect the internal shape of the forwardee secret key:
 
-    // the forwardee key has a replacement fingerprint parameter in its encryption subkey
-    let PublicParams::ECDH(EcdhPublicParams::Curve25519 {
-        replacement_fingerprint,
-        ..
-    }) = forwardee.secret_subkeys[0].key.public_key().public_params()
-    else {
-        panic!("expect ecdh")
-    };
+        // 1. it has the replacement fingerprint parameter in its encryption subkey
+        let PublicParams::ECDH(EcdhPublicParams::Curve25519 {
+            replacement_fingerprint,
+            ..
+        }) = forwardee.secret_subkeys[0].key.public_key().public_params()
+        else {
+            panic!("expect ecdh")
+        };
 
-    assert_eq!(
-        *replacement_fingerprint,
-        Some([
-            138, 95, 53, 117, 56, 51, 255, 153, 25, 173, 136, 22, 21, 87, 229, 80, 147, 147, 5, 16
-        ])
-    );
+        const REPLACEMENT_FP: &str = "8a5f35753833ff9919ad88161557e55093930510";
 
-    // the forwardee key has key flag "0x40" and "0x10" set on the encryption subkey binding
-    let key_flags = forwardee.secret_subkeys[0].signatures[0].key_flags();
-    assert!(key_flags.decrypt_forwarded());
-    assert!(key_flags.shared());
+        assert_eq!(
+            replacement_fingerprint.unwrap().as_slice(),
+            hex::decode(REPLACEMENT_FP).unwrap()
+        );
 
-    // Forwardee tries to decrypt the transformed message
+        // 2. it has key flags "0x40" and "0x10" set on the encryption subkey binding
+        let key_flags = forwardee.secret_subkeys[0].signatures[0].key_flags();
+        assert!(key_flags.decrypt_forwarded());
+        assert!(key_flags.shared());
+    }
+
+    // Forwardee decrypts the transformed message
     let (msg, _) = Message::from_string(TRANSFORMED_MESSAGE).unwrap();
 
-    dbg!(&msg);
     let mut msg = msg
         .decrypt(&Password::empty(), &forwardee)
         .expect("decrypt");
 
-    dbg!(&msg);
     let plain = msg.as_data_vec().unwrap();
 
     assert_eq!(plain, PLAINTEXT.as_bytes());
