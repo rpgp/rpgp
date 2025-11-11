@@ -1,10 +1,14 @@
 //! Tests from https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-end-to-end-tests
-use pgp::{
-    composed::{Deserializable, Message, SignedSecretKey},
-    types::{EcdhPublicParams, Password, PublicKeyTrait, PublicParams},
-};
 
-const RECIPIENT_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+#[test]
+#[cfg(feature = "draft-wussler-openpgp-forwarding")]
+fn test_forwarding_v4() {
+    use pgp::{
+        composed::{Deserializable, Message, SignedSecretKey},
+        types::{EcdhPublicParams, Password, PublicKeyTrait, PublicParams},
+    };
+
+    const RECIPIENT_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
 
 xVgEZAdtGBYJKwYBBAHaRw8BAQdAGzrOpvCFCxQ6hmpP52fBtbYmqkPM+TF9oBei
 x9QWcnEAAQDa54PERHLvDqIMo0f03+mJXMTR3Dwq+qi5LTaflQFDGxEdzRNib2Ig
@@ -19,7 +23,7 @@ siLL+xMJ+Hy4AhsMAAAKagEA4Knj6S6nG24nuXfqkkytPlFTHwzurjv3+qqXwWL6
 =un5O
 -----END PGP PRIVATE KEY BLOCK-----";
 
-const FORWARDEE_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+    const FORWARDEE_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
 
 xVgEZAdtGBYJKwYBBAHaRw8BAQdAcNgHyRGEaqGmzEqEwCobfUkyrJnY8faBvsf9
 R2c5ZzYAAP9bFL4nPBdo04ei0C2IAh5RXOpmuejGC3GAIn/UmL5cYQ+XzRtjaGFy
@@ -35,7 +39,7 @@ zWBsBR8VnoOVfEE+VQk6YAi7cTSjcMjfsIez9FYtAQDKo9aCMhUohYyqvhZjn8aS
 =lESj
 -----END PGP PRIVATE KEY BLOCK-----";
 
-const _ENCYPTED_MESSAGE: &str = "-----BEGIN PGP MESSAGE-----
+    const _ENCYPTED_MESSAGE: &str = "-----BEGIN PGP MESSAGE-----
 
 wV4DFVflUJOTBRASAQdAdvFLPtXcvwSkEwbwmnjOrL6eZLh5ysnVpbPlgZbZwjgw
 yGZuVVMAK/ypFfebDf4D/rlEw3cysv213m8aoK8nAUO8xQX3XQq3Sg+EGm0BNV8E
@@ -44,14 +48,15 @@ yGZuVVMAK/ypFfebDf4D/rlEw3cysv213m8aoK8nAUO8xQX3XQq3Sg+EGm0BNV8E
 =uOPV
 -----END PGP MESSAGE-----";
 
-const _PROXY_PARAMETER_K: &[u8] = &[
-    0x04, 0xb6, 0x57, 0x04, 0x5f, 0xc9, 0xc0, 0x75, 0x9c, 0x5f, 0xd1, 0x1d, 0x8c, 0xa7, 0x5a, 0x2b,
-    0x1a, 0xa1, 0x01, 0xc9, 0xc8, 0x96, 0x49, 0x0b, 0xce, 0xc1, 0x00, 0xf9, 0x41, 0xe9, 0x7e, 0x0e,
-];
+    const _PROXY_PARAMETER_K: &[u8] = &[
+        0x04, 0xb6, 0x57, 0x04, 0x5f, 0xc9, 0xc0, 0x75, 0x9c, 0x5f, 0xd1, 0x1d, 0x8c, 0xa7, 0x5a,
+        0x2b, 0x1a, 0xa1, 0x01, 0xc9, 0xc8, 0x96, 0x49, 0x0b, 0xce, 0xc1, 0x00, 0xf9, 0x41, 0xe9,
+        0x7e, 0x0e,
+    ];
 
-const PLAINTEXT: &str = "Message for Bob";
+    const PLAINTEXT: &str = "Message for Bob";
 
-const TRANSFORMED_MESSAGE: &str = "-----BEGIN PGP MESSAGE-----
+    const TRANSFORMED_MESSAGE: &str = "-----BEGIN PGP MESSAGE-----
 
 wV4DB27Wn97eACkSAQdA62TlMU2QoGmf5iBLnIm4dlFRkLIg+6MbaatghwxK+Ccw
 yGZuVVMAK/ypFfebDf4D/rlEw3cysv213m8aoK8nAUO8xQX3XQq3Sg+EGm0BNV8E
@@ -60,8 +65,6 @@ yGZuVVMAK/ypFfebDf4D/rlEw3cysv213m8aoK8nAUO8xQX3XQq3Sg+EGm0BNV8E
 =pVRa
 -----END PGP MESSAGE-----";
 
-#[test]
-fn test_forwarding_v4() {
     let _ = pretty_env_logger::try_init();
 
     let (_recipient, _) = SignedSecretKey::from_string(RECIPIENT_KEY).expect("RECIPIENT_KEY");

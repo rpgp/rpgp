@@ -284,6 +284,7 @@ impl EcdhPublicParams {
                 // <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-generating-the-forwardee-ke>
                 let kdf_type = match i.read_u8()? {
                     0x01 => EcdhKdfType::Native,
+                    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
                     0xff => EcdhKdfType::Replaced,
                     typ => bail!("unexpected ECDH KDF type {}", typ),
                 };

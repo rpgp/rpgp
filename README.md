@@ -122,6 +122,7 @@ fn main() -> pgp::errors::Result<()> {
 - `wasm`: Allows building for wasm
 - `malformed-artifact-compat`: Be lenient towards some types of malformed artifacts (erroneously formed ECDH PKESK; invalidly short first partial body segments), and allow use of large RSA keys (>4096 bit). Most users will NOT need this feature, should be disabled by default!
 - `draft-pqc`: Enables implementation of draft-ietf-openpgp-pqc-12 (This is unstable and can have breaking changes in patch releases. DO NOT USE IN PRODUCTION!)
+- `draft-wussler-openpgp-forwarding`: Enables support for the formats from draft-wussler-openpgp-forwarding-00, and decryption of forwarded ECDH Curve25519 OpenPGP messages
 
 ## Current Status
 
