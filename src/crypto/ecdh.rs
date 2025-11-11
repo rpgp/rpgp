@@ -576,8 +576,14 @@ pub fn encrypt<R: CryptoRng + Rng>(
             p,
             hash,
             alg_sym,
-            replacement_fingerprint: _replacement_fingerprint,
+            replacement_fingerprint,
         } => {
+            ensure_eq!(
+                replacement_fingerprint,
+                &None,
+                "ecdh replacement_fingerprint must be None"
+            );
+
             let their_public = p;
             let mut our_secret_key_bytes =
                 Zeroizing::new([0u8; ECCCurve::Curve25519.secret_key_length()]);

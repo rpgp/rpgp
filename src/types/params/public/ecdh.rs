@@ -2,6 +2,7 @@ use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
+use num_enum::IntoPrimitive;
 
 use crate::{
     crypto::{
@@ -14,6 +15,18 @@ use crate::{
     ser::Serialize,
     types::Mpi,
 };
+
+/// ECDH KDF type
+/// See <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-iana-considerations>
+///
+/// 0x01: "Native fingerprint KDF"
+/// 0xFF: "Replaced fingerprint KDF"
+#[derive(Debug, PartialEq, Eq, Copy, Clone, IntoPrimitive, Hash, derive_more::Display)]
+#[repr(u8)]
+enum EcdhKdfType {
+    Native = 0x01,
+    Replaced = 0xff,
+}
 
 #[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -134,7 +147,7 @@ impl Serialize for EcdhPublicParams {
                     // Serialize as a regular ECDH key
 
                     writer.write_u8(0x03)?; // len of the following fields
-                    writer.write_u8(0x01)?; // fixed tag ("Native fingerprint KDF")
+                    writer.write_u8(EcdhKdfType::Native.into())?;
 
                     writer.write_u8((*hash).into())?;
                     writer.write_u8((*alg_sym).into())?;
@@ -144,7 +157,7 @@ impl Serialize for EcdhPublicParams {
                     // See <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-generating-the-forwardee-ke>
 
                     writer.write_u8(0x17)?; // len of the following fields
-                    writer.write_u8(0xff)?; // fixed tag for forwardee key ("Replaced fingerprint KDF")
+                    writer.write_u8(EcdhKdfType::Replaced.into())?;
 
                     writer.write_u8((*hash).into())?;
                     writer.write_u8((*alg_sym).into())?;
@@ -263,11 +276,36 @@ impl EcdhPublicParams {
                 let p = Mpi::try_from_reader(&mut i)?;
 
                 // a one-octet size of the following fields
-                let _len2 = i.read_u8()?;
+                let len_param = i.read_u8()?;
 
-                // a one-octet value 01, reserved for future extensions
-                let mode = i.read_u8()?;
-                ensure!(mode == 1 || mode == 0xff, "unexpected KDF mode {}", mode);
+                // a one-octet value for the "KDF type".
+                // defaults to 0x01, as per RFC 9580.
+                // 0xff is used for "forwardee keys", see
+                // <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-generating-the-forwardee-ke>
+                let kdf_type = match i.read_u8()? {
+                    0x01 => EcdhKdfType::Native,
+                    0xff => EcdhKdfType::Replaced,
+                    typ => bail!("unexpected ECDH KDF type {}", typ),
+                };
+
+                ensure_eq!(
+                    len_param,
+                    match kdf_type {
+                        EcdhKdfType::Native => 0x03,
+                        EcdhKdfType::Replaced => 0x17,
+                    },
+                    "unexpected length {} for kdf type {}",
+                    len_param,
+                    kdf_type
+                );
+
+                if kdf_type == EcdhKdfType::Replaced {
+                    ensure!(
+                        curve == ECCCurve::Curve25519,
+                        "unexpected curve for forwardee key {}",
+                        curve
+                    );
+                }
 
                 // a one-octet hash function ID used with a KDF
                 let hash = i.read_u8().map(HashAlgorithm::from)?;
@@ -276,12 +314,13 @@ impl EcdhPublicParams {
                 // the symmetric key used for the message encryption
                 let alg_sym = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
 
-                let replacement_fingerprint = if mode == 0xff {
-                    let fingerprint: [u8; 20] =
-                        i.take_bytes(20)?.as_ref().try_into().expect("read 20");
-                    Some(fingerprint)
-                } else {
-                    None
+                let replacement_fingerprint = match kdf_type {
+                    EcdhKdfType::Native => None,
+                    EcdhKdfType::Replaced => {
+                        let replacement_fingerprint: [u8; 20] =
+                            i.take_bytes(20)?.as_ref().try_into().expect("read 20");
+                        Some(replacement_fingerprint)
+                    }
                 };
 
                 let params = Self::try_from_mpi(p, curve, hash, alg_sym, replacement_fingerprint)?;
