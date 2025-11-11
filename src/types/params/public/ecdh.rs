@@ -25,7 +25,8 @@ pub enum EcdhPublicParams {
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
 
-        /// https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke
+        /// Optional additional field for "forwardee keys", see
+        /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke>
         replacement_fingerprint: Option<[u8; 20]>,
     },
     P256 {
@@ -128,20 +129,28 @@ impl Serialize for EcdhPublicParams {
         };
 
         if let Some((hash, alg_sym, replacement_fingerprint)) = tags {
-            if let Some(replacement_fingerprint) = replacement_fingerprint {
-                writer.write_u8(0x17)?; // len of the following fields
-                writer.write_u8(0xff)?; // fixed tag for forwardee key (draft-wussler-openpgp-forwarding)
+            match replacement_fingerprint {
+                None => {
+                    // Serialize as a regular ECDH key
 
-                writer.write_u8((*hash).into())?;
-                writer.write_u8((*alg_sym).into())?;
+                    writer.write_u8(0x03)?; // len of the following fields
+                    writer.write_u8(0x01)?; // fixed tag ("Native fingerprint KDF")
 
-                writer.write_all(&replacement_fingerprint)?; // 20 byte v4 fingerprint (draft-wussler-openpgp-forwarding)
-            } else {
-                writer.write_u8(0x03)?; // len of the following fields
-                writer.write_u8(0x01)?; // fixed tag
+                    writer.write_u8((*hash).into())?;
+                    writer.write_u8((*alg_sym).into())?;
+                }
+                Some(replacement_fingerprint) => {
+                    // Serialize as a "forwardee key".
+                    // See <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-generating-the-forwardee-ke>
 
-                writer.write_u8((*hash).into())?;
-                writer.write_u8((*alg_sym).into())?;
+                    writer.write_u8(0x17)?; // len of the following fields
+                    writer.write_u8(0xff)?; // fixed tag for forwardee key ("Replaced fingerprint KDF")
+
+                    writer.write_u8((*hash).into())?;
+                    writer.write_u8((*alg_sym).into())?;
+
+                    writer.write_all(&replacement_fingerprint)?; // 20 byte v4 fingerprint
+                }
             }
         }
 

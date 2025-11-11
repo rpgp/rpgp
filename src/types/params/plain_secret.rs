@@ -436,6 +436,7 @@ impl PlainSecretParams {
                     }
                 };
 
+                // fingerprint to use in the KDF
                 let mut fingerprint = recipient.fingerprint().as_bytes().to_vec();
 
                 if let EcdhPublicParams::Curve25519 {
@@ -443,6 +444,8 @@ impl PlainSecretParams {
                     ..
                 } = params
                 {
+                    // A replacement_fingerprint is set in the key, we use it in the KDF.
+                    // See <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-decrypting-forwarded-messag>
                     fingerprint = fp.to_vec();
                 };
 

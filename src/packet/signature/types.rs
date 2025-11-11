@@ -1246,6 +1246,7 @@ impl KeyFlags {
         self.known.authentication()
     }
 
+    /// Ref <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-key-flag-0x40>
     pub fn decrypt_forwarded(&self) -> bool {
         self.known.decrypt_forwarded()
     }
