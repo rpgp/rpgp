@@ -18,14 +18,24 @@ use crate::{
 
 /// ECDH KDF type
 /// See <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-iana-considerations>
-///
-/// 0x01: "Native fingerprint KDF"
-/// 0xFF: "Replaced fingerprint KDF"
 #[derive(Debug, PartialEq, Eq, Copy, Clone, IntoPrimitive, Hash, derive_more::Display)]
 #[repr(u8)]
 enum EcdhKdfType {
+    /// 0x01: "Native fingerprint KDF"
     Native = 0x01,
+
+    /// 0xFF: "Replaced fingerprint KDF"
     Replaced = 0xff,
+}
+
+impl EcdhKdfType {
+    /// Length the KDF parameter block, in bytes
+    const fn param_len(&self) -> u8 {
+        match self {
+            Self::Native => 0x03,
+            Self::Replaced => 0x17,
+        }
+    }
 }
 
 #[derive(derive_more::Debug, PartialEq, Eq, Clone)]
@@ -146,7 +156,7 @@ impl Serialize for EcdhPublicParams {
                 None => {
                     // Serialize as a regular ECDH key
 
-                    writer.write_u8(0x03)?; // len of the following fields
+                    writer.write_u8(EcdhKdfType::Native.param_len())?;
                     writer.write_u8(EcdhKdfType::Native.into())?;
 
                     writer.write_u8((*hash).into())?;
@@ -156,7 +166,7 @@ impl Serialize for EcdhPublicParams {
                     // Serialize as a "forwardee key".
                     // See <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-generating-the-forwardee-ke>
 
-                    writer.write_u8(0x17)?; // len of the following fields
+                    writer.write_u8(EcdhKdfType::Replaced.param_len())?;
                     writer.write_u8(EcdhKdfType::Replaced.into())?;
 
                     writer.write_u8((*hash).into())?;
@@ -291,10 +301,7 @@ impl EcdhPublicParams {
 
                 ensure_eq!(
                     len_param,
-                    match kdf_type {
-                        EcdhKdfType::Native => 0x03,
-                        EcdhKdfType::Replaced => 0x17,
-                    },
+                    kdf_type.param_len(),
                     "unexpected length {} for kdf type {}",
                     len_param,
                     kdf_type
@@ -317,11 +324,7 @@ impl EcdhPublicParams {
 
                 let replacement_fingerprint = match kdf_type {
                     EcdhKdfType::Native => None,
-                    EcdhKdfType::Replaced => {
-                        let replacement_fingerprint: [u8; 20] =
-                            i.take_bytes(20)?.as_ref().try_into().expect("read 20");
-                        Some(replacement_fingerprint)
-                    }
+                    EcdhKdfType::Replaced => Some(i.read_array()?),
                 };
 
                 let params = Self::try_from_mpi(p, curve, hash, alg_sym, replacement_fingerprint)?;
