@@ -52,6 +52,8 @@ pub fn mdc_test() {
     // Produce an encrypted message, once
     let encrypted_data = make_seipdv1_msg(&mut rng);
 
+    let mut count = 0;
+
     // Attempt decryption of this message with a series of (wrong) session keys
     for _ in 0..1024 {
         let encrypted = Message::from_bytes(&*encrypted_data).expect("ok");
@@ -81,6 +83,9 @@ pub fn mdc_test() {
 
         // We haven't read until the end of the stream yet
         if let Ok(mut decrypted) = res {
+            // count ok occurrences for Message::decrypt_with_session_key
+            count += 1;
+
             // read to the end of the stream
             let plain = decrypted.as_data_vec();
 
