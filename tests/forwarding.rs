@@ -3,7 +3,7 @@
 //! Tests from https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-end-to-end-tests
 use pgp::{
     composed::{Deserializable, Message, SignedSecretKey},
-    types::{EcdhPublicParams, Password, PublicKeyTrait, PublicParams},
+    types::{EcdhKdfType, EcdhPublicParams, Password, PublicKeyTrait, PublicParams},
 };
 
 const RECIPIENT_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
@@ -74,10 +74,15 @@ fn test_forwarding_v4() {
         // inspect the internal shape of the forwardee secret key:
 
         // 1. it has the replacement fingerprint parameter in its encryption subkey
-        let PublicParams::ECDH(EcdhPublicParams::Curve25519 {
+        let PublicParams::ECDH(EcdhPublicParams::Curve25519 { ecdh_kdf_type, .. }) =
+            forwardee.secret_subkeys[0].key.public_key().public_params()
+        else {
+            panic!("expect ecdh")
+        };
+
+        let EcdhKdfType::Replaced {
             replacement_fingerprint,
-            ..
-        }) = forwardee.secret_subkeys[0].key.public_key().public_params()
+        } = ecdh_kdf_type
         else {
             panic!("expect ecdh")
         };
@@ -85,7 +90,7 @@ fn test_forwarding_v4() {
         const REPLACEMENT_FP: &str = "8a5f35753833ff9919ad88161557e55093930510";
 
         assert_eq!(
-            replacement_fingerprint.unwrap().as_slice(),
+            replacement_fingerprint.as_slice(),
             hex::decode(REPLACEMENT_FP).unwrap()
         );
 

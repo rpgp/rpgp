@@ -10,7 +10,7 @@ use crate::{
 };
 
 mod dsa;
-mod ecdh;
+pub(crate) mod ecdh;
 mod ecdsa;
 mod ed25519;
 mod ed448;

@@ -25,7 +25,7 @@ use crate::{
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::{EskType, PkeskBytes, PublicKeyTrait, PublicParams, *},
+    types::{ecdh::EcdhKdfType, EskType, PkeskBytes, PublicKeyTrait, PublicParams, *},
     util::TeeWriter,
 };
 
@@ -442,13 +442,16 @@ impl PlainSecretParams {
                 let mut fingerprint = recipient_fp.as_bytes(); // normally: the recipient fp
 
                 if let EcdhPublicParams::Curve25519 {
-                    replacement_fingerprint: Some(fp),
+                    ecdh_kdf_type:
+                        EcdhKdfType::Replaced {
+                            replacement_fingerprint,
+                        },
                     ..
                 } = params
                 {
                     // A replacement fingerprint is set in the key, we use it in the KDF.
                     // See <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-decrypting-forwarded-messag>
-                    fingerprint = &fp[..];
+                    fingerprint = &replacement_fingerprint[..];
                 };
 
                 priv_key.decrypt(ecdh::EncryptionFields {
