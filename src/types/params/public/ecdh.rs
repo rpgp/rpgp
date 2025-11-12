@@ -25,6 +25,7 @@ pub enum EcdhKdfType {
     Native,
 
     /// 0xFF: "Replaced fingerprint KDF"
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     Replaced {
         /// "Forwardee key" fingerprint, see
         /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke>
@@ -36,6 +37,7 @@ impl From<EcdhKdfType> for u8 {
     fn from(value: EcdhKdfType) -> Self {
         match value {
             EcdhKdfType::Native => 0x01,
+            #[cfg(feature = "draft-wussler-openpgp-forwarding")]
             EcdhKdfType::Replaced { .. } => 0xff,
         }
     }
@@ -46,6 +48,7 @@ impl EcdhKdfType {
     const fn param_len(&self) -> u8 {
         match self {
             Self::Native => 0x03,
+            #[cfg(feature = "draft-wussler-openpgp-forwarding")]
             Self::Replaced { .. } => 0x17,
         }
     }
@@ -168,6 +171,7 @@ impl Serialize for EcdhPublicParams {
             writer.write_u8((*hash).into())?;
             writer.write_u8((*alg_sym).into())?;
 
+            #[cfg(feature = "draft-wussler-openpgp-forwarding")]
             if let EcdhKdfType::Replaced {
                 replacement_fingerprint,
             } = ecdh_kdf_type
@@ -184,7 +188,10 @@ impl Serialize for EcdhPublicParams {
 
         match self {
             Self::Curve25519 {
-                p, ecdh_kdf_type, ..
+                p,
+                #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+                ecdh_kdf_type,
+                ..
             } => {
                 sum += self.curve().oid().len();
                 let mut mpi = Vec::with_capacity(33);
@@ -194,7 +201,7 @@ impl Serialize for EcdhPublicParams {
                 sum += mpi.write_len();
 
                 // https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke
-
+                #[cfg(feature = "draft-wussler-openpgp-forwarding")]
                 if matches![ecdh_kdf_type, EcdhKdfType::Replaced { .. }] {
                     sum += 20
                 }
@@ -315,6 +322,7 @@ impl EcdhPublicParams {
 
                 let ecdh_kdf_type = match kdf_type {
                     0x01 => EcdhKdfType::Native,
+                    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
                     0xff => EcdhKdfType::Replaced {
                         replacement_fingerprint: i.read_array()?,
                     },

@@ -25,7 +25,7 @@ use crate::{
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::{ecdh::EcdhKdfType, EskType, PkeskBytes, PublicKeyTrait, PublicParams, *},
+    types::{EskType, PkeskBytes, PublicKeyTrait, PublicParams, *},
     util::TeeWriter,
 };
 
@@ -439,8 +439,10 @@ impl PlainSecretParams {
                 let recipient_fp = recipient.fingerprint();
 
                 // The fingerprint to use in the KDF
+                #[allow(unused_mut)]
                 let mut fingerprint = recipient_fp.as_bytes(); // normally: the recipient fp
 
+                #[cfg(feature = "draft-wussler-openpgp-forwarding")]
                 if let EcdhPublicParams::Curve25519 {
                     ecdh_kdf_type:
                         EcdhKdfType::Replaced {
