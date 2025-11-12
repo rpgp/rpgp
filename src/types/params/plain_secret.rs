@@ -436,23 +436,25 @@ impl PlainSecretParams {
                     }
                 };
 
-                // fingerprint to use in the KDF
-                let mut fingerprint = recipient.fingerprint().as_bytes().to_vec();
+                let recipient_fp = recipient.fingerprint();
+
+                // The fingerprint to use in the KDF
+                let mut fingerprint = recipient_fp.as_bytes(); // normally: the recipient fp
 
                 if let EcdhPublicParams::Curve25519 {
                     replacement_fingerprint: Some(fp),
                     ..
                 } = params
                 {
-                    // A replacement_fingerprint is set in the key, we use it in the KDF.
+                    // A replacement fingerprint is set in the key, we use it in the KDF.
                     // See <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-decrypting-forwarded-messag>
-                    fingerprint = fp.to_vec();
+                    fingerprint = &fp[..];
                 };
 
                 priv_key.decrypt(ecdh::EncryptionFields {
                     public_point: &public_point.to_owned(),
                     encrypted_session_key,
-                    fingerprint: &fingerprint,
+                    fingerprint,
                     curve: params.curve(),
                     hash: *hash,
                     alg_sym: *alg_sym,
