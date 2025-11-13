@@ -9,7 +9,7 @@ use crate::{
         hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{bail, ensure, ensure_eq, format_err, Result},
+    errors::{bail, ensure_eq, format_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::Mpi,
@@ -299,20 +299,6 @@ impl EcdhPublicParams {
                 // <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-generating-the-forwardee-ke>
                 let kdf_type = i.read_u8()?;
 
-                ensure!(
-                    kdf_type == 0x01 || kdf_type == 0xff,
-                    "unexpected ECDH KDF type {}",
-                    kdf_type
-                );
-
-                if kdf_type == 0xff {
-                    ensure!(
-                        curve == ECCCurve::Curve25519,
-                        "unexpected curve for forwardee key {}",
-                        curve
-                    );
-                }
-
                 // a one-octet hash function ID used with a KDF
                 let hash = i.read_u8().map(HashAlgorithm::from)?;
 
@@ -322,14 +308,24 @@ impl EcdhPublicParams {
 
                 let ecdh_kdf_type = match kdf_type {
                     0x01 => EcdhKdfType::Native,
+
                     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
-                    0xff => EcdhKdfType::Replaced {
-                        replacement_fingerprint: i.read_array()?,
-                    },
-                    _ => unreachable!("ensured above"), // FIXME?
+                    0xff => {
+                        crate::errors::ensure!(
+                            curve == ECCCurve::Curve25519,
+                            "unexpected curve for forwardee key {}",
+                            curve
+                        );
+
+                        EcdhKdfType::Replaced {
+                            replacement_fingerprint: i.read_array()?,
+                        }
+                    }
+
+                    typ => bail!("unexpected ECDH KDF type {}", typ),
                 };
 
-                // now that we have an ecdh_kdf_type, we can sanity-check len_param against it
+                // now we can sanity-check len_param against ecdh_kdf_type
                 ensure_eq!(
                     len_param,
                     ecdh_kdf_type.param_len(),
