@@ -4,11 +4,11 @@ use bytes::{Buf, Bytes, BytesMut};
 use camellia::{Camellia128, Camellia192, Camellia256};
 use cast5::Cast5;
 use cfb_mode::{cipher::KeyIvInit, BufEncryptor};
-use cipher::{BlockCipher, BlockDecrypt, BlockEncryptMut, BlockSizeUser};
+use cipher::{BlockCipherEncrypt, BlockSizeUser};
 use des::TdesEde3;
 use idea::Idea;
 use log::debug;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use sha1::{Digest, Sha1};
 use twofish::Twofish;
 
@@ -38,8 +38,8 @@ where
 }
 
 impl<R: std::io::Read> StreamEncryptor<R> {
-    pub fn new<B: Rng + CryptoRng>(
-        rng: B,
+    pub fn new<B: RngCore + CryptoRng + ?Sized>(
+        rng: &mut B,
         alg: SymmetricKeyAlgorithm,
         key: &[u8],
         plaintext: R,
@@ -128,7 +128,7 @@ where
 #[derive(derive_more::Debug)]
 pub enum StreamEncryptorInner<M, R>
 where
-    M: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    M: BlockCipherEncrypt,
     BufEncryptor<M>: KeyIvInit,
     R: std::io::Read,
 {
@@ -157,13 +157,13 @@ where
 
 impl<M, R> StreamEncryptorInner<M, R>
 where
-    M: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    M: BlockCipherEncrypt,
     BufEncryptor<M>: KeyIvInit,
     R: std::io::Read,
 {
-    fn new<RAND>(mut rng: RAND, source: R, key: &[u8]) -> Result<Self>
+    fn new<RAND>(rng: &mut RAND, source: R, key: &[u8]) -> Result<Self>
     where
-        RAND: Rng + CryptoRng,
+        RAND: RngCore + CryptoRng + ?Sized,
     {
         debug!("protected encrypt stream");
 
@@ -325,7 +325,7 @@ where
 
 impl<M, R> std::io::Read for StreamEncryptorInner<M, R>
 where
-    M: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    M: BlockCipherEncrypt,
     BufEncryptor<M>: KeyIvInit,
     R: std::io::Read,
 {

@@ -1,7 +1,5 @@
 use std::io::{self, BufRead};
 
-use cx448::x448;
-
 use crate::{
     errors::{format_err, Result},
     parsing_reader::BufReadParsing,
@@ -51,9 +49,9 @@ mod tests {
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
             fn from_seed(seed: u64) -> X448PublicParams {
-                let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+                let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
 
-                let secret = x448::Secret::new(&mut rng);
+                let secret = x448::EphemeralSecret::random_from_rng(&mut rng);
                 X448PublicParams {
                     key: (&secret).into(),
                 }

@@ -1,7 +1,7 @@
 use std::io;
 
 use log::warn;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 
 use crate::{
     armor,
@@ -163,9 +163,9 @@ impl SignedPublicKey {
         )
     }
 
-    pub fn encrypt<R: Rng + CryptoRng>(
+    pub fn encrypt<R: RngCore + CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
@@ -192,7 +192,7 @@ impl KeyDetails for SignedPublicKey {
 }
 
 impl Imprint for SignedPublicKey {
-    fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>> {
+    fn imprint<D: KnownDigest>(&self) -> Result<hybrid_array::Array<u8, D::OutputSize>> {
         self.primary_key.imprint::<D>()
     }
 }
@@ -304,9 +304,9 @@ impl SignedPublicSubKey {
         PublicSubkey::new(self.key.clone(), keyflags, embedded)
     }
 
-    pub fn encrypt<R: Rng + CryptoRng>(
+    pub fn encrypt<R: RngCore + CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
@@ -315,7 +315,7 @@ impl SignedPublicSubKey {
 }
 
 impl Imprint for SignedPublicSubKey {
-    fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>> {
+    fn imprint<D: KnownDigest>(&self) -> Result<hybrid_array::Array<u8, D::OutputSize>> {
         self.key.imprint::<D>()
     }
 }

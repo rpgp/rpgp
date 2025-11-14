@@ -392,8 +392,8 @@ impl Read for SignatureOnePassReader<'_> {
 #[cfg(test)]
 mod tests {
 
+    use chacha20::ChaCha20Rng;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
 
     use crate::{
         armor,

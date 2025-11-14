@@ -6,10 +6,10 @@ use std::{
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use chrono::SubsecRound;
+use cipher::typenum::U64;
 use crc24::Crc24Hasher;
-use generic_array::typenum::U64;
 use log::debug;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 
 use super::{ArmorOptions, RawSessionKey};
 use crate::{
@@ -106,14 +106,14 @@ pub struct EncryptionSeipdV2 {
 pub trait Encryption: PartialEq {
     fn encrypt<R, READ, W>(
         self,
-        rng: R,
+        rng: &mut R,
         generator: READ,
         partial_chunk_size: u32,
         len: Option<u32>,
         out: W,
     ) -> Result<()>
     where
-        R: Rng + CryptoRng,
+        R: RngCore + CryptoRng + ?Sized,
         READ: std::io::Read,
         W: std::io::Write;
 
@@ -247,12 +247,12 @@ impl Builder<'_, DummyReader> {
 }
 
 fn prepare<R>(
-    mut rng: R,
+    rng: &mut R,
     typ: SignatureType,
     keys: &[SigningConfig<'_>],
 ) -> Result<Vec<(crate::packet::SignatureConfig, OnePassSignature)>>
 where
-    R: Rng + CryptoRng,
+    R: RngCore + CryptoRng + ?Sized,
 {
     let mut out = Vec::new();
 
@@ -267,9 +267,7 @@ where
         // prepare signing
         let mut sig_config = match config.key.version() {
             KeyVersion::V4 => crate::packet::SignatureConfig::v4(typ, algorithm, hash_alg),
-            KeyVersion::V6 => {
-                crate::packet::SignatureConfig::v6(&mut rng, typ, algorithm, hash_alg)?
-            }
+            KeyVersion::V6 => crate::packet::SignatureConfig::v6(rng, typ, algorithm, hash_alg)?,
             v => bail!("unsupported key version {:?}", v),
         };
 
@@ -307,13 +305,13 @@ impl<'a, R: Read> Builder<'a, R, NoEncryption> {
     /// Encrypt this message using Seipd V1.
     pub fn seipd_v1<RAND>(
         self,
-        mut rng: RAND,
+        rng: &mut RAND,
         sym_alg: SymmetricKeyAlgorithm,
     ) -> Builder<'a, R, EncryptionSeipdV1>
     where
-        RAND: CryptoRng + Rng,
+        RAND: CryptoRng + RngCore + ?Sized,
     {
-        let session_key = sym_alg.new_session_key(&mut rng);
+        let session_key = sym_alg.new_session_key(rng);
         Builder {
             source: self.source,
             compression: self.compression,
@@ -335,15 +333,15 @@ impl<'a, R: Read> Builder<'a, R, NoEncryption> {
     /// Encrypt this message using Seipd V2.
     pub fn seipd_v2<RAND>(
         self,
-        mut rng: RAND,
+        rng: &mut RAND,
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
         chunk_size: ChunkSize,
     ) -> Builder<'a, R, EncryptionSeipdV2>
     where
-        RAND: CryptoRng + Rng,
+        RAND: CryptoRng + RngCore + ?Sized,
     {
-        let session_key = sym_alg.new_session_key(&mut rng);
+        let session_key = sym_alg.new_session_key(rng);
 
         let mut salt = [0u8; 32];
         rng.fill_bytes(&mut salt);
@@ -433,14 +431,14 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     /// [PK ESK]: https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio
     /// # References
     /// [RFC 9580 &sect; 5.1 - Public Key Encrypted Session Key Packet](https://www.rfc-editor.org/rfc/rfc9580#section-5.1)
-    pub fn encrypt_to_key<RAND, K>(&mut self, mut rng: RAND, pkey: &K) -> Result<&mut Self>
+    pub fn encrypt_to_key<RAND, K>(&mut self, rng: &mut RAND, pkey: &K) -> Result<&mut Self>
     where
-        RAND: CryptoRng + Rng,
+        RAND: CryptoRng + RngCore + ?Sized,
         K: crate::types::PublicKeyTrait,
     {
         // Encrypt (asym) the session key using the provided public key.
         let pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
-            &mut rng,
+            rng,
             &self.encryption.session_key,
             self.encryption.sym_alg,
             pkey,
@@ -454,16 +452,16 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     /// See [encrypt_to_key][Self::encrypt_to_key] for more information
     pub fn encrypt_to_key_anonymous<RAND, K>(
         &mut self,
-        mut rng: RAND,
+        rng: &mut RAND,
         pkey: &K,
     ) -> Result<&mut Self>
     where
-        RAND: CryptoRng + Rng,
+        RAND: CryptoRng + RngCore + ?Sized,
         K: crate::types::PublicKeyTrait,
     {
         // Encrypt (asym) the session key using the provided public key.
         let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
-            &mut rng,
+            rng,
             &self.encryption.session_key,
             self.encryption.sym_alg,
             pkey,
@@ -598,14 +596,14 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// [PK ESK]: https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio
     /// # References
     /// [RFC 9580 &sect; 5.1 - Public Key Encrypted Session Key Packet](https://www.rfc-editor.org/rfc/rfc9580#section-5.1)
-    pub fn encrypt_to_key<RAND, K>(&mut self, mut rng: RAND, pkey: &K) -> Result<&mut Self>
+    pub fn encrypt_to_key<RAND, K>(&mut self, rng: &mut RAND, pkey: &K) -> Result<&mut Self>
     where
-        RAND: CryptoRng + Rng,
+        RAND: CryptoRng + RngCore + ?Sized,
         K: crate::types::PublicKeyTrait,
     {
         // Encrypt (asym) the session key using the provided public key.
         let pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
-            &mut rng,
+            rng,
             &self.encryption.session_key,
             pkey,
         )?;
@@ -618,16 +616,16 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// See [encrypt_to_key][Self::encrypt_to_key] for more information
     pub fn encrypt_to_key_anonymous<RAND, K>(
         &mut self,
-        mut rng: RAND,
+        rng: &mut RAND,
         pkey: &K,
     ) -> Result<&mut Self>
     where
-        RAND: CryptoRng + Rng,
+        RAND: CryptoRng + RngCore + ?Sized,
         K: crate::types::PublicKeyTrait,
     {
         // Encrypt (asym) the session key using the provided public key.
         let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
-            &mut rng,
+            rng,
             &self.encryption.session_key,
             pkey,
         )?;
@@ -680,16 +678,16 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// - [ArmorOptions]
     pub fn encrypt_with_password<RAND>(
         &mut self,
-        mut rng: RAND,
+        rng: &mut RAND,
         s2k: StringToKey,
         msg_pw: &Password,
     ) -> Result<&mut Self>
     where
-        RAND: Rng + CryptoRng,
+        RAND: RngCore + CryptoRng + ?Sized,
     {
         // Encrypt (sym) the session key using the provided password.
         let esk = SymKeyEncryptedSessionKey::encrypt_v6(
-            &mut rng,
+            rng,
             msg_pw,
             &self.encryption.session_key,
             s2k,
@@ -817,9 +815,9 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out to a writer.
-    pub fn to_writer<RAND, W>(self, rng: RAND, out: W) -> Result<()>
+    pub fn to_writer<RAND, W>(self, rng: &mut RAND, out: W) -> Result<()>
     where
-        RAND: Rng + CryptoRng,
+        RAND: RngCore + CryptoRng + ?Sized,
         W: std::io::Write,
     {
         let sign_typ = self.sign_typ;
@@ -897,12 +895,12 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     /// Write the data not as binary, but ascii armor encoded.
     pub fn to_armored_writer<RAND, W>(
         self,
-        rng: RAND,
+        rng: &mut RAND,
         opts: ArmorOptions<'_>,
         mut out: W,
     ) -> Result<()>
     where
-        RAND: Rng + CryptoRng,
+        RAND: RngCore + CryptoRng + ?Sized,
         W: std::io::Write,
     {
         let typ = armor::BlockType::Message;
@@ -933,9 +931,9 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out directly to a file.
-    pub fn to_file<RAND, P>(self, rng: RAND, out_path: P) -> Result<()>
+    pub fn to_file<RAND, P>(self, rng: &mut RAND, out_path: P) -> Result<()>
     where
-        RAND: Rng + CryptoRng,
+        RAND: RngCore + CryptoRng + ?Sized,
         P: AsRef<Path>,
     {
         let out_path: &Path = out_path.as_ref();
@@ -960,12 +958,12 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     /// Write the data out directly to a file.
     pub fn to_armored_file<RAND, P>(
         self,
-        rng: RAND,
+        rng: &mut RAND,
         out_path: P,
         opts: ArmorOptions<'_>,
     ) -> Result<()>
     where
-        RAND: Rng + CryptoRng,
+        RAND: RngCore + CryptoRng + ?Sized,
         P: AsRef<Path>,
     {
         let out_path: &Path = out_path.as_ref();
@@ -988,9 +986,9 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out directly to a `Vec<u8>`.
-    pub fn to_vec<RAND>(self, rng: RAND) -> Result<Vec<u8>>
+    pub fn to_vec<RAND>(self, rng: &mut RAND) -> Result<Vec<u8>>
     where
-        RAND: Rng + CryptoRng,
+        RAND: RngCore + CryptoRng + ?Sized,
     {
         let mut out = Vec::new();
         self.to_writer(rng, &mut out)?;
@@ -998,9 +996,9 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data as ascii armored data, directly to a `String`.
-    pub fn to_armored_string<RAND>(self, rng: RAND, opts: ArmorOptions<'_>) -> Result<String>
+    pub fn to_armored_string<RAND>(self, rng: &mut RAND, opts: ArmorOptions<'_>) -> Result<String>
     where
-        RAND: Rng + CryptoRng,
+        RAND: RngCore + CryptoRng + ?Sized,
     {
         let mut out = Vec::new();
         self.to_armored_writer(rng, opts, &mut out)?;
@@ -1011,7 +1009,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
 
 #[allow(clippy::too_many_arguments)]
 fn to_writer_inner<RAND, R, W, E>(
-    mut rng: RAND,
+    rng: &mut RAND,
     _name: Bytes,
     source: R,
     source_len: Option<u32>,
@@ -1024,7 +1022,7 @@ fn to_writer_inner<RAND, R, W, E>(
     out: W,
 ) -> Result<()>
 where
-    RAND: Rng + CryptoRng,
+    RAND: RngCore + CryptoRng + ?Sized,
     R: std::io::Read,
     W: std::io::Write,
     E: Encryption,
@@ -1033,7 +1031,7 @@ where
     let literal_data_header = LiteralDataHeader::new(data_mode);
 
     let sign_generator = SignGenerator::new(
-        &mut rng,
+        rng,
         sign_typ,
         literal_data_header,
         partial_chunk_size,
@@ -1048,11 +1046,11 @@ where
             let generator =
                 CompressedDataGenerator::new(compression, sign_generator, len, partial_chunk_size)?;
 
-            encryption.encrypt(&mut rng, generator, partial_chunk_size, None, out)?;
+            encryption.encrypt(rng, generator, partial_chunk_size, None, out)?;
         }
         None => {
             let len = sign_generator.len();
-            encryption.encrypt(&mut rng, sign_generator, partial_chunk_size, len, out)?;
+            encryption.encrypt(rng, sign_generator, partial_chunk_size, len, out)?;
         }
     }
     Ok(())
@@ -1061,14 +1059,14 @@ where
 impl Encryption for NoEncryption {
     fn encrypt<R, READ, W>(
         self,
-        _rng: R,
+        _rng: &mut R,
         mut generator: READ,
         _partial_chunk_size: u32,
         _len: Option<u32>,
         mut out: W,
     ) -> Result<()>
     where
-        R: Rng + CryptoRng,
+        R: RngCore + CryptoRng + ?Sized,
         READ: std::io::Read,
         W: std::io::Write,
     {
@@ -1084,14 +1082,14 @@ impl Encryption for NoEncryption {
 impl Encryption for EncryptionSeipdV1 {
     fn encrypt<R, READ, W>(
         self,
-        rng: R,
+        rng: &mut R,
         generator: READ,
         partial_chunk_size: u32,
         len: Option<u32>,
         mut out: W,
     ) -> Result<()>
     where
-        R: Rng + CryptoRng,
+        R: RngCore + CryptoRng + ?Sized,
         READ: std::io::Read,
         W: std::io::Write,
     {
@@ -1134,14 +1132,14 @@ impl Encryption for EncryptionSeipdV1 {
 impl Encryption for EncryptionSeipdV2 {
     fn encrypt<R, READ, W>(
         self,
-        _rng: R,
+        _rng: &mut R,
         generator: READ,
         partial_chunk_size: u32,
         len: Option<u32>,
         mut out: W,
     ) -> Result<()>
     where
-        R: Rng + CryptoRng,
+        R: RngCore + CryptoRng + ?Sized,
         READ: std::io::Read,
         W: std::io::Write,
     {
@@ -1348,7 +1346,7 @@ impl<R: std::io::Read> std::io::Read for SignatureHashers<R> {
 
 impl<'a, R: std::io::Read> SignGenerator<'a, R> {
     fn new<RAND>(
-        mut rng: RAND,
+        rng: &mut RAND,
         typ: SignatureType,
         literal_data_header: LiteralDataHeader,
         chunk_size: u32,
@@ -1357,9 +1355,9 @@ impl<'a, R: std::io::Read> SignGenerator<'a, R> {
         source_len: Option<u32>,
     ) -> Result<Self>
     where
-        RAND: CryptoRng + Rng,
+        RAND: CryptoRng + RngCore + ?Sized,
     {
-        let prep = prepare(&mut rng, typ, &signers)?;
+        let prep = prepare(rng, typ, &signers)?;
         let mut configs = VecDeque::with_capacity(prep.len());
         let mut sign_hashers = VecDeque::with_capacity(prep.len());
         let mut ops = VecDeque::with_capacity(prep.len());
@@ -1525,8 +1523,8 @@ impl<R: std::io::Read> std::io::Read for SignGenerator<'_, R> {
 
 #[cfg(test)]
 mod tests {
+    use chacha20::ChaCha20Rng;
     use rand::{Rng, SeedableRng};
-    use rand_chacha::ChaCha20Rng;
     use testresult::TestResult;
 
     use super::*;
@@ -1604,7 +1602,7 @@ mod tests {
 
             let mut buf = vec![0u8; file_size];
             rng.fill(&mut buf[..]);
-            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+            let mut reader = ChaosReader::new(rng.fork(), buf.clone());
 
             // encrypt it
             let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
@@ -1862,7 +1860,7 @@ mod tests {
 
             // Generate data
             let buf = random_string(&mut rng, file_size);
-            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+            let mut reader = ChaosReader::new(rng.fork(), buf.clone());
 
             let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
             builder.sign_text().partial_chunk_size(chunk_size).unwrap();
@@ -1903,7 +1901,7 @@ mod tests {
 
             // Generate data
             let buf = random_string(&mut rng, file_size);
-            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+            let mut reader = ChaosReader::new(rng.fork(), buf.clone());
 
             let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
             builder.sign_text().partial_chunk_size(chunk_size).unwrap();
@@ -1947,7 +1945,7 @@ mod tests {
 
             // Generate data
             let buf = random_string(&mut rng, file_size);
-            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+            let mut reader = ChaosReader::new(rng.fork(), buf.clone());
 
             let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
             builder
@@ -1999,7 +1997,7 @@ mod tests {
 
             // Generate data
             let buf = random_string(&mut rng, file_size);
-            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+            let mut reader = ChaosReader::new(rng.fork(), buf.clone());
 
             println!("data:\n{}", hex::encode(buf.as_bytes()));
 
@@ -2046,7 +2044,7 @@ mod tests {
 
             // Generate data
             let buf = random_string(&mut rng, file_size);
-            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+            let mut reader = ChaosReader::new(rng.fork(), buf.clone());
 
             println!(
                 "data:\n{}\n{} ({})",
@@ -2155,7 +2153,7 @@ mod tests {
 
             // Generate data
             let buf = random_string(&mut rng, file_size);
-            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+            let mut reader = ChaosReader::new(rng.fork(), buf.clone());
 
             let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
             builder
@@ -2240,7 +2238,7 @@ mod tests {
 
                 // Generate data
                 let buf = random_string(&mut rng, file_size);
-                let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+                let mut reader = ChaosReader::new(rng.fork(), buf.clone());
 
                 let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
                 builder
@@ -2332,7 +2330,7 @@ mod tests {
 
                 // Generate data
                 let buf = random_string(&mut rng, file_size);
-                let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+                let mut reader = ChaosReader::new(rng.fork(), buf.clone());
 
                 let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
                 builder

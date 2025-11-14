@@ -122,7 +122,7 @@ impl DetachedSignature {
     }
 
     fn sign_data<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
+        mut rng: RNG,
         typ: SignatureType,
         key: &impl SecretKeyTrait,
         key_pw: &Password,
@@ -132,7 +132,7 @@ impl DetachedSignature {
     ) -> Result<DetachedSignature> {
         let mut config = match key.version() {
             KeyVersion::V4 => SignatureConfig::v4(typ, key.algorithm(), hash_algorithm),
-            KeyVersion::V6 => SignatureConfig::v6(rng, typ, key.algorithm(), hash_algorithm)?,
+            KeyVersion::V6 => SignatureConfig::v6(&mut rng, typ, key.algorithm(), hash_algorithm)?,
             v => bail!("unsupported key version: {:?}", v),
         };
 
@@ -229,9 +229,9 @@ fn next<I: Iterator<Item = Result<Packet>>>(
 
 #[cfg(test)]
 mod tests {
+    use chacha20::ChaCha20Rng;
     use chrono::SubsecRound;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
 
     use crate::{
         composed::{Deserializable, DetachedSignature, SignedSecretKey, SubpacketConfig},
