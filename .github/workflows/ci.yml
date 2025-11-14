@@ -63,6 +63,14 @@ jobs:
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       run: cargo nextest run --lib --bins --tests --all --features draft-pqc
 
+    - name: forwarding
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
+      run: cargo nextest run --lib --bins --tests --all --features draft-wussler-openpgp-forwarding
+
+    - name: all-features
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
+      run: cargo nextest run --lib --bins --tests --all --all-features
+
     - name: tests ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
 

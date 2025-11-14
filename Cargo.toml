@@ -143,6 +143,7 @@ wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
 malformed-artifact-compat = []
 
 draft-pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
+draft-wussler-openpgp-forwarding = []
 
 [profile.bench]
 debug = 2

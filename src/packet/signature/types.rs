@@ -1246,6 +1246,13 @@ impl KeyFlags {
         self.known.authentication()
     }
 
+    /// Draft key flag: "This key may be used for forwarded communication"
+    ///
+    /// Ref <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-key-flag-0x40>
+    pub fn draft_decrypt_forwarded(&self) -> bool {
+        self.known.draft_decrypt_forwarded()
+    }
+
     pub fn group(&self) -> bool {
         self.known.group()
     }
@@ -1313,7 +1320,7 @@ pub struct KnownKeyFlags {
     #[bits(1)]
     authentication: bool,
     #[bits(1)]
-    _padding0: u8,
+    draft_decrypt_forwarded: bool,
     #[bits(1)]
     group: bool,
     #[bits(2)]

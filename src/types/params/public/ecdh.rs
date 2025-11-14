@@ -15,6 +15,45 @@ use crate::{
     types::Mpi,
 };
 
+/// ECDH KDF type
+/// See <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-iana-considerations>
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
+#[repr(u8)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub enum EcdhKdfType {
+    /// 0x01: "Native fingerprint KDF"
+    Native,
+
+    /// 0xFF: "Replaced fingerprint KDF"
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+    Replaced {
+        /// "Forwardee key" fingerprint, see
+        /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke>
+        replacement_fingerprint: [u8; 20],
+    },
+}
+
+impl From<EcdhKdfType> for u8 {
+    fn from(value: EcdhKdfType) -> Self {
+        match value {
+            EcdhKdfType::Native => 0x01,
+            #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+            EcdhKdfType::Replaced { .. } => 0xff,
+        }
+    }
+}
+
+impl EcdhKdfType {
+    /// Length the KDF parameter block, in bytes
+    const fn param_len(&self) -> u8 {
+        match self {
+            Self::Native => 0x03,
+            #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+            Self::Replaced { .. } => 0x17,
+        }
+    }
+}
+
 #[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum EcdhPublicParams {
@@ -24,6 +63,7 @@ pub enum EcdhPublicParams {
         p: x25519_dalek::PublicKey,
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
+        ecdh_kdf_type: EcdhKdfType,
     },
     P256 {
         #[cfg_attr(test, proptest(strategy = "tests::ecdh_p256_gen()"))]
@@ -78,40 +118,45 @@ impl Serialize for EcdhPublicParams {
         writer.write_all(&oid)?;
 
         let tags = match self {
-            Self::Curve25519 { p, hash, alg_sym } => {
+            Self::Curve25519 {
+                p,
+                hash,
+                alg_sym,
+                ecdh_kdf_type,
+            } => {
                 let mut mpi = Vec::with_capacity(33);
                 mpi.push(0x40);
                 mpi.extend_from_slice(p.as_bytes());
                 let mpi = Mpi::from_slice(&mpi);
                 mpi.to_writer(writer)?;
-                Some((hash, alg_sym))
+                Some((hash, alg_sym, ecdh_kdf_type))
             }
             Self::P256 { p, hash, alg_sym } => {
                 let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
                 p.to_writer(writer)?;
-                Some((hash, alg_sym))
+                Some((hash, alg_sym, &EcdhKdfType::Native))
             }
             Self::P384 { p, hash, alg_sym } => {
                 let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
                 p.to_writer(writer)?;
-                Some((hash, alg_sym))
+                Some((hash, alg_sym, &EcdhKdfType::Native))
             }
             Self::P521 { p, hash, alg_sym } => {
                 let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
                 p.to_writer(writer)?;
-                Some((hash, alg_sym))
+                Some((hash, alg_sym, &EcdhKdfType::Native))
             }
             Self::Brainpool256 { p, hash, alg_sym } => {
                 p.to_writer(writer)?;
-                Some((hash, alg_sym))
+                Some((hash, alg_sym, &EcdhKdfType::Native))
             }
             Self::Brainpool384 { p, hash, alg_sym } => {
                 p.to_writer(writer)?;
-                Some((hash, alg_sym))
+                Some((hash, alg_sym, &EcdhKdfType::Native))
             }
             Self::Brainpool512 { p, hash, alg_sym } => {
                 p.to_writer(writer)?;
-                Some((hash, alg_sym))
+                Some((hash, alg_sym, &EcdhKdfType::Native))
             }
             Self::Unsupported { opaque, .. } => {
                 writer.write_all(opaque)?;
@@ -119,12 +164,20 @@ impl Serialize for EcdhPublicParams {
             }
         };
 
-        if let Some((hash, alg_sym)) = tags {
-            writer.write_u8(0x03)?; // len of the following fields
-            writer.write_u8(0x01)?; // fixed tag
+        if let Some((hash, alg_sym, ecdh_kdf_type)) = tags {
+            writer.write_u8(ecdh_kdf_type.param_len())?;
+            writer.write_u8((*ecdh_kdf_type).into())?;
 
             writer.write_u8((*hash).into())?;
             writer.write_u8((*alg_sym).into())?;
+
+            #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+            if let EcdhKdfType::Replaced {
+                replacement_fingerprint,
+            } = ecdh_kdf_type
+            {
+                writer.write_all(&replacement_fingerprint[..])?; // 20 byte v4 fingerprint
+            }
         }
 
         Ok(())
@@ -134,13 +187,24 @@ impl Serialize for EcdhPublicParams {
         let mut sum = 1; // oid len
 
         match self {
-            Self::Curve25519 { p, .. } => {
+            Self::Curve25519 {
+                p,
+                #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+                ecdh_kdf_type,
+                ..
+            } => {
                 sum += self.curve().oid().len();
                 let mut mpi = Vec::with_capacity(33);
                 mpi.push(0x40);
                 mpi.extend_from_slice(p.as_bytes());
                 let mpi = Mpi::from_slice(&mpi);
                 sum += mpi.write_len();
+
+                // https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke
+                #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+                if matches![ecdh_kdf_type, EcdhKdfType::Replaced { .. }] {
+                    sum += 20
+                }
             }
             Self::P256 { p, .. } => {
                 let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
@@ -227,10 +291,13 @@ impl EcdhPublicParams {
                 let p = Mpi::try_from_reader(&mut i)?;
 
                 // a one-octet size of the following fields
-                let _len2 = i.read_u8()?;
+                let len_param = i.read_u8()?;
 
-                // a one-octet value 01, reserved for future extensions
-                i.read_tag(&[1])?;
+                // a one-octet value for the "KDF type".
+                // defaults to 0x01, as per RFC 9580.
+                // 0xff is used for "forwardee keys", see
+                // <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-generating-the-forwardee-ke>
+                let kdf_type = i.read_u8()?;
 
                 // a one-octet hash function ID used with a KDF
                 let hash = i.read_u8().map(HashAlgorithm::from)?;
@@ -239,7 +306,35 @@ impl EcdhPublicParams {
                 // the symmetric key used for the message encryption
                 let alg_sym = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
 
-                let params = Self::try_from_mpi(p, curve, hash, alg_sym)?;
+                let ecdh_kdf_type = match kdf_type {
+                    0x01 => EcdhKdfType::Native,
+
+                    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+                    0xff => {
+                        crate::errors::ensure!(
+                            curve == ECCCurve::Curve25519,
+                            "unexpected curve for forwardee key {}",
+                            curve
+                        );
+
+                        EcdhKdfType::Replaced {
+                            replacement_fingerprint: i.read_array()?,
+                        }
+                    }
+
+                    typ => bail!("unexpected ECDH KDF type {}", typ),
+                };
+
+                // now we can sanity-check len_param against ecdh_kdf_type
+                ensure_eq!(
+                    len_param,
+                    ecdh_kdf_type.param_len(),
+                    "unexpected length {} for kdf type {}",
+                    len_param,
+                    kdf_type
+                );
+
+                let params = Self::try_from_mpi(p, curve, hash, alg_sym, ecdh_kdf_type)?;
                 Ok(params)
             }
             _ => {
@@ -261,6 +356,7 @@ impl EcdhPublicParams {
         curve: ECCCurve,
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
+        ecdh_kdf_type: EcdhKdfType,
     ) -> Result<Self> {
         match curve {
             ECCCurve::Curve25519 => {
@@ -273,7 +369,12 @@ impl EcdhPublicParams {
                 public_key_arr[..].copy_from_slice(public_key);
 
                 let p = x25519_dalek::PublicKey::from(public_key_arr);
-                Ok(EcdhPublicParams::Curve25519 { p, hash, alg_sym })
+                Ok(EcdhPublicParams::Curve25519 {
+                    p,
+                    hash,
+                    alg_sym,
+                    ecdh_kdf_type,
+                })
             }
             ECCCurve::P256 => {
                 let p = p256::PublicKey::from_sec1_bytes(p.as_ref())?;

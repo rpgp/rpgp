@@ -11,7 +11,7 @@ use crate::{
     },
     errors::{ensure, ensure_eq, unsupported_err, Error, Result},
     ser::Serialize,
-    types::{pad_key, EcdhPublicParams, Mpi, PkeskBytes},
+    types::{ecdh::EcdhKdfType, pad_key, EcdhPublicParams, Mpi, PkeskBytes},
 };
 
 /// 20 octets representing "Anonymous Sender    ".
@@ -114,6 +114,7 @@ impl From<&SecretKey> for EcdhPublicParams {
                 p: PublicKey::from(&key.0),
                 hash,
                 alg_sym,
+                ecdh_kdf_type: EcdhKdfType::Native,
             },
             SecretKey::P256 { ref secret } => Self::P256 {
                 p: secret.public_key(),
@@ -571,7 +572,18 @@ pub fn encrypt<R: CryptoRng + Rng>(
     );
 
     let (encoded_public, shared_secret, hash, alg_sym) = match params {
-        EcdhPublicParams::Curve25519 { p, hash, alg_sym } => {
+        EcdhPublicParams::Curve25519 {
+            p,
+            hash,
+            alg_sym,
+            ecdh_kdf_type,
+        } => {
+            ensure_eq!(
+                ecdh_kdf_type,
+                &EcdhKdfType::Native,
+                "ecdh_kdf_type must be Native"
+            );
+
             let their_public = p;
             let mut our_secret_key_bytes =
                 Zeroizing::new([0u8; ECCCurve::Curve25519.secret_key_length()]);
