@@ -1,6 +1,7 @@
-//! This module provides an abstraction to provide a signer compatible with
-//! [`pgp`] but backed by a [`signature::Signer`] to keep keys in HSMs or other
-//! secure controllers.
+//! An abstraction to provide a signer that is compatible with rPGP, but backed by a Rust Crypto
+//! [`signature::Signer`].
+//!
+//! This allows use of keys in HSMs or other secure controllers.
 
 mod ecdsa;
 mod rsa;
