@@ -2,6 +2,39 @@
 
 All notable changes to rpgp will be documented in this file.
 
+## [0.18.0](https://github.com/rpgp/rpgp/compare/v0.17.0..0.18.0) - 2025-11-16
+
+### ⛰️  Features
+
+- Add  Signature::verify_key_third_party - ([91f8a02](https://github.com/rpgp/rpgp/commit/91f8a02012c45b931457b31dfe459a96a4e9410a))
+- [**breaking**] Improve handling of large RSA keys - ([466ec9d](https://github.com/rpgp/rpgp/commit/466ec9d0c5fd53ea3e72c72f241346c74f1eb09f))
+- [**breaking**] Decryption support for draft-wussler-openpgp-forwarding ([#637](https://github.com/rpgp/rpgp/issues/637)) - ([1e6ac17](https://github.com/rpgp/rpgp/commit/1e6ac17c00e33c3026b40791798a09a34817c74f))
+
+### 🐛 Bug Fixes
+
+- Handle edge case in NormalizedReader LF mode - ([caf31af](https://github.com/rpgp/rpgp/commit/caf31afc11c44ff3e84ae1a5e8ec0ce9bde85b3d))
+
+### 🚜 Refactor
+
+- In text signatures, don't normalize single `\r` characters ([#650](https://github.com/rpgp/rpgp/issues/650)) - ([410c844](https://github.com/rpgp/rpgp/commit/410c844c68ed0fcc0ed9c64ffc2c425c2052572f))
+
+### 📚 Documentation
+
+- Update status information in README ([#645](https://github.com/rpgp/rpgp/issues/645)) - ([f92caf5](https://github.com/rpgp/rpgp/commit/f92caf549c23f01328d3c91c21d8dc597111b203))
+- Expand "users" section ([#646](https://github.com/rpgp/rpgp/issues/646)) - ([cfe71ab](https://github.com/rpgp/rpgp/commit/cfe71ab54540c1bdda3fbde4708b8f7ce78ef118))
+- Simplify README example code; minor tweaks ([#647](https://github.com/rpgp/rpgp/issues/647)) - ([035d2f6](https://github.com/rpgp/rpgp/commit/035d2f67024b1bbcd06e25922b5cc9bcf0325802))
+- Add example + references for encrypt_to_key on Builder - ([dfe1f01](https://github.com/rpgp/rpgp/commit/dfe1f01a347c8af1553250ed0214b99f42092fcd))
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump MSRV to 1.88 - ([ad00ed9](https://github.com/rpgp/rpgp/commit/ad00ed902361d66160864c97ef003e3fe800f53d))
+- Happier clippy - ([a02cf93](https://github.com/rpgp/rpgp/commit/a02cf932690d3d127c7155a93cbe208f18811827))
+- [**breaking**] Drop unintended visibilities - ([204c51f](https://github.com/rpgp/rpgp/commit/204c51f93f9f141067a16d6d2380f21bcb7a239d))
+
+### Cleanup
+
+- [**breaking**] Drop some high-level semantics functions from the API - ([0f58ea1](https://github.com/rpgp/rpgp/commit/0f58ea1cec37ca271282917d8df81fcf599f365f))
+
 ## [0.17.0](https://github.com/rpgp/rpgp/compare/v0.16.0..0.17.0) - 2025-09-25
 
 ### ⛰️  Features
