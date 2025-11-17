@@ -1,5 +1,5 @@
 use aes_gcm::aead::rand_core::CryptoRng;
-use rand::Rng;
+use rand::RngCore;
 
 use crate::{
     composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey},
@@ -46,23 +46,23 @@ impl SecretKey {
         }
     }
 
-    pub fn sign<R>(self, mut rng: R, key_pw: &Password) -> Result<SignedSecretKey>
+    pub fn sign<R>(self, rng: &mut R, key_pw: &Password) -> Result<SignedSecretKey>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + RngCore + ?Sized,
     {
         let primary_key = self.primary_key;
-        let details =
-            self.details
-                .sign(&mut rng, &primary_key, primary_key.public_key(), key_pw)?;
+        let details = self
+            .details
+            .sign(rng, &primary_key, primary_key.public_key(), key_pw)?;
         let public_subkeys = self
             .public_subkeys
             .into_iter()
-            .map(|k| k.sign(&mut rng, &primary_key, primary_key.public_key(), key_pw))
+            .map(|k| k.sign(rng, &primary_key, primary_key.public_key(), key_pw))
             .collect::<Result<Vec<_>>>()?;
         let secret_subkeys = self
             .secret_subkeys
             .into_iter()
-            .map(|k| k.sign(&mut rng, &primary_key, primary_key.public_key(), key_pw))
+            .map(|k| k.sign(rng, &primary_key, primary_key.public_key(), key_pw))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedSecretKey {
@@ -86,20 +86,20 @@ impl SecretSubkey {
     /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
     pub fn sign<R, K, P>(
         self,
-        mut rng: R,
+        rng: &mut R,
         primary_sec_key: &K,
         primary_pub_key: &P,
         key_pw: &Password,
     ) -> Result<SignedSecretSubKey>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + RngCore + ?Sized,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
         let key = self.key;
 
         let signatures = vec![key.sign(
-            &mut rng,
+            rng,
             primary_sec_key,
             primary_pub_key,
             key_pw,
@@ -113,8 +113,8 @@ impl SecretSubkey {
 
 #[cfg(test)]
 mod tests {
+    use chacha20::ChaCha8Rng;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::composed::{Deserializable, SignedPublicKey};

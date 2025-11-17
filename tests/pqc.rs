@@ -1,4 +1,5 @@
 #![cfg(feature = "draft-pqc")]
+use chacha20::ChaCha8Rng;
 use pgp::{
     composed::{
         Deserializable, DetachedSignature, KeyType, Message, MessageBuilder,
@@ -8,7 +9,6 @@ use pgp::{
     types::{KeyDetails, KeyVersion, Password},
 };
 use rand::{CryptoRng, RngCore, SeedableRng};
-use rand_chacha::ChaCha8Rng;
 use smallvec::smallvec;
 use testresult::TestResult;
 

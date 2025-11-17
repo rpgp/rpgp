@@ -3,6 +3,7 @@
 #[cfg(feature = "malformed-artifact-compat")]
 #[test]
 fn test_large_rsa() {
+    use chacha20::ChaCha8Rng;
     use pgp::{
         composed::{
             Deserializable, DetachedSignature, Message, MessageBuilder, SignedPublicKey,
@@ -12,7 +13,6 @@ fn test_large_rsa() {
         types::Password,
     };
     use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     let mut rng = ChaCha8Rng::seed_from_u64(0);
 
