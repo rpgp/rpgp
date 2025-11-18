@@ -26,11 +26,11 @@ use crate::{
 
 /// MAX_KEY_SIZE limits rsa key size while parsing public key packets
 #[cfg(not(feature = "malformed-artifact-compat"))]
-pub(crate) const MAX_KEY_SIZE: usize = 4096;
+pub(crate) const MAX_KEY_SIZE: usize = 8192;
 #[cfg(feature = "malformed-artifact-compat")]
 pub(crate) const MAX_KEY_SIZE: usize = 16384;
 
-/// The MAX_KEY_SIZE_GENERATE limit applies to  generating a new SecretKey
+/// The MAX_KEY_SIZE_GENERATE limit applies to generating a new SecretKey
 const MAX_KEY_SIZE_GENERATE: usize = 4096;
 
 /// Private Key for RSA.

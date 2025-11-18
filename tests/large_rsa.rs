@@ -1,8 +1,6 @@
-/// Normally, we reject RSA keys >4 kbit.
-/// However, with feature "malformed-artifact-compat" we handle up to 16 kbit RSA
-#[cfg(feature = "malformed-artifact-compat")]
+/// Check that we can use an RSA 8k key for encrypt/decrypt and sign/verify
 #[test]
-fn test_large_rsa() {
+fn test_rsa_8192() {
     use pgp::{
         composed::{
             Deserializable, DetachedSignature, Message, MessageBuilder, SignedPublicKey,
