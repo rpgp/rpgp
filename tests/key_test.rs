@@ -151,98 +151,98 @@ parse_dumps!(
     (
         test_parse_dumps_0,
         0,
-        17_702,
+        17_711,
         // Hash::Other(4)
         0,
-        3290,
-        20_992
+        3282,
+        20_993
     ),
     (
         test_parse_dumps_1,
         1,
-        17_540,
+        17_561,
         // - Hash::Other(4)
         // - Elgamal verify
         6,
-        3446,
-        20_992
+        3429,
+        20_996
     ),
     (
         test_parse_dumps_2,
         2,
-        17_567,
+        17_586,
         // - Hash::Other(4)
         // - Hash::Other(5)
         // - Elgamal verify
         3,
-        3419,
-        20_989
+        3402,
+        20_991
     ),
     (
         test_parse_dumps_3,
         3,
-        17_631,
+        17_662,
         // - Hash::Other(4)
         // - Elgamal verify
         5,
-        3355,
-        20_991
+        3330,
+        20_997
     ),
     (
         test_parse_dumps_4,
         4,
-        17_587,
+        17_604,
         // - Elgamal verify - gets hidden?
         2,
-        3406,
-        20_995
+        3386,
+        20_992
     ),
     (
         test_parse_dumps_5,
         5,
-        17_612,
+        17_631,
         // - Hash::Other(4)
         // - Elgamal verify
         7,
-        3373,
-        20_992
+        3361,
+        20_999
     ),
     (
         test_parse_dumps_6,
         6,
-        17_680,
+        17_696,
         // - Elgamal verify
         1,
-        3312,
-        20_993
+        3300,
+        20_997
     ),
     (
         test_parse_dumps_7,
         7,
-        17_702,
+        17_716,
         // - Elgamal verify
         3,
-        3303,
-        21_008
+        3287,
+        21_006
     ),
     (
         test_parse_dumps_8,
         8,
-        17_691,
+        17_718,
         // - Hash::Other(5)
         // - Elgamal verify
         5,
-        3299,
-        20_995
+        3275,
+        20_998
     ),
     (
         test_parse_dumps_9,
         9,
-        17_546,
+        17_566,
         // - Hash::Other(5)
         // - Elgamal verify
         2,
-        3453,
+        3433,
         21_001
     ),
 );
