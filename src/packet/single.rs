@@ -6,9 +6,10 @@ use crate::{
     errors::{format_err, Error, Result, UnsupportedSnafu},
     packet::{
         CompressedData, GnupgAeadData, LiteralData, Marker, ModDetectionCode, OnePassSignature,
-        Packet, PacketHeader, Padding, PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey,
-        SecretKey, SecretSubkey, Signature, SymEncryptedData, SymEncryptedProtectedData,
-        SymKeyEncryptedSessionKey, Trust, UserAttribute, UserId,
+        Packet, PacketHeader, Padding, PersistentSymmetricKey, PublicKey,
+        PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey, SecretSubkey, Signature,
+        SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust,
+        UserAttribute, UserId,
     },
     parsing_reader::BufReadParsing,
     types::Tag,
@@ -73,6 +74,11 @@ impl Packet {
                     source: Box::new(format_err!("Unassigned Critical Packet type {:?}", id)),
                 })
             }
+
+            Tag::PersistentSymmetricKey => {
+                PersistentSymmetricKey::try_from_reader(packet_header, &mut body).map(Into::into)
+            }
+
             // "Unassigned Non-Critical Packets"
             Tag::UnassignedNonCritical(id) => {
                 // a "soft" error that will usually get ignored while processing packet streams
