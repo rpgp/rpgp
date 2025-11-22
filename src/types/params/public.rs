@@ -4,11 +4,12 @@ use bytes::Bytes;
 
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::{Error, Result},
+    errors::{bail, Error, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
 };
 
+mod aead;
 mod dsa;
 pub(crate) mod ecdh;
 mod ecdsa;
@@ -36,7 +37,7 @@ mod slh_dsa_shake128s;
 mod slh_dsa_shake256s;
 
 pub use self::{
-    dsa::DsaPublicParams, ecdh::EcdhPublicParams, ecdsa::EcdsaPublicParams,
+    aead::AeadPublicParams, dsa::DsaPublicParams, ecdh::EcdhPublicParams, ecdsa::EcdsaPublicParams,
     ed25519::Ed25519PublicParams, ed448::Ed448PublicParams, eddsa_legacy::EddsaLegacyPublicParams,
     elgamal::ElgamalPublicParams, rsa::RsaPublicParams, x25519::X25519PublicParams,
     x448::X448PublicParams,
@@ -53,6 +54,7 @@ use super::PlainSecretParams;
 /// Raw public key material for any algorithm.
 #[derive(PartialEq, Eq, Clone, derive_more::Debug)]
 pub enum PublicParams {
+    AEAD(AeadPublicParams),
     RSA(RsaPublicParams),
     DSA(DsaPublicParams),
     ECDSA(EcdsaPublicParams),
@@ -88,6 +90,7 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
 
     fn try_from(secret: &PlainSecretParams) -> Result<Self, Self::Error> {
         match secret {
+            PlainSecretParams::AEAD(_) => bail!("can't get PublicParams"),
             PlainSecretParams::RSA(ref p) => Ok(Self::RSA(p.into())),
             PlainSecretParams::DSA(ref p) => Ok(Self::DSA(p.into())),
             PlainSecretParams::ECDSA(ref p) => p.try_into().map(Self::ECDSA),
@@ -127,6 +130,10 @@ impl PublicParams {
         i: B,
     ) -> Result<PublicParams> {
         match typ {
+            PublicKeyAlgorithm::AEAD => {
+                let params = AeadPublicParams::try_from_reader(i)?;
+                Ok(PublicParams::AEAD(params))
+            }
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSAEncrypt
             | PublicKeyAlgorithm::RSASign => {
@@ -228,6 +235,8 @@ impl PublicParams {
     /// key as a signer
     pub fn hash_alg(&self) -> HashAlgorithm {
         match self {
+            PublicParams::AEAD(_) => HashAlgorithm::Sha512, // FIXME?
+
             PublicParams::RSA(_)
             | PublicParams::DSA(_)
             | PublicParams::EdDSALegacy(_)
@@ -283,6 +292,9 @@ fn unknown<B: BufRead>(mut i: B, len: Option<usize>) -> Result<PublicParams> {
 impl Serialize for PublicParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
+            PublicParams::AEAD(params) => {
+                params.to_writer(writer)?;
+            }
             PublicParams::RSA(params) => {
                 params.to_writer(writer)?;
             }
@@ -352,6 +364,9 @@ impl Serialize for PublicParams {
     fn write_len(&self) -> usize {
         let mut sum = 0;
         match self {
+            PublicParams::AEAD(params) => {
+                sum += params.write_len();
+            }
             PublicParams::RSA(params) => {
                 sum += params.write_len();
             }

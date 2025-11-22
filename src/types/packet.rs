@@ -148,7 +148,12 @@ pub enum Tag {
     #[cfg_attr(test, proptest(skip))]
     UnassignedCritical(UnassignedCriticalTag),
 
-    /// Unassigned Non-Critical Packets [40-59]
+    /// Persistent Symmetric Key Packet (PSK)
+    ///
+    /// <https://twisstle.gitlab.io/openpgp-persistent-symmetric-keys/#name-persistent-symmetric-key-pa>
+    PersistentSymmetricKey = 40,
+
+    /// Unassigned Non-Critical Packets [41-59]
     #[cfg_attr(test, proptest(skip))]
     UnassignedNonCritical(UnassignedNonCriticalTag),
 
@@ -191,7 +196,7 @@ impl UnassignedNonCriticalTag {
     /// Creates a new tag, returning `None` if it is not a valid `UnassignedNonCritical` tag.
     pub fn new(value: u8) -> Option<Self> {
         match value {
-            40..=59 => Some(Self(value)),
+            41..=59 => Some(Self(value)),
             _ => None,
         }
     }
@@ -273,7 +278,10 @@ impl From<Tag> for u8 {
             Tag::Padding => 21,
 
             Tag::UnassignedCritical(id) => id.into(),
+
+            Tag::PersistentSymmetricKey => 40,
             Tag::UnassignedNonCritical(id) => id.into(),
+
             Tag::Experimental(id) => id.into(),
 
             Tag::Invalid(id) => id.into(),
@@ -304,7 +312,8 @@ impl From<u8> for Tag {
             20 => Self::GnupgAeadData,
             21 => Self::Padding,
             22..=39 => Self::UnassignedCritical(UnassignedCriticalTag(value)),
-            40..=59 => Self::UnassignedNonCritical(UnassignedNonCriticalTag(value)),
+            40 => Self::PersistentSymmetricKey,
+            41..=59 => Self::UnassignedNonCritical(UnassignedNonCriticalTag(value)),
             60..=63 => Self::Experimental(ExperimentalTag(value)),
 
             0 | 15 | 16 | 64.. => Self::Invalid(InvalidTag(value)),
