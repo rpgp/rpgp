@@ -508,6 +508,9 @@ fn create_signature(
 
     debug!("unlocked key");
     match *priv_key {
+        PlainSecretParams::AEAD(ref priv_key) => {
+            bail!("unimplemented")
+        }
         PlainSecretParams::RSA(ref priv_key) => {
             let PublicParams::RSA(_) = pub_params else {
                 bail!("inconsistent key");

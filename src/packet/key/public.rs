@@ -426,6 +426,7 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
     typ: EskType,
 ) -> Result<PkeskBytes> {
     match key.public_params() {
+        PublicParams::AEAD(_) => bail!("not implemented"),
         PublicParams::RSA(ref params) => crypto::rsa::encrypt(rng, &params.key, plain),
         PublicParams::EdDSALegacy { .. } => bail!("EdDSALegacy is only used for signing"),
         PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
@@ -788,6 +789,7 @@ impl PublicKeyTrait for PubKeyInner {
         sig: &SignatureBytes,
     ) -> Result<()> {
         match self.public_params {
+            PublicParams::AEAD(_) => bail!("not implemented"),
             PublicParams::RSA(ref params) => {
                 let sig: &[Mpi] = sig.try_into()?;
 
