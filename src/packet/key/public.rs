@@ -436,7 +436,11 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
     typ: EskType,
 ) -> Result<PkeskBytes> {
     match key.public_params() {
-        PublicParams::AEAD(_) => bail!("not implemented"),PublicParams::RSA(ref params) => crypto::rsa::encrypt(rng, &params.key, plain),
+        PublicParams::AEAD(_) => {
+            // XXX: we don't have access to the secret key material in the symmetric key, here :(
+
+            bail!("not implemented")
+        }PublicParams::RSA(ref params) => crypto::rsa::encrypt(rng, &params.key, plain),
         PublicParams::EdDSALegacy { .. } => bail!("EdDSALegacy is only used for signing"),
         PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
         PublicParams::Ed448 { .. } => bail!("Ed448 is only used for signing"),
