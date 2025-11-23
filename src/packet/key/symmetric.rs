@@ -4,14 +4,16 @@
 
 use std::io::BufRead;
 
+use chrono::{DateTime, Utc};
+
 use crate::{
-    crypto::public_key::PublicKeyAlgorithm,
+    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::ensure_eq,
     packet::{PacketHeader, PacketTrait, PubKeyInner},
     ser::Serialize,
     types::{
         Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PlainSecretParams, PublicKeyTrait,
-        PublicParams, SecretParams, Tag,
+        PublicParams, SecretParams, SignatureBytes, Tag,
     },
 };
 
@@ -114,6 +116,29 @@ impl PersistentSymmetricKey {
     }
 }
 
+impl PublicKeyTrait for PersistentSymmetricKey {
+    fn created_at(&self) -> &DateTime<Utc> {
+        self.details.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.details.expiration()
+    }
+
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> crate::errors::Result<()> {
+        todo!()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.details.public_params()
+    }
+}
+
 impl PacketTrait for PersistentSymmetricKey {
     fn packet_header(&self) -> &PacketHeader {
         &self.packet_header
@@ -160,7 +185,13 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use crate::{
-        crypto::{aead_key, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
+        composed::MessageBuilder,
+        crypto::{
+            aead::{AeadAlgorithm, ChunkSize},
+            aead_key,
+            public_key::PublicKeyAlgorithm,
+            sym::SymmetricKeyAlgorithm,
+        },
         packet::{
             key::symmetric::PersistentSymmetricKey, Packet, PacketParser, PubKeyInner, PublicKey,
         },
@@ -221,5 +252,26 @@ mod tests {
         };
 
         eprintln!("{:02x?}", secret.key);
+    }
+
+    #[test]
+    fn psk_encrypt() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        const PLAIN: &[u8] = b"hello world";
+
+        let psk = make_psk();
+
+        let mut builder = MessageBuilder::from_bytes(&[][..], PLAIN.to_vec()).seipd_v2(
+            &mut rng,
+            SymmetricKeyAlgorithm::AES128,
+            AeadAlgorithm::Ocb,
+            ChunkSize::default(),
+        );
+        builder.encrypt_to_key(&mut rng, &psk).expect("encryption");
+
+        let encrypted = builder.to_vec(&mut rng).expect("writing");
+
+        eprintln!("{:02x?}", encrypted);
     }
 }
