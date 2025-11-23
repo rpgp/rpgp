@@ -9,6 +9,7 @@ use crate::{
     crypto::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
+        Encryptor,
     },
     errors::{bail, ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
@@ -147,8 +148,10 @@ impl SignedPublicKey {
         let res = String::from_utf8(self.to_armored_bytes(opts)?).map_err(|e| e.utf8_error())?;
         Ok(res)
     }
+}
 
-    pub fn encrypt<R: Rng + CryptoRng>(
+impl Encryptor for SignedPublicKey {
+    fn encrypt<R: Rng + CryptoRng>(
         &self,
         rng: R,
         plain: &[u8],
@@ -273,8 +276,10 @@ impl SignedPublicSubKey {
 
         Ok(())
     }
+}
 
-    pub fn encrypt<R: Rng + CryptoRng>(
+impl Encryptor for SignedPublicSubKey {
+    fn encrypt<R: Rng + CryptoRng>(
         &self,
         rng: R,
         plain: &[u8],

@@ -1498,7 +1498,7 @@ mod tests {
             let mut builder = MessageBuilder::from_bytes("hello.txt", DATA);
             builder.compression(CompressionAlgorithm::ZLIB);
             let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
-            builder.encrypt_to_key(&mut rng, &pkey).unwrap();
+            builder.encrypt_to_key(&mut rng, pkey).unwrap();
 
             builder
                 .to_armored_string(&mut rng, Default::default())
@@ -1508,7 +1508,7 @@ mod tests {
             let mut builder = MessageBuilder::from_bytes("hello.txt", DATA);
             builder.compression(CompressionAlgorithm::ZLIB);
             let mut builder = builder.seipd_v1(&mut rng2, SymmetricKeyAlgorithm::AES128);
-            builder.encrypt_to_key(&mut rng2, &pkey).unwrap();
+            builder.encrypt_to_key(&mut rng2, pkey).unwrap();
             builder
                 .to_armored_string(&mut rng2, Default::default())
                 .unwrap()
@@ -1553,7 +1553,7 @@ mod tests {
                 AeadAlgorithm::Ocb,
                 ChunkSize::default(),
             );
-            builder.encrypt_to_key(&mut rng, &pkey).unwrap();
+            builder.encrypt_to_key(&mut rng, pkey).unwrap();
             builder
                 .to_armored_string(&mut rng, Default::default())
                 .unwrap()
@@ -1567,7 +1567,7 @@ mod tests {
             );
             builder
                 .compression(CompressionAlgorithm::ZLIB)
-                .encrypt_to_key(&mut rng2, &pkey)
+                .encrypt_to_key(&mut rng2, pkey)
                 .unwrap();
             builder
                 .to_armored_string(&mut rng2, Default::default())
@@ -1606,7 +1606,7 @@ mod tests {
                 .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
             builder
                 .compression(CompressionAlgorithm::ZLIB)
-                .encrypt_to_key(&mut rng, &pkey)
+                .encrypt_to_key(&mut rng, pkey)
                 .unwrap();
             let armored = builder
                 .to_armored_string(&mut rng, Default::default())
@@ -1646,7 +1646,7 @@ mod tests {
             );
             builder
                 .compression(CompressionAlgorithm::ZLIB)
-                .encrypt_to_key(&mut rng, &pkey)
+                .encrypt_to_key(&mut rng, pkey)
                 .unwrap();
             let armored = builder
                 .to_armored_string(&mut rng, Default::default())

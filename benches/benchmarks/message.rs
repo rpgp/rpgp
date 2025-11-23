@@ -171,7 +171,7 @@ fn bench_message(c: &mut Criterion) {
                         let mut builder = MessageBuilder::from_reader("", &bytes[..])
                             .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
                         builder
-                            .encrypt_to_key(&mut rng, &signed_key.secret_subkeys[0].public_key())
+                            .encrypt_to_key(&mut rng, signed_key.secret_subkeys[0].public_key())
                             .unwrap();
 
                         let mut sink = vec![];
@@ -197,7 +197,7 @@ fn bench_message(c: &mut Criterion) {
                     let mut builder =
                         MessageBuilder::from_reader("", &bytes[..]).seipd_v1(&mut rng, sym);
                     builder
-                        .encrypt_to_key(&mut rng, &signed_key.secret_subkeys[0].public_key())
+                        .encrypt_to_key(&mut rng, signed_key.secret_subkeys[0].public_key())
                         .unwrap();
 
                     let mut encrypted = vec![];

@@ -1,7 +1,7 @@
 //! # Cryptography module
 
 use self::hash::HashAlgorithm;
-use crate::types::SignatureBytes;
+use crate::types::{EskType, PkeskBytes, PublicKeyTrait, SignatureBytes};
 
 // Symmetric
 
@@ -55,4 +55,14 @@ pub trait Decryptor {
 /// Describes keys that can sign data.
 pub trait Signer {
     fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> crate::errors::Result<SignatureBytes>;
+}
+
+/// Describes keys that can encrypt data.
+pub trait Encryptor: PublicKeyTrait {
+    fn encrypt<R: rand::CryptoRng + rand::Rng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> crate::errors::Result<PkeskBytes>;
 }

@@ -7,14 +7,14 @@ use zeroize::Zeroizing;
 
 use crate::{
     composed::RawSessionKey,
-    crypto::{checksum, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
+    crypto::{checksum, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm, Encryptor},
     errors::{bail, ensure_eq, Result},
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
         EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PkeskBytes, PkeskVersion,
-        PublicKeyTrait, PublicParams, Tag,
+        PublicParams, Tag,
     },
 };
 
@@ -159,17 +159,17 @@ impl PublicKeyEncryptedSessionKey {
     }
 
     /// Encrypts the given session key to `pkey` as a v3 pkesk.
-    pub fn from_session_key_v3<R: CryptoRng + Rng>(
+    pub fn from_session_key_v3<R: CryptoRng + Rng, K: Encryptor>(
         rng: R,
         session_key: &RawSessionKey,
         alg: SymmetricKeyAlgorithm,
-        pkey: &impl PublicKeyTrait,
+        pkey: &K,
     ) -> Result<Self> {
         // the symmetric key algorithm, the session key, and a checksum (for some algorithms)
         let data =
             Self::prepare_session_key_for_encryption(Some(alg), session_key, pkey.public_params());
 
-        let values = crate::packet::key::encrypt(pkey, rng, &data, EskType::V3_4)?;
+        let values = pkey.encrypt(rng, &data, EskType::V3_4)?;
 
         let id = pkey.key_id();
         let len = write_len_v3(&id, &values);
@@ -185,10 +185,10 @@ impl PublicKeyEncryptedSessionKey {
     }
 
     /// Encrypts the given session key to `pkey` as a v6 pkesk.
-    pub fn from_session_key_v6<R: CryptoRng + Rng>(
+    pub fn from_session_key_v6<R: CryptoRng + Rng, K: Encryptor>(
         rng: R,
         session_key: &RawSessionKey,
-        pkey: &impl PublicKeyTrait,
+        pkey: &K,
     ) -> Result<Self> {
         // "An implementation MUST NOT generate ElGamal v6 PKESK packets."
         // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-5.1.4-6)
@@ -200,7 +200,7 @@ impl PublicKeyEncryptedSessionKey {
         let data =
             Self::prepare_session_key_for_encryption(None, session_key, pkey.public_params());
 
-        let values = crate::packet::key::encrypt(pkey, rng, &data, EskType::V6)?;
+        let values = pkey.encrypt(rng, &data, EskType::V6)?;
         let fingerprint = Some(pkey.fingerprint());
 
         let len = write_len_v6(&values, &fingerprint);

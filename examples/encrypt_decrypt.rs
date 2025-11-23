@@ -57,7 +57,7 @@ fn encrypt(cert: &SignedPublicKey, msg: &[u8]) -> Vec<u8> {
 
     // Add `encryption_subkey` as one recipient of the encrypted message
     builder
-        .encrypt_to_key(thread_rng(), &encryption_subkey)
+        .encrypt_to_key(thread_rng(), encryption_subkey)
         .unwrap();
 
     // Perform the actual encryption of the payload and put together the resulting encrypted message

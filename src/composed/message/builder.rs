@@ -19,6 +19,7 @@ use crate::{
         aead::{AeadAlgorithm, ChunkSize},
         hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
+        Encryptor,
     },
     errors::{bail, ensure, ensure_eq, Result},
     line_writer::{LineBreak, LineWriter},
@@ -436,7 +437,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     pub fn encrypt_to_key<RAND, K>(&mut self, mut rng: RAND, pkey: &K) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
-        K: crate::types::PublicKeyTrait,
+        K: Encryptor,
     {
         // Encrypt (asym) the session key using the provided public key.
         let pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
@@ -459,7 +460,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     ) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
-        K: crate::types::PublicKeyTrait,
+        K: Encryptor,
     {
         // Encrypt (asym) the session key using the provided public key.
         let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
@@ -601,7 +602,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     pub fn encrypt_to_key<RAND, K>(&mut self, mut rng: RAND, pkey: &K) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
-        K: crate::types::PublicKeyTrait,
+        K: Encryptor,
     {
         // Encrypt (asym) the session key using the provided public key.
         let pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
@@ -623,7 +624,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     ) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
-        K: crate::types::PublicKeyTrait,
+        K: Encryptor,
     {
         // Encrypt (asym) the session key using the provided public key.
         let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
@@ -1769,7 +1770,7 @@ mod tests {
             let mut builder = Builder::from_reader("plaintext.txt", &buf[..]);
             builder.partial_chunk_size(chunk_size).unwrap();
             let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
-            builder.encrypt_to_key(&mut rng, &pkey).expect("encryption");
+            builder.encrypt_to_key(&mut rng, pkey).expect("encryption");
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
@@ -1815,7 +1816,7 @@ mod tests {
             builder.partial_chunk_size(chunk_size).unwrap();
             let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
             builder
-                .encrypt_to_key(&mut rng, &pkey)
+                .encrypt_to_key(&mut rng, pkey)
                 .expect("encryption")
                 .encrypt_with_password(s2k, &"hello world".into())
                 .expect("encryption sym");
@@ -1908,7 +1909,7 @@ mod tests {
             let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
             builder.sign_text().partial_chunk_size(chunk_size).unwrap();
             let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
-            builder.encrypt_to_key(&mut rng, &pkey).expect("encryption");
+            builder.encrypt_to_key(&mut rng, pkey).expect("encryption");
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
@@ -1956,7 +1957,7 @@ mod tests {
                 .partial_chunk_size(chunk_size)
                 .unwrap();
             let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
-            builder.encrypt_to_key(&mut rng, &pkey).expect("encryption");
+            builder.encrypt_to_key(&mut rng, pkey).expect("encryption");
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
@@ -2062,7 +2063,7 @@ mod tests {
                 .partial_chunk_size(chunk_size)
                 .unwrap();
             let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
-            builder.encrypt_to_key(&mut rng, &pkey).expect("encryption");
+            builder.encrypt_to_key(&mut rng, pkey).expect("encryption");
 
             builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
             let encrypted = builder.to_vec(&mut rng).expect("writing");
@@ -2170,7 +2171,7 @@ mod tests {
                 ChunkSize::default(),
             );
             builder
-                .encrypt_to_key(&mut rng, &pkey)
+                .encrypt_to_key(&mut rng, pkey)
                 .expect("encryption")
                 .sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
             let encrypted = builder.to_vec(&mut rng).expect("writing");
@@ -2254,7 +2255,7 @@ mod tests {
                     ChunkSize::default(),
                 );
                 builder
-                    .encrypt_to_key(&mut rng, &pkey1)?
+                    .encrypt_to_key(&mut rng, pkey1)?
                     .sign(&*skey1, Password::empty(), HashAlgorithm::Sha256)
                     .sign(&*skey2, Password::empty(), HashAlgorithm::Sha512);
 
@@ -2397,7 +2398,7 @@ mod tests {
         let mut builder = Builder::from_bytes("plaintext.txt", b"hello world".as_slice())
             .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
         builder
-            .encrypt_to_key_anonymous(&mut rng, &skey.secret_subkeys[0].public_key())
+            .encrypt_to_key_anonymous(&mut rng, skey.secret_subkeys[0].public_key())
             .unwrap();
 
         let encrypted = builder.to_vec(&mut rng).unwrap();
@@ -2440,7 +2441,7 @@ mod tests {
             ChunkSize::default(),
         );
         builder
-            .encrypt_to_key_anonymous(&mut rng, &skey.secret_subkeys[0].public_key())
+            .encrypt_to_key_anonymous(&mut rng, skey.secret_subkeys[0].public_key())
             .unwrap();
 
         let encrypted = builder.to_vec(&mut rng).unwrap();
@@ -2567,7 +2568,7 @@ mod tests {
             .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
         builder
             .set_session_key(MY_TERRIBLE_SESSION_KEY.to_vec().into())?
-            .encrypt_to_key(&mut rng, &skey.secret_subkeys[0].public_key())
+            .encrypt_to_key(&mut rng, skey.secret_subkeys[0].public_key())
             .unwrap();
 
         let encrypted = builder.to_vec(&mut rng).unwrap();
@@ -2620,7 +2621,7 @@ mod tests {
         );
         builder
             .set_session_key(MY_TERRIBLE_SESSION_KEY.to_vec().into())?
-            .encrypt_to_key(&mut rng, &skey.secret_subkeys[0].public_key())
+            .encrypt_to_key(&mut rng, skey.secret_subkeys[0].public_key())
             .unwrap();
 
         let encrypted = builder.to_vec(&mut rng).unwrap();
