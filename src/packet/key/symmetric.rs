@@ -4,6 +4,7 @@
 
 use std::io::BufRead;
 
+use aead::rand_core::CryptoRng;
 use bytes::BytesMut;
 use chrono::{DateTime, Utc};
 use hkdf::Hkdf;
@@ -16,12 +17,13 @@ use crate::{
         aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm, Signer,
     },
-    errors::{bail, ensure_eq, unsupported_err},
+    errors::{bail, ensure, ensure_eq, unsupported_err},
     packet::{PacketHeader, PacketTrait, PubKeyInner},
     ser::Serialize,
     types::{
-        Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PlainSecretParams, PublicKeyTrait,
-        PublicParams, SecretKeyTrait, SecretParams, SignatureBytes, Tag,
+        EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PkeskBytes,
+        PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
+        SignatureBytes, Tag,
     },
 };
 
@@ -155,6 +157,57 @@ impl PersistentSymmetricKey {
         aead.encrypt_in_place(&public_params.sym_alg, &key, &iv, digest, &mut buf)?;
 
         Ok(buf)
+    }
+}
+
+impl EncryptionKey for PersistentSymmetricKey {
+    fn encrypt<R: CryptoRng + Rng>(
+        &self,
+        mut rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> crate::errors::Result<PkeskBytes> {
+        ensure!(
+            matches!(typ, EskType::V6),
+            "only v6 ESK supported right now"
+        );
+
+        let aead = AeadAlgorithm::Ocb; // FIXME: parameter
+
+        // 32 octets of salt. The salt is used to derive the key-encryption key and MUST be
+        // securely generated (see section 13.10 of [RFC9580]).
+        let mut salt: [u8; 32] = [0; 32];
+        rng.fill(&mut salt);
+
+        let SecretParams::Plain(PlainSecretParams::AEAD(secret)) = &self.secret_params else {
+            unimplemented!();
+        };
+
+        let PublicParams::AEAD(public_params) = &self.details.public_params() else {
+            unimplemented!();
+        };
+
+        // A symmetric key encryption of the plaintext value described in section 5.1 of [RFC9580],
+        // performed with the key-encryption key and IV computed as described in Section 7.4,
+        // using the symmetric-key cipher of the key and the indicated AEAD mode, with as
+        // additional data the empty string; including the authentication tag.
+
+        let version = self.details.version().into();
+        let info = (Tag::Signature, version, aead, public_params.sym_alg);
+
+        let (key, iv) = derive(&secret.key, &salt, info);
+
+        let mut buf = BytesMut::with_capacity(64);
+
+        aead.encrypt_in_place(&public_params.sym_alg, &key, &iv, plain, &mut buf)?;
+
+        let encrypted = buf.into();
+
+        Ok(PkeskBytes::Aead {
+            aead,
+            salt,
+            encrypted,
+        })
     }
 }
 
@@ -453,9 +506,11 @@ mod tests {
         );
         builder.encrypt_to_key(&mut rng, &psk).expect("encryption");
 
-        let encrypted = builder.to_vec(&mut rng).expect("writing");
+        let encrypted = builder
+            .to_armored_string(&mut rng, ArmorOptions::default())
+            .expect("writing");
 
-        eprintln!("{:02x?}", encrypted);
+        eprintln!("{}", encrypted);
     }
 
     #[test]
