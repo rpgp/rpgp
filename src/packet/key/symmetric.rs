@@ -5,7 +5,7 @@
 use std::io::BufRead;
 
 use aead::rand_core::CryptoRng;
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use chrono::{DateTime, Utc};
 use hkdf::Hkdf;
 use log::debug;
@@ -193,15 +193,20 @@ impl EncryptionKey for PersistentSymmetricKey {
         // additional data the empty string; including the authentication tag.
 
         let version = self.details.version().into();
-        let info = (Tag::Signature, version, aead, public_params.sym_alg);
+        let info = (
+            Tag::PublicKeyEncryptedSessionKey,
+            version,
+            aead,
+            public_params.sym_alg,
+        );
 
         let (key, iv) = derive(&secret.key, &salt, info);
 
-        let mut buf = BytesMut::with_capacity(64);
+        let mut buf = plain.into();
 
-        aead.encrypt_in_place(&public_params.sym_alg, &key, &iv, plain, &mut buf)?;
+        aead.encrypt_in_place(&public_params.sym_alg, &key, &iv, &[], &mut buf)?;
 
-        let encrypted = buf.into();
+        let encrypted: Bytes = buf.into();
 
         Ok(PkeskBytes::Aead {
             aead,
@@ -380,7 +385,7 @@ impl Serialize for PersistentSymmetricKey {
 /// Returns:
 /// - M bits of key, matching the size of SymmetricKeyAlgorithm,
 /// - N bit of IV, matching the nonce size of AeadAlgorithm
-fn derive(
+pub(crate) fn derive(
     persistent_key: &[u8],
     salt: &[u8; 32],
     info: (Tag, u8, AeadAlgorithm, SymmetricKeyAlgorithm),
@@ -416,7 +421,7 @@ mod tests {
 
     use crate::{
         armor::{BlockType, Dearmor},
-        composed::{ArmorOptions, Message, MessageBuilder},
+        composed::{ArmorOptions, Esk, Message, MessageBuilder},
         crypto::{
             aead::{AeadAlgorithm, ChunkSize},
             aead_key,
@@ -430,8 +435,8 @@ mod tests {
         },
         ser::Serialize,
         types::{
-            AeadPublicParams, KeyVersion, Password, PlainSecretParams, PublicParams, SecretParams,
-            Tag,
+            AeadPublicParams, EskType, KeyVersion, Password, PlainSecretParams, PublicKeyTrait,
+            PublicParams, SecretParams, Tag,
         },
     };
 
@@ -461,7 +466,16 @@ mod tests {
             key: key.to_vec(),
         }));
 
-        PersistentSymmetricKey::new(pk, plainsecret).expect("foo")
+        let psk = PersistentSymmetricKey::new(pk, plainsecret).expect("foo");
+
+        let packet = Packet::from(psk.clone());
+
+        let mut out = Vec::new();
+        crate::armor::write(&packet, BlockType::PrivateKey, &mut out, None, false)
+            .expect("armor writer");
+        eprintln!("{}", String::from_utf8(out).expect("utf8"));
+
+        psk
     }
 
     #[test]
@@ -511,6 +525,40 @@ mod tests {
             .expect("writing");
 
         eprintln!("{}", encrypted);
+
+        let (msg, _) = Message::from_armor(encrypted.as_bytes()).expect("parse");
+
+        eprintln!("{:#?}", msg);
+
+        let Message::Encrypted { esk, .. } = &msg else {
+            panic!("not encrypted");
+        };
+
+        assert_eq!(esk.len(), 1);
+        let esk = &esk[0];
+
+        let Esk::PublicKeyEncryptedSessionKey(pkesk) = esk else {
+            unimplemented!();
+        };
+
+        let SecretParams::Plain(sec_params) = &psk.secret_params else {
+            unimplemented!()
+        };
+
+        let sk = sec_params
+            .decrypt(
+                psk.public_params(),
+                pkesk.values().unwrap(),
+                EskType::V6, // FIXME: generalize
+                &psk,
+            )
+            .expect("decryption failed");
+
+        let mut dec = msg.decrypt_with_session_key(sk).expect("decryption");
+
+        let decrypted = dec.as_data_vec().expect("decryption");
+
+        assert_eq!(PLAIN, decrypted);
     }
 
     #[test]
@@ -520,13 +568,6 @@ mod tests {
         const PLAIN: &[u8] = b"hello world";
 
         let psk = make_psk();
-
-        let packet = Packet::from(psk.clone());
-
-        let mut out = Vec::new();
-        crate::armor::write(&packet, BlockType::PrivateKey, &mut out, None, false)
-            .expect("armor writer");
-        eprintln!("{}", String::from_utf8(out).expect("utf8"));
 
         // let signed = psk.to(&mut rng, ArmorOptions::default()).expect("writing");
 
