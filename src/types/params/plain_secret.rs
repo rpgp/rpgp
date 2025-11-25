@@ -417,6 +417,30 @@ impl PlainSecretParams {
         K: KeyDetails,
     {
         let decrypted_key = match (self, values) {
+            (
+                PlainSecretParams::AEAD(ref priv_key),
+                PkeskBytes::Aead {
+                    aead,
+                    salt,
+                    encrypted,
+                },
+            ) => {
+                let PublicParams::AEAD(pub_param) = pub_params else {
+                    bail!("inconsistent key state");
+                };
+
+                priv_key.decrypt(aead_key::EncryptionFields {
+                    data: encrypted,
+                    aead: *aead,
+                    // PKESK version
+                    version: match typ {
+                        EskType::V3_4 => 3,
+                        EskType::V6 => 6,
+                    },
+                    sym_alg: pub_param.sym_alg,
+                    salt,
+                })?
+            }
             (PlainSecretParams::RSA(ref priv_key), PkeskBytes::Rsa { mpi }) => {
                 priv_key.decrypt(&mpi.to_owned())?
             }
