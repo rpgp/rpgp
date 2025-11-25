@@ -7,7 +7,7 @@ use crate::{errors::Result, parsing_reader::BufReadParsing, ser::Serialize};
 #[derive(derive_more::Debug, PartialEq, Clone)]
 pub struct MlDsa87Ed448PublicParams {
     #[debug("{}", hex::encode(ed448.as_bytes()))]
-    pub ed448: cx448::VerifyingKey,
+    pub ed448: ed448_goldilocks::VerifyingKey,
     #[debug("{}", hex::encode(ml_dsa.encode()))]
     pub ml_dsa: Box<ml_dsa::VerifyingKey<MlDsa87>>,
 }
@@ -18,7 +18,7 @@ impl MlDsa87Ed448PublicParams {
     pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         // ed448 public key
         let p = i.read_array::<57>()?;
-        let ed448 = cx448::VerifyingKey::from_bytes(&p)?;
+        let ed448 = ed448_goldilocks::VerifyingKey::from_bytes(&p)?;
 
         // ML DSA key
         let p = i.read_array::<2592>()?;
@@ -57,9 +57,9 @@ mod tests {
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
             fn from_seed(seed: u64) -> MlDsa87Ed448PublicParams {
-                let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+                let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
 
-                let x = cx448::SigningKey::generate(&mut rng);
+                let x = ed448_goldilocks::SigningKey::generate(&mut rng);
                 let ml = MlDsa87::key_gen(&mut rng);
 
                 MlDsa87Ed448PublicParams {

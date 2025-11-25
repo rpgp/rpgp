@@ -405,7 +405,7 @@ pub(super) mod tests {
 
     proptest::prop_compose! {
         pub fn ecdh_curve25519_gen()(seed: u64) -> x25519_dalek::PublicKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
             let mut secret_key_bytes = [0u8; ECCCurve::Curve25519.secret_key_length()];
             rng.fill_bytes(&mut secret_key_bytes);
 
@@ -416,22 +416,25 @@ pub(super) mod tests {
 
     proptest::prop_compose! {
         pub fn ecdh_p256_gen()(seed: u64) -> elliptic_curve::PublicKey<p256::NistP256> {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            elliptic_curve::SecretKey::<p256::NistP256>::random(&mut rng).public_key()
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
+            let Ok(key) = elliptic_curve::SecretKey::<p256::NistP256>::try_from_rng(&mut rng);
+            key.public_key()
         }
     }
 
     proptest::prop_compose! {
         pub fn ecdh_p384_gen()(seed: u64) -> elliptic_curve::PublicKey<p384::NistP384> {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            elliptic_curve::SecretKey::<p384::NistP384>::random(&mut rng).public_key()
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
+            let Ok(key) = elliptic_curve::SecretKey::<p384::NistP384>::try_from_rng(&mut rng);
+            key.public_key()
         }
     }
 
     proptest::prop_compose! {
         pub fn ecdh_p521_gen()(seed: u64) -> elliptic_curve::PublicKey<p521::NistP521> {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            elliptic_curve::SecretKey::<p521::NistP521>::random(&mut rng).public_key()
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
+            let Ok(key) = elliptic_curve::SecretKey::<p521::NistP521>::try_from_rng(&mut rng);
+            key.public_key()
         }
     }
 
