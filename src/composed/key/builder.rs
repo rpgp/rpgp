@@ -7,15 +7,15 @@ use smallvec::SmallVec;
 
 #[cfg(feature = "draft-pqc")]
 use crate::crypto::{
-    ml_dsa65_ed25519, ml_dsa87_ed448, ml_kem768_x25519, ml_kem1024_x448, slh_dsa_shake128f,
+    ml_dsa65_ed25519, ml_dsa87_ed448, ml_kem1024_x448, ml_kem768_x25519, slh_dsa_shake128f,
     slh_dsa_shake128s, slh_dsa_shake256s,
 };
 use crate::{
     composed::{KeyDetails, SignedSecretKey},
     crypto::{
-        aead::AeadAlgorithm, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed448, ed25519,
-        hash::HashAlgorithm, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x448,
-        x25519,
+        aead::AeadAlgorithm, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
+        hash::HashAlgorithm, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm,
+        x25519, x448,
     },
     errors::Result,
     packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
@@ -286,7 +286,7 @@ impl SecretKeyParams {
             features.set_seipd_v2(true);
         };
 
-        let key = super::secret::SecretKey::new(
+        let key = super::secret::RawSecretKey::new(
             primary_key,
             KeyDetails::new(
                 primary_user_id,
@@ -341,7 +341,7 @@ impl SecretKeyParams {
                         sub.set_password_with_s2k(&passphrase.as_str().into(), s2k)?;
                     }
 
-                    Ok(super::secret::SecretSubkey::new(sub, keyflags, embedded))
+                    Ok((sub, keyflags, embedded))
                 })
                 .collect::<Result<Vec<_>>>()?,
         );
@@ -1316,17 +1316,15 @@ mod tests {
         let signed_public_key = signed_secret_key.signed_public_key();
 
         // The signing capable subkey should have an embedded signature
-        assert!(
-            signed_public_key
-                .public_subkeys
-                .first()
-                .expect("signing subkey")
-                .signatures
-                .first()
-                .expect("binding signature")
-                .embedded_signature()
-                .is_some()
-        );
+        assert!(signed_public_key
+            .public_subkeys
+            .first()
+            .expect("signing subkey")
+            .signatures
+            .first()
+            .expect("binding signature")
+            .embedded_signature()
+            .is_some());
 
         signed_public_key.verify().expect("invalid public key");
     }

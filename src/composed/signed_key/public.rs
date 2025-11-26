@@ -5,12 +5,12 @@ use rand::{CryptoRng, Rng};
 
 use crate::{
     armor,
-    composed::{ArmorOptions, signed_key::SignedKeyDetails},
+    composed::{signed_key::SignedKeyDetails, ArmorOptions},
     crypto::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{Result, bail, ensure},
+    errors::{bail, ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{
