@@ -1891,7 +1891,7 @@ mod tests {
 
         let mut sink = vec![];
         parsed.read_to_end(&mut sink).expect("read message");
-        parsed.verify(&*pkey).expect("verify");
+        parsed.verify(pkey).expect("verify");
     }
 
     #[test]
@@ -1917,7 +1917,7 @@ mod tests {
             .0;
         let mut sink = vec![];
         parsed.read_to_end(&mut sink).expect("read message");
-        parsed.verify(&*pkey).unwrap();
+        parsed.verify(pkey).unwrap();
     }
 
     #[test]
@@ -1946,7 +1946,7 @@ mod tests {
         let mut sink = vec![];
         decompressed.read_to_end(&mut sink).expect("read message");
 
-        decompressed.verify(&*pkey).unwrap();
+        decompressed.verify(pkey).unwrap();
     }
 
     #[test]
@@ -1988,7 +1988,7 @@ mod tests {
             let mut sink = vec![];
             parsed.read_to_end(&mut sink).expect("read message");
             assert_eq!(sink, input);
-            parsed.verify(&*pkey).expect("signature verification");
+            parsed.verify(pkey).expect("signature verification");
         }
     }
 
@@ -2017,7 +2017,7 @@ mod tests {
 
         let mut sink = vec![];
         parsed.read_to_end(&mut sink).expect("read message");
-        parsed.verify(&*pkey).unwrap();
+        parsed.verify(pkey).unwrap();
     }
 
     #[test]
@@ -2051,7 +2051,7 @@ mod tests {
             let mut decompressed = parsed.decompress().expect("decompress");
             let mut sink = vec![];
             decompressed.read_to_end(&mut sink).expect("read message");
-            decompressed.verify(&*pkey).unwrap();
+            decompressed.verify(pkey).unwrap();
         }
     }
 }

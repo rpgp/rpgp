@@ -273,7 +273,7 @@ fn test_ml_kem_1024_x448() -> TestResult {
 
         let data = msg.as_data_string()?;
         assert_eq!(data, "Testing\n");
-        msg.verify(&*key_a.public_key())?;
+        msg.verify(key_a.public_key())?;
         dbg!(&msg);
     }
 

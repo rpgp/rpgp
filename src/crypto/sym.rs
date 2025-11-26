@@ -136,6 +136,7 @@ pub enum SymmetricKeyAlgorithm {
     Other(#[cfg_attr(test, proptest(strategy = "111u8.."))] u8),
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for SymmetricKeyAlgorithm {
     fn default() -> Self {
         Self::AES128
