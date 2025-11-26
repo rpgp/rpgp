@@ -163,8 +163,7 @@ fn bench_message(c: &mut Criterion) {
                     let mut rng = rand::thread_rng();
                     rng.fill_bytes(&mut bytes);
 
-                    let key = build_key(kt1.clone(), kt2.clone());
-                    let signed_key = key.sign(&mut rng, &Password::empty()).unwrap();
+                    let signed_key = build_key(kt1.clone(), kt2.clone());
 
                     // let message = Message::new_literal_bytes("test", &bytes).unwrap();
 
@@ -193,8 +192,7 @@ fn bench_message(c: &mut Criterion) {
                     let mut rng = rand::thread_rng();
                     rng.fill_bytes(&mut bytes);
 
-                    let key = build_key(kt1.clone(), kt2.clone());
-                    let signed_key = key.sign(&mut rng, &Password::empty()).unwrap();
+                    let signed_key = build_key(kt1.clone(), kt2.clone());
 
                     let mut builder =
                         MessageBuilder::from_reader("", &bytes[..]).seipd_v1(&mut rng, sym);
