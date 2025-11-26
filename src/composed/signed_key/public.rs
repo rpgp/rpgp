@@ -156,34 +156,6 @@ impl SignedPublicKey {
     ) -> Result<PkeskBytes> {
         self.primary_key.encrypt(rng, plain, typ)
     }
-
-    // /// Signs this key based on the current information.
-    // pub fn sign<R, K, P>(
-    //     self,
-    //     mut rng: R,
-    //     sec_key: &K,
-    //     pub_key: &P,
-    //     key_pw: &Password,
-    // ) -> Result<Self>
-    // where
-    //     R: CryptoRng + Rng,
-    //     K: SecretKeyTrait,
-    //     P: PublicKeyTrait + Serialize,
-    // {
-    //     let primary_key = self.primary_key;
-    //     let details = self.details.sign(&mut rng, sec_key, pub_key, key_pw)?;
-    //     let public_subkeys = self
-    //         .public_subkeys
-    //         .into_iter()
-    //         .map(|k| k.sign(&mut rng, sec_key, pub_key, key_pw))
-    //         .collect::<Result<Vec<_>>>()?;
-
-    //     Ok(SignedPublicKey {
-    //         primary_key,
-    //         details,
-    //         public_subkeys,
-    //     })
-    // }
 }
 
 impl KeyDetails for SignedPublicKey {
@@ -310,37 +282,6 @@ impl SignedPublicSubKey {
     ) -> Result<PkeskBytes> {
         self.key.encrypt(rng, plain, typ)
     }
-
-    // pub fn sign<R, K, P>(
-    //     self,
-    //     mut rng: R,
-    //     primary_sec_key: &K,
-    //     primary_pub_key: &P,
-    //     key_pw: &Password,
-    // ) -> Result<Self>
-    // where
-    //     R: CryptoRng + Rng,
-    //     K: SecretKeyTrait,
-    //     P: PublicKeyTrait + Serialize,
-    // {
-    //     let key = self.key;
-
-    //     let signatures = vec![key.sign(
-    //         &mut rng,
-    //         primary_sec_key,
-    //         primary_pub_key,
-    //         key_pw,
-    //         self.keyflags.clone(),
-    //         self.embedded.clone(),
-    //     )?];
-
-    //     Ok(Self {
-    //         key,
-    //         signatures,
-    //         keyflags: self.keyflags,
-    //         embedded: self.embedded,
-    //     })
-    // }
 }
 
 impl Imprint for SignedPublicSubKey {
