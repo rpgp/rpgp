@@ -2,7 +2,6 @@ use std::{io, ops::Deref};
 
 use generic_array::GenericArray;
 use log::{debug, warn};
-use rand::{CryptoRng, Rng};
 
 use crate::{
     armor,
@@ -160,15 +159,6 @@ impl SignedSecretKey {
         Ok(res)
     }
 
-    pub fn encrypt<R: Rng + CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        self.primary_key.encrypt(rng, plain, typ)
-    }
-
     pub fn public_key(&self) -> PublicKey {
         let mut subkeys: Vec<PublicSubkey> = self
             .public_subkeys
@@ -293,15 +283,6 @@ impl SignedSecretSubKey {
         }
 
         Ok(())
-    }
-
-    pub fn encrypt<R: Rng + CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        self.key.encrypt(rng, plain, typ)
     }
 
     /// Drops the secret key material in this subkey.

@@ -5,7 +5,7 @@ use generic_array::GenericArray;
 use log::debug;
 use rand::{CryptoRng, Rng};
 
-use super::public::{encrypt, PubKeyInner};
+use super::public::PubKeyInner;
 use crate::{
     crypto::{
         hash::{HashAlgorithm, KnownDigest},
@@ -18,9 +18,9 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion,
-        Password, PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait,
-        SecretParams, SignatureBytes, Tag,
+        EddsaLegacyPublicParams, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Password,
+        PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
+        SignatureBytes, Tag,
     },
 };
 
@@ -395,15 +395,6 @@ impl SecretKey {
 
         Ok(())
     }
-
-    pub fn encrypt<R: rand::Rng + rand::CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        encrypt(&self.details, rng, plain, typ)
-    }
 }
 
 impl SecretSubkey {
@@ -486,15 +477,6 @@ impl SecretSubkey {
             keyflags,
             embedded,
         )
-    }
-
-    pub fn encrypt<R: rand::Rng + rand::CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        encrypt(&self.details, rng, plain, typ)
     }
 }
 

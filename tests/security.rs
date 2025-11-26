@@ -190,7 +190,7 @@ fn rpg_021_signed_secret_key_encrypt_panic1() {
     //
     // crash also happens with pgp::types::EskType::V3_4
     let _ciphertext = {
-        key.encrypt(
+        key.primary_key.public_key().encrypt(
             &mut rng,
             dummy_plaintext.as_slice(),
             pgp::types::EskType::V6,
