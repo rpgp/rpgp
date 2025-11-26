@@ -236,11 +236,10 @@ fn gen_key<R: RngCore + CryptoRng>(mut rng: R) -> TestResult<SignedSecretKey> {
         .build()
         .unwrap();
 
-    let key = key_params
+    let signed_key = key_params
         .generate(&mut rng)
         .expect("failed to generate secret key");
 
-    let signed_key = key.sign(&mut rng, &"".into())?;
     signed_key.verify()?;
 
     Ok(signed_key)
@@ -261,7 +260,7 @@ fn test_ml_kem_1024_x448() -> TestResult {
     builder
         .sign(&*key_a, Password::empty(), HashAlgorithm::Sha3_512)
         // encrypting to the PQ subkey
-        .encrypt_to_key(&mut rng, &key_b.public_key().public_subkeys[0])?;
+        .encrypt_to_key(&mut rng, &key_b.signed_public_key().public_subkeys[0])?;
 
     let out = builder.to_armored_string(&mut rng, Default::default())?;
 

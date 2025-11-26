@@ -5,17 +5,13 @@ use rand::{CryptoRng, Rng};
 
 use crate::{
     armor,
-    composed::{
-        key::{PublicKey, PublicSubkey},
-        signed_key::SignedKeyDetails,
-        ArmorOptions,
-    },
+    composed::{ArmorOptions, signed_key::SignedKeyDetails},
     crypto::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{bail, ensure, Result},
-    packet::{self, Packet, PacketTrait, SignatureType, SubpacketData},
+    errors::{Result, bail, ensure},
+    packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{
         EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes,
@@ -152,17 +148,6 @@ impl SignedPublicKey {
         Ok(res)
     }
 
-    pub fn as_unsigned(&self) -> PublicKey {
-        PublicKey::new(
-            self.primary_key.clone(),
-            self.details.as_unsigned(),
-            self.public_subkeys
-                .iter()
-                .map(SignedPublicSubKey::as_unsigned)
-                .collect(),
-        )
-    }
-
     pub fn encrypt<R: Rng + CryptoRng>(
         &self,
         rng: R,
@@ -171,6 +156,34 @@ impl SignedPublicKey {
     ) -> Result<PkeskBytes> {
         self.primary_key.encrypt(rng, plain, typ)
     }
+
+    // /// Signs this key based on the current information.
+    // pub fn sign<R, K, P>(
+    //     self,
+    //     mut rng: R,
+    //     sec_key: &K,
+    //     pub_key: &P,
+    //     key_pw: &Password,
+    // ) -> Result<Self>
+    // where
+    //     R: CryptoRng + Rng,
+    //     K: SecretKeyTrait,
+    //     P: PublicKeyTrait + Serialize,
+    // {
+    //     let primary_key = self.primary_key;
+    //     let details = self.details.sign(&mut rng, sec_key, pub_key, key_pw)?;
+    //     let public_subkeys = self
+    //         .public_subkeys
+    //         .into_iter()
+    //         .map(|k| k.sign(&mut rng, sec_key, pub_key, key_pw))
+    //         .collect::<Result<Vec<_>>>()?;
+
+    //     Ok(SignedPublicKey {
+    //         primary_key,
+    //         details,
+    //         public_subkeys,
+    //     })
+    // }
 }
 
 impl KeyDetails for SignedPublicKey {
@@ -289,21 +302,6 @@ impl SignedPublicSubKey {
         Ok(())
     }
 
-    pub fn as_unsigned(&self) -> PublicSubkey {
-        let sig = self.signatures.first().expect("missing signatures");
-
-        let embedded = sig.config().and_then(|c| {
-            c.hashed_subpackets().find_map(|p| match &p.data {
-                SubpacketData::EmbeddedSignature(backsig) => Some(*backsig.clone()),
-                _ => None,
-            })
-        });
-
-        let keyflags = sig.key_flags();
-
-        PublicSubkey::new(self.key.clone(), keyflags, embedded)
-    }
-
     pub fn encrypt<R: Rng + CryptoRng>(
         &self,
         rng: R,
@@ -312,6 +310,37 @@ impl SignedPublicSubKey {
     ) -> Result<PkeskBytes> {
         self.key.encrypt(rng, plain, typ)
     }
+
+    // pub fn sign<R, K, P>(
+    //     self,
+    //     mut rng: R,
+    //     primary_sec_key: &K,
+    //     primary_pub_key: &P,
+    //     key_pw: &Password,
+    // ) -> Result<Self>
+    // where
+    //     R: CryptoRng + Rng,
+    //     K: SecretKeyTrait,
+    //     P: PublicKeyTrait + Serialize,
+    // {
+    //     let key = self.key;
+
+    //     let signatures = vec![key.sign(
+    //         &mut rng,
+    //         primary_sec_key,
+    //         primary_pub_key,
+    //         key_pw,
+    //         self.keyflags.clone(),
+    //         self.embedded.clone(),
+    //     )?];
+
+    //     Ok(Self {
+    //         key,
+    //         signatures,
+    //         keyflags: self.keyflags,
+    //         embedded: self.embedded,
+    //     })
+    // }
 }
 
 impl Imprint for SignedPublicSubKey {

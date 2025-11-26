@@ -46,8 +46,8 @@
 //! [signing and verifying with external hashing]: super::signed_key
 
 mod builder;
-mod public;
-mod secret;
+pub(crate) mod public;
+pub(crate) mod secret;
 mod shared;
 
-pub use self::{builder::*, public::*, secret::*, shared::*};
+pub use self::{builder::*, shared::*};

@@ -2,7 +2,7 @@ use aes_gcm::aead::rand_core::CryptoRng;
 use rand::Rng;
 
 use crate::{
-    composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey},
+    composed::{KeyDetails, SignedSecretKey, SignedSecretSubKey, public::PublicSubkey},
     errors::Result,
     packet::{self, KeyFlags, Signature},
     ser::Serialize,
@@ -12,7 +12,7 @@ use crate::{
 /// User facing interface to work with the components of a "Transferable Secret Key (TSK)"
 /// (but without any Signature packets)
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct SecretKey {
+pub(super) struct SecretKey {
     primary_key: packet::SecretKey,
     details: KeyDetails,
     public_subkeys: Vec<PublicSubkey>,
@@ -21,7 +21,7 @@ pub struct SecretKey {
 
 /// Wrapper for a SecretSubkey packet with associated KeyFlags
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct SecretSubkey {
+pub(super) struct SecretSubkey {
     key: packet::SecretSubkey,
     keyflags: KeyFlags,
 
@@ -32,7 +32,7 @@ pub struct SecretSubkey {
 }
 
 impl SecretKey {
-    pub fn new(
+    pub(super) fn new(
         primary_key: packet::SecretKey,
         details: KeyDetails,
         public_subkeys: Vec<PublicSubkey>,
@@ -46,7 +46,7 @@ impl SecretKey {
         }
     }
 
-    pub fn sign<R>(self, mut rng: R, key_pw: &Password) -> Result<SignedSecretKey>
+    pub(super) fn sign<R>(self, mut rng: R, key_pw: &Password) -> Result<SignedSecretKey>
     where
         R: CryptoRng + Rng,
     {
@@ -113,9 +113,6 @@ impl SecretSubkey {
 
 #[cfg(test)]
 mod tests {
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
-
     use super::*;
     use crate::composed::{Deserializable, SignedPublicKey};
 
@@ -132,17 +129,7 @@ mod tests {
         secret.verify().unwrap();
         public.verify().unwrap();
 
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
-        let unsigned_pubkey = secret.public_key();
-
-        let signed_pubkey = unsigned_pubkey
-            .sign(
-                &mut rng,
-                &secret.primary_key,
-                secret.primary_key.public_key(),
-                &Password::empty(),
-            )
-            .unwrap();
+        let signed_pubkey = secret.signed_public_key();
 
         assert_eq!(signed_pubkey.primary_key, public.primary_key);
     }

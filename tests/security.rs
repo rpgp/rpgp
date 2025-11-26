@@ -147,16 +147,17 @@ fn rpg_007_message_from_armor_single_panic1() {
     let _ = Message::from_armor(bad_input);
 }
 
-/// RPG-017
-#[test]
-fn rpg_017_signed_public_key_as_unsigned_panic1() {
-    let bad_input: &[u8] = &[155, 4, 228, 4, 0, 4, 0];
-    let key = pgp::composed::SignedPublicKey::from_bytes(bad_input).unwrap();
-    // expected bug behavior:
-    // thread '<unnamed>' panicked at src/composed/signed_key/shared.rs:116:35:
-    // missing user ids
-    let _ = key.as_unsigned();
-}
+// API removed
+// /// RPG-017
+// #[test]
+// fn rpg_017_signed_public_key_as_unsigned_panic1() {
+//     let bad_input: &[u8] = &[155, 4, 228, 4, 0, 4, 0];
+//     let key = pgp::composed::SignedPublicKey::from_bytes(bad_input).unwrap();
+//     // expected bug behavior:
+//     // thread '<unnamed>' panicked at src/composed/signed_key/shared.rs:116:35:
+//     // missing user ids
+//     let _ = key.as_unsigned();
+// }
 
 /// RPG-021
 /// Actual fix is in RustCrypto/RSA
