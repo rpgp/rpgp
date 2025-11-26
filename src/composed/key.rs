@@ -8,7 +8,7 @@
 //!
 //! ```rust
 //! use pgp::{
-//!     composed::{KeyDetails, KeyType, SecretKey, SecretKeyParamsBuilder, SecretSubkey},
+//!     composed::{KeyDetails, KeyType, SecretKeyParamsBuilder},
 //!     crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
 //!     errors::Result,
 //!     packet::{KeyFlags, UserAttribute, UserId},
