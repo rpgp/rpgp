@@ -1340,7 +1340,7 @@ pub struct KnownKeyFlags {
 /// (Only the first 4 bits have been used so far)
 ///
 /// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-features>
-#[derive(Default, Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Features {
     /// Handles the first byte.
     /// Can be None to encode Features subpackets that are 0 byte long.
@@ -1349,6 +1349,15 @@ pub struct Features {
     /// Any additional features bytes.
     /// (Must be empty if "known" is None.)
     rest: Vec<u8>,
+}
+
+impl Default for Features {
+    fn default() -> Self {
+        Self {
+            first: Some(KnownFeatures::default()),
+            rest: vec![],
+        }
+    }
 }
 
 impl From<&[u8]> for Features {
