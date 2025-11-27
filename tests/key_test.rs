@@ -1294,8 +1294,7 @@ fn test_locked_key() {
         HashAlgorithm::Sha256,
         b"payload".as_slice(),
     )
-    .err()
-    .expect("can't sign with wrong password");
+    .expect_err("can't sign with wrong password");
 
     assert!(matches!(res, Error::InvalidInput { .. }));
 
