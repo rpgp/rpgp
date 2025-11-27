@@ -9,14 +9,13 @@ use crate::{
     crypto::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
-        Encryptor,
     },
     errors::{bail, ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{
-        EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes,
-        PublicKeyTrait, PublicParams, SignatureBytes, Tag,
+        EncryptionKey, EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength,
+        PkeskBytes, PublicKeyTrait, PublicParams, SignatureBytes, Tag,
     },
 };
 
@@ -150,7 +149,7 @@ impl SignedPublicKey {
     }
 }
 
-impl Encryptor for SignedPublicKey {
+impl EncryptionKey for SignedPublicKey {
     fn encrypt<R: Rng + CryptoRng>(
         &self,
         rng: R,
@@ -278,7 +277,7 @@ impl SignedPublicSubKey {
     }
 }
 
-impl Encryptor for SignedPublicSubKey {
+impl EncryptionKey for SignedPublicSubKey {
     fn encrypt<R: Rng + CryptoRng>(
         &self,
         rng: R,

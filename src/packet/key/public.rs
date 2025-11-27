@@ -14,7 +14,6 @@ use crate::{
         self,
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
-        Encryptor,
     },
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     packet::{
@@ -22,9 +21,9 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EcdhPublicParams, EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails,
-        KeyId, KeyVersion, Mpi, Password, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait,
-        SignatureBytes, Tag,
+        EcdhPublicParams, EddsaLegacyPublicParams, EncryptionKey, EskType, Fingerprint, Imprint,
+        KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes, PublicKeyTrait, PublicParams,
+        SecretKeyTrait, SignatureBytes, Tag,
     },
 };
 
@@ -96,7 +95,7 @@ impl PublicKey {
     }
 }
 
-impl Encryptor for PublicKey {
+impl EncryptionKey for PublicKey {
     fn encrypt<R: rand::CryptoRng + rand::Rng>(
         &self,
         rng: R,
@@ -208,7 +207,7 @@ impl PublicSubkey {
     }
 }
 
-impl Encryptor for PublicSubkey {
+impl EncryptionKey for PublicSubkey {
     fn encrypt<R: rand::CryptoRng + rand::Rng>(
         &self,
         rng: R,
@@ -424,7 +423,7 @@ impl PubKeyInner {
     }
 }
 
-impl Encryptor for PubKeyInner {
+impl EncryptionKey for PubKeyInner {
     fn encrypt<R: rand::CryptoRng + rand::Rng>(
         &self,
         mut rng: R,

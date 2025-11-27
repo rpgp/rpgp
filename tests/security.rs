@@ -1,6 +1,6 @@
 use pgp::{
     composed::{Deserializable, Message},
-    crypto::Encryptor,
+    types::EncryptionKey,
 };
 
 /// RPG-022

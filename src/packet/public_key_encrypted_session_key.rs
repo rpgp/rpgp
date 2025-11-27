@@ -7,14 +7,14 @@ use zeroize::Zeroizing;
 
 use crate::{
     composed::RawSessionKey,
-    crypto::{checksum, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm, Encryptor},
+    crypto::{checksum, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
     errors::{bail, ensure_eq, Result},
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PkeskBytes, PkeskVersion,
-        PublicParams, Tag,
+        EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PkeskBytes,
+        PkeskVersion, PublicParams, Tag,
     },
 };
 
@@ -159,7 +159,7 @@ impl PublicKeyEncryptedSessionKey {
     }
 
     /// Encrypts the given session key to `pkey` as a v3 pkesk.
-    pub fn from_session_key_v3<R: CryptoRng + Rng, E: Encryptor>(
+    pub fn from_session_key_v3<R: CryptoRng + Rng, E: EncryptionKey>(
         rng: R,
         session_key: &RawSessionKey,
         alg: SymmetricKeyAlgorithm,
@@ -185,7 +185,7 @@ impl PublicKeyEncryptedSessionKey {
     }
 
     /// Encrypts the given session key to `pkey` as a v6 pkesk.
-    pub fn from_session_key_v6<R: CryptoRng + Rng, E: Encryptor>(
+    pub fn from_session_key_v6<R: CryptoRng + Rng, E: EncryptionKey>(
         rng: R,
         session_key: &RawSessionKey,
         enc: &E,

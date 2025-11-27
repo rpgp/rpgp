@@ -16,7 +16,7 @@ pub use self::{
     compression::CompressionAlgorithm,
     fingerprint::Fingerprint,
     key_id::KeyId,
-    key_traits::{Imprint, KeyDetails, PublicKeyTrait, SecretKeyTrait},
+    key_traits::{EncryptionKey, Imprint, KeyDetails, PublicKeyTrait, SecretKeyTrait},
     mpi::Mpi,
     packet::*,
     params::*,

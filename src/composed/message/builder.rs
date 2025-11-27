@@ -19,7 +19,6 @@ use crate::{
         aead::{AeadAlgorithm, ChunkSize},
         hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
-        Encryptor,
     },
     errors::{bail, ensure, ensure_eq, Result},
     line_writer::{LineBreak, LineWriter},
@@ -31,8 +30,8 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PacketHeaderVersion, PacketLength,
-        Password, SecretKeyTrait, StringToKey, Tag,
+        CompressionAlgorithm, EncryptionKey, Fingerprint, KeyId, KeyVersion, PacketHeaderVersion,
+        PacketLength, Password, SecretKeyTrait, StringToKey, Tag,
     },
     util::{fill_buffer, TeeWriter},
 };
@@ -437,7 +436,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     pub fn encrypt_to_key<RAND, E>(&mut self, mut rng: RAND, enc: &E) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
-        E: Encryptor,
+        E: EncryptionKey,
     {
         // Encrypt (asym) the session key using the provided public key.
         let pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
@@ -456,7 +455,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     pub fn encrypt_to_key_anonymous<RAND, E>(&mut self, mut rng: RAND, enc: &E) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
-        E: Encryptor,
+        E: EncryptionKey,
     {
         // Encrypt (asym) the session key using the provided public key.
         let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
@@ -598,7 +597,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     pub fn encrypt_to_key<RAND, E>(&mut self, mut rng: RAND, enc: &E) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
-        E: Encryptor,
+        E: EncryptionKey,
     {
         // Encrypt (asym) the session key using the provided public key.
         let pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
@@ -616,7 +615,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     pub fn encrypt_to_key_anonymous<RAND, E>(&mut self, mut rng: RAND, enc: &E) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
-        E: Encryptor,
+        E: EncryptionKey,
     {
         // Encrypt (asym) the session key using the provided public key.
         let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(

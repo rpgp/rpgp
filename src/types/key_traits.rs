@@ -4,7 +4,9 @@ use crate::{
         public_key::PublicKeyAlgorithm,
     },
     errors::Result,
-    types::{Fingerprint, KeyId, KeyVersion, Password, PublicParams, SignatureBytes},
+    types::{
+        EskType, Fingerprint, KeyId, KeyVersion, Password, PkeskBytes, PublicParams, SignatureBytes,
+    },
 };
 
 pub trait KeyDetails {
@@ -164,4 +166,15 @@ pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
     /// The recommended hash algorithm to calculate the signature hash digest with,
     /// when using this as a signer
     fn hash_alg(&self) -> HashAlgorithm;
+}
+
+/// Describes keys that can encrypt plain data (i.e. a session key) into data for a
+/// [PKESK](https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio).
+pub trait EncryptionKey: PublicKeyTrait {
+    fn encrypt<R: rand::CryptoRng + rand::Rng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> crate::errors::Result<PkeskBytes>;
 }
