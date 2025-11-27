@@ -57,7 +57,8 @@ pub trait Signer {
     fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> crate::errors::Result<SignatureBytes>;
 }
 
-/// Describes keys that can encrypt data.
+/// Describes keys that can encrypt plain data (i.e. a session key) into data for a
+/// [PKESK](https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio).
 pub trait Encryptor: PublicKeyTrait {
     fn encrypt<R: rand::CryptoRng + rand::Rng>(
         &self,
