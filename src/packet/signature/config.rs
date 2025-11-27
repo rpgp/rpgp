@@ -505,9 +505,13 @@ impl SignatureConfig {
                     // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3.35-3)
                     if let SubpacketData::IssuerFingerprint(fp) = &packet.data {
                         match (self.version(), fp.version()) {
-                            (SignatureVersion::V6, Some(KeyVersion::V6)) => {},
-                            (SignatureVersion::V4, Some(KeyVersion::V4)) => {},
-                            _ => bail!("IntendedRecipientFingerprint {:?} doesn't match signature version {:?}", fp, self.version())
+                            (SignatureVersion::V6, Some(KeyVersion::V6)) => {}
+                            (SignatureVersion::V4, Some(KeyVersion::V4)) => {}
+                            _ => bail!(
+                                "IntendedRecipientFingerprint {:?} doesn't match signature version {:?}",
+                                fp,
+                                self.version()
+                            ),
                         }
                     }
 
@@ -792,7 +796,6 @@ mod tests {
             .build()
             .expect("Must be able to create secret key params");
         let alice = secret_key_params.generate(&mut rng).expect("generate");
-        let alice = alice.sign(&mut rng, &Password::empty()).expect("sign");
 
         // initialize bob
         let mut key_params = SecretKeyParamsBuilder::default();
@@ -803,8 +806,7 @@ mod tests {
         let secret_key_params = key_params
             .build()
             .expect("Must be able to create secret key params");
-        let bob = secret_key_params.generate(&mut rng).expect("generate");
-        let mut bob = bob.sign(&mut rng, &Password::empty()).expect("sign");
+        let mut bob = secret_key_params.generate(&mut rng).expect("generate");
 
         // alice makes a third party direct signature over bob's key
         let mut config =

@@ -410,7 +410,7 @@ fn test_compression_quine() {
     assert_eq!(res.len(), 176);
 
     let msg = Message::from_file("./tests/quine.out").unwrap();
-    assert!(msg.verify(&*pkey).is_err());
+    assert!(msg.verify(pkey).is_err());
 }
 
 #[test]

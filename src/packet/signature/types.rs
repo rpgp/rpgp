@@ -1014,6 +1014,7 @@ pub enum SignatureVersion {
     Other(#[debug("0x{:x}", _0)] u8),
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for SignatureVersion {
     fn default() -> Self {
         Self::V4

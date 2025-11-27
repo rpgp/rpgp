@@ -8,7 +8,7 @@
 //!
 //! ```rust
 //! use pgp::{
-//!     composed::{KeyDetails, KeyType, SecretKey, SecretKeyParamsBuilder, SecretSubkey},
+//!     composed::{KeyDetails, KeyType, SecretKeyParamsBuilder},
 //!     crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
 //!     errors::Result,
 //!     packet::{KeyFlags, UserAttribute, UserId},
@@ -29,13 +29,9 @@
 //! let secret_key_params = key_params
 //!     .build()
 //!     .expect("Must be able to create secret key params");
-//! let secret_key = secret_key_params
+//! let signed_secret_key = secret_key_params
 //!     .generate(thread_rng())
 //!     .expect("Failed to generate a plain key.");
-//! let passwd_fn = Password::empty();
-//! let signed_secret_key = secret_key
-//!     .sign(&mut thread_rng(), &passwd_fn)
-//!     .expect("Must be able to sign its own metadata");
 //! let public_key = signed_secret_key.public_key();
 //! ```
 //!
@@ -46,8 +42,7 @@
 //! [signing and verifying with external hashing]: super::signed_key
 
 mod builder;
-mod public;
 mod secret;
 mod shared;
 
-pub use self::{builder::*, public::*, secret::*, shared::*};
+pub use self::{builder::*, shared::*};

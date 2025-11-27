@@ -432,6 +432,7 @@ impl KeyVersion {
     }
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for KeyVersion {
     fn default() -> Self {
         Self::V4

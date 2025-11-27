@@ -100,6 +100,7 @@ impl FromStr for HashAlgorithm {
     }
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for HashAlgorithm {
     fn default() -> Self {
         Self::Sha256
@@ -171,7 +172,7 @@ impl HashAlgorithm {
             HashAlgorithm::Sha1 => match Sha1::try_digest(data) {
                 CollisionResult::Ok(output) => output.to_vec(),
                 CollisionResult::Collision(_) | CollisionResult::Mitigated(_) => {
-                    return Err(Sha1HashCollisionSnafu {}.build().into())
+                    return Err(Sha1HashCollisionSnafu {}.build().into());
                 }
             },
             HashAlgorithm::Ripemd160 => Ripemd160::digest(data).to_vec(),

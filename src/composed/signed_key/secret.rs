@@ -6,13 +6,12 @@ use log::{debug, warn};
 use crate::{
     armor,
     composed::{
-        key::{PublicKey, PublicSubkey},
         signed_key::{SignedKeyDetails, SignedPublicSubKey},
         ArmorOptions, PlainSessionKey, SignedPublicKey,
     },
     crypto::hash::KnownDigest,
     errors::{ensure, Result},
-    packet::{self, Packet, PacketTrait, SignatureType, SubpacketData},
+    packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{EskType, Imprint, Password, PkeskBytes, PublicKeyTrait, Tag},
 };
@@ -159,22 +158,6 @@ impl SignedSecretKey {
         Ok(res)
     }
 
-    pub fn public_key(&self) -> PublicKey {
-        let mut subkeys: Vec<PublicSubkey> = self
-            .public_subkeys
-            .iter()
-            .map(SignedPublicSubKey::as_unsigned)
-            .collect();
-        let sec_subkeys = self.secret_subkeys.iter().map(|k| k.public_key());
-        subkeys.extend(sec_subkeys);
-
-        PublicKey::new(
-            self.primary_key.public_key().clone(),
-            self.details.as_unsigned(),
-            subkeys,
-        )
-    }
-
     /// Drops the secret key material in both the primary key and all secret subkeys.
     /// All other components of the key remain as they are.
     pub fn signed_public_key(&self) -> SignedPublicKey {
@@ -289,21 +272,6 @@ impl SignedSecretSubKey {
     /// All binding signatures remain as they are.
     pub fn signed_public_key(&self) -> SignedPublicSubKey {
         SignedPublicSubKey::new(self.key.public_key().clone(), self.signatures.clone())
-    }
-
-    pub fn public_key(&self) -> PublicSubkey {
-        let sig = self.signatures.first().expect("invalid signed subkey");
-
-        let keyflags = sig.key_flags();
-
-        let embedded = sig.config().and_then(|c| {
-            c.hashed_subpackets().find_map(|p| match &p.data {
-                SubpacketData::EmbeddedSignature(backsig) => Some(*backsig.clone()),
-                _ => None,
-            })
-        });
-
-        PublicSubkey::new(self.key.public_key().clone(), keyflags, embedded)
     }
 
     /// Decrypts session key using this key.

@@ -12,7 +12,9 @@ use chrono::{DateTime, Utc};
 use num_traits::ToPrimitive;
 use pgp::{
     armor,
-    composed::{Deserializable, PublicOrSecret, SignedPublicKey, SignedSecretKey},
+    composed::{
+        Deserializable, DetachedSignature, PublicOrSecret, SignedPublicKey, SignedSecretKey,
+    },
     crypto::{
         ecdsa::SecretKey as ECDSASecretKey, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
@@ -1272,7 +1274,7 @@ fn test_invalid() {
 
 #[test]
 #[ignore]
-fn test_encrypted_key() {
+fn test_locked_key() {
     let p = Path::new("./tests/key-with-password-123.asc");
     let mut file = read_file(p.to_path_buf());
     let mut rng = ChaChaRng::from_seed([0u8; 32]);
@@ -1283,19 +1285,28 @@ fn test_encrypted_key() {
     let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
     let (key, _headers) = SignedSecretKey::from_string(input).expect("failed to parse key");
     key.verify().expect("invalid key");
-    let unsigned_pubkey = key.public_key();
 
     // Incorrect password results in InvalidInput error.
-    let res = unsigned_pubkey
-        .clone()
-        .sign(&mut rng, &*key, &*key.public_key(), &"".into())
-        .err()
-        .unwrap();
+    let res = DetachedSignature::sign_binary_data(
+        &mut rng,
+        &*key,
+        &"hunter99".into(), // wrong password
+        HashAlgorithm::Sha256,
+        b"payload".as_slice(),
+    )
+    .expect_err("can't sign with wrong password");
 
-    assert!(matches!(res, pgp::errors::Error::InvalidInput { .. }));
-    let _signed_key = unsigned_pubkey
-        .sign(&mut rng, &*key, &*key.public_key(), &"123".into())
-        .unwrap();
+    assert!(matches!(res, Error::InvalidInput { .. }));
+
+    // Correct password can sign.
+    DetachedSignature::sign_binary_data(
+        &mut rng,
+        &*key,
+        &"123".into(),
+        HashAlgorithm::Sha256,
+        b"payload".as_slice(),
+    )
+    .expect("can sign with correct password");
 }
 
 /// Handle a test certificate with key flags that span more than a single `u8`.

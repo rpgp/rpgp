@@ -5,17 +5,13 @@ use rand::{CryptoRng, Rng};
 
 use crate::{
     armor,
-    composed::{
-        key::{PublicKey, PublicSubkey},
-        signed_key::SignedKeyDetails,
-        ArmorOptions,
-    },
+    composed::{signed_key::SignedKeyDetails, ArmorOptions},
     crypto::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
     },
     errors::{bail, ensure, Result},
-    packet::{self, Packet, PacketTrait, SignatureType, SubpacketData},
+    packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{
         EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes,
@@ -152,17 +148,6 @@ impl SignedPublicKey {
         Ok(res)
     }
 
-    pub fn as_unsigned(&self) -> PublicKey {
-        PublicKey::new(
-            self.primary_key.clone(),
-            self.details.as_unsigned(),
-            self.public_subkeys
-                .iter()
-                .map(SignedPublicSubKey::as_unsigned)
-                .collect(),
-        )
-    }
-
     pub fn encrypt<R: Rng + CryptoRng>(
         &self,
         rng: R,
@@ -287,21 +272,6 @@ impl SignedPublicSubKey {
         }
 
         Ok(())
-    }
-
-    pub fn as_unsigned(&self) -> PublicSubkey {
-        let sig = self.signatures.first().expect("missing signatures");
-
-        let embedded = sig.config().and_then(|c| {
-            c.hashed_subpackets().find_map(|p| match &p.data {
-                SubpacketData::EmbeddedSignature(backsig) => Some(*backsig.clone()),
-                _ => None,
-            })
-        });
-
-        let keyflags = sig.key_flags();
-
-        PublicSubkey::new(self.key.clone(), keyflags, embedded)
     }
 
     pub fn encrypt<R: Rng + CryptoRng>(

@@ -3,7 +3,6 @@ use std::io::{self, BufRead};
 use byteorder::{LittleEndian, WriteBytesExt};
 use bytes::Bytes;
 use chrono::{SubsecRound, Utc};
-use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use rand::{CryptoRng, Rng};
 

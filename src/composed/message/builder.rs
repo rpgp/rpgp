@@ -2020,7 +2020,7 @@ mod tests {
 
             // verify signature
             assert!(message.is_one_pass_signed());
-            message.verify(&*skey.public_key()).expect("signed");
+            message.verify(skey.public_key()).expect("signed");
 
             assert_eq!(message.literal_data_header().unwrap().file_name(), "");
         }
@@ -2083,7 +2083,7 @@ mod tests {
             // verify signature
             dbg!(&message);
             assert!(message.is_one_pass_signed());
-            message.verify(&*skey.public_key()).expect("signed");
+            message.verify(skey.public_key()).expect("signed");
 
             assert_eq!(message.literal_data_header().unwrap().file_name(), "");
         }
@@ -2192,7 +2192,7 @@ mod tests {
                 decompressed.as_data_string().unwrap(),
                 buf, // normalize_lines(&buf, LineBreak::Crlf),
             );
-            decompressed.verify(&*skey.public_key()).expect("signed");
+            decompressed.verify(skey.public_key()).expect("signed");
 
             assert_eq!(decompressed.literal_data_header().unwrap().file_name(), "");
         }
@@ -2287,8 +2287,7 @@ mod tests {
                     buf, // normalize_lines(&buf, LineBreak::Crlf),
                 );
 
-                let res =
-                    decompressed.verify_nested(&[&*skey1.public_key(), &*skey2.public_key()])?;
+                let res = decompressed.verify_nested(&[skey1.public_key(), skey2.public_key()])?;
                 assert_eq!(res.len(), 2);
                 assert!(matches!(res[0], VerificationResult::Valid(_)));
                 assert!(matches!(res[1], VerificationResult::Valid(_)));
@@ -2368,8 +2367,7 @@ mod tests {
                     buf, // normalize_lines(&buf, LineBreak::Crlf),
                 );
 
-                let res =
-                    decompressed.verify_nested(&[&*skey1.public_key(), &*skey2.public_key()])?;
+                let res = decompressed.verify_nested(&[skey1.public_key(), skey2.public_key()])?;
                 assert_eq!(res.len(), 2);
                 let VerificationResult::Valid(ref sig1) = res[0] else {
                     panic!("invalid sig1");

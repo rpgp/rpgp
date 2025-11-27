@@ -1,5 +1,5 @@
 use pgp::{
-    composed::{KeyType, SecretKey, SecretKeyParamsBuilder, SubkeyParamsBuilder},
+    composed::{KeyType, SecretKeyParamsBuilder, SignedSecretKey, SubkeyParamsBuilder},
     crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
     types::CompressionAlgorithm,
 };
@@ -10,7 +10,7 @@ pub mod key;
 pub mod message;
 pub mod s2k;
 
-pub fn build_key(kt: KeyType, kt_sub: KeyType) -> SecretKey {
+pub fn build_key(kt: KeyType, kt_sub: KeyType) -> SignedSecretKey {
     let key_params = SecretKeyParamsBuilder::default()
         .key_type(kt)
         .can_certify(true)

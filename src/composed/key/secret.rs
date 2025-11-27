@@ -2,43 +2,30 @@ use aes_gcm::aead::rand_core::CryptoRng;
 use rand::Rng;
 
 use crate::{
-    composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey},
+    composed::{KeyDetails, SignedPublicSubKey, SignedSecretKey, SignedSecretSubKey},
     errors::Result,
     packet::{self, KeyFlags, Signature},
-    ser::Serialize,
-    types::{Password, PublicKeyTrait, SecretKeyTrait},
+    types::Password,
 };
 
-/// User facing interface to work with the components of a "Transferable Secret Key (TSK)"
+/// Internal building block to represent the components of a "Transferable Secret Key (TSK)"
 /// (but without any Signature packets)
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct SecretKey {
+pub(super) struct RawSecretKey {
     primary_key: packet::SecretKey,
     details: KeyDetails,
-    public_subkeys: Vec<PublicSubkey>,
-    secret_subkeys: Vec<SecretSubkey>,
+    public_subkeys: Vec<(packet::PublicSubkey, KeyFlags, Option<Signature>)>,
+    secret_subkeys: Vec<(packet::SecretSubkey, KeyFlags, Option<Signature>)>,
 }
 
-/// Wrapper for a SecretSubkey packet with associated KeyFlags
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct SecretSubkey {
-    key: packet::SecretSubkey,
-    keyflags: KeyFlags,
-
-    /// Embedded primary key binding signature, required for signing-capable subkeys.
-    ///
-    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#sigtype-primary-binding>
-    pub embedded: Option<Signature>,
-}
-
-impl SecretKey {
-    pub fn new(
+impl RawSecretKey {
+    pub(super) fn new(
         primary_key: packet::SecretKey,
         details: KeyDetails,
-        public_subkeys: Vec<PublicSubkey>,
-        secret_subkeys: Vec<SecretSubkey>,
+        public_subkeys: Vec<(packet::PublicSubkey, KeyFlags, Option<Signature>)>,
+        secret_subkeys: Vec<(packet::SecretSubkey, KeyFlags, Option<Signature>)>,
     ) -> Self {
-        SecretKey {
+        RawSecretKey {
             primary_key,
             details,
             public_subkeys,
@@ -46,7 +33,7 @@ impl SecretKey {
         }
     }
 
-    pub fn sign<R>(self, mut rng: R, key_pw: &Password) -> Result<SignedSecretKey>
+    pub(super) fn sign<R>(self, mut rng: R, key_pw: &Password) -> Result<SignedSecretKey>
     where
         R: CryptoRng + Rng,
     {
@@ -57,12 +44,40 @@ impl SecretKey {
         let public_subkeys = self
             .public_subkeys
             .into_iter()
-            .map(|k| k.sign(&mut rng, &primary_key, primary_key.public_key(), key_pw))
+            .map(|(sub_key, keyflags, embedded)| {
+                // Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
+                let signature = sub_key.sign(
+                    &mut rng,
+                    &primary_key,
+                    primary_key.public_key(),
+                    key_pw,
+                    keyflags,
+                    embedded,
+                )?;
+                Ok(SignedPublicSubKey {
+                    key: sub_key,
+                    signatures: vec![signature],
+                })
+            })
             .collect::<Result<Vec<_>>>()?;
         let secret_subkeys = self
             .secret_subkeys
             .into_iter()
-            .map(|k| k.sign(&mut rng, &primary_key, primary_key.public_key(), key_pw))
+            .map(|(sub_key, keyflags, embedded)| {
+                // Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
+                let signature = sub_key.sign(
+                    &mut rng,
+                    &primary_key,
+                    primary_key.public_key(),
+                    key_pw,
+                    keyflags,
+                    embedded,
+                )?;
+                Ok(SignedSecretSubKey {
+                    key: sub_key,
+                    signatures: vec![signature],
+                })
+            })
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedSecretKey {
@@ -74,48 +89,8 @@ impl SecretKey {
     }
 }
 
-impl SecretSubkey {
-    pub fn new(key: packet::SecretSubkey, keyflags: KeyFlags, embedded: Option<Signature>) -> Self {
-        SecretSubkey {
-            key,
-            keyflags,
-            embedded,
-        }
-    }
-
-    /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
-    pub fn sign<R, K, P>(
-        self,
-        mut rng: R,
-        primary_sec_key: &K,
-        primary_pub_key: &P,
-        key_pw: &Password,
-    ) -> Result<SignedSecretSubKey>
-    where
-        R: CryptoRng + Rng,
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
-    {
-        let key = self.key;
-
-        let signatures = vec![key.sign(
-            &mut rng,
-            primary_sec_key,
-            primary_pub_key,
-            key_pw,
-            self.keyflags,
-            self.embedded,
-        )?];
-
-        Ok(SignedSecretSubKey { key, signatures })
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
-
     use super::*;
     use crate::composed::{Deserializable, SignedPublicKey};
 
@@ -132,17 +107,7 @@ mod tests {
         secret.verify().unwrap();
         public.verify().unwrap();
 
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
-        let unsigned_pubkey = secret.public_key();
-
-        let signed_pubkey = unsigned_pubkey
-            .sign(
-                &mut rng,
-                &secret.primary_key,
-                secret.primary_key.public_key(),
-                &Password::empty(),
-            )
-            .unwrap();
+        let signed_pubkey = secret.signed_public_key();
 
         assert_eq!(signed_pubkey.primary_key, public.primary_key);
     }

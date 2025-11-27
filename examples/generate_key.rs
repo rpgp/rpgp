@@ -5,7 +5,7 @@ use pgp::{
     },
     crypto::ecc_curve::ECCCurve,
     ser::Serialize,
-    types::{KeyDetails, Password},
+    types::KeyDetails,
 };
 use rand::thread_rng;
 
@@ -92,14 +92,11 @@ fn keygen(
 
     // Generate the components of the private key (in particular: the secret key packets)
     let secret_key_params = key_params.build().expect("Build secret_key_params");
-    let secret_key = secret_key_params
-        .generate(thread_rng())
-        .expect("Generate plain key");
 
     // Produce binding self-signatures that link all the components together
-    let signed = secret_key
-        .sign(&mut thread_rng(), &Password::from(""))
-        .expect("Sign SecretKey");
+    let signed = secret_key_params
+        .generate(thread_rng())
+        .expect("Generate plain key");
 
     Ok(signed)
 }
