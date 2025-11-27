@@ -8,7 +8,7 @@ use crate::{
     types::Password,
 };
 
-/// Interanal building block to represent the components of a "Transferable Secret Key (TSK)"
+/// Internal building block to represent the components of a "Transferable Secret Key (TSK)"
 /// (but without any Signature packets)
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub(super) struct RawSecretKey {
