@@ -1,3 +1,5 @@
+use rand::{CryptoRng, Rng};
+
 use crate::{
     crypto::{
         hash::{HashAlgorithm, KnownDigest},
@@ -177,4 +179,15 @@ pub trait EncryptionKey: PublicKeyTrait {
         plain: &[u8],
         typ: EskType,
     ) -> crate::errors::Result<PkeskBytes>;
+}
+
+impl<T: EncryptionKey> EncryptionKey for &T {
+    fn encrypt<R: CryptoRng + Rng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        (*self).encrypt(rng, plain, typ)
+    }
 }
