@@ -594,16 +594,16 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// [PK ESK]: https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio
     /// # References
     /// [RFC 9580 &sect; 5.1 - Public Key Encrypted Session Key Packet](https://www.rfc-editor.org/rfc/rfc9580#section-5.1)
-    pub fn encrypt_to_key<RAND, K>(&mut self, mut rng: RAND, pkey: &K) -> Result<&mut Self>
+    pub fn encrypt_to_key<RAND, E>(&mut self, mut rng: RAND, enc: &E) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
-        K: crate::types::PublicKeyTrait,
+        E: EncryptionKey,
     {
         // Encrypt (asym) the session key using the provided public key.
         let pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
             &mut rng,
             &self.encryption.session_key,
-            pkey,
+            enc,
         )?;
         self.encryption.pub_esks.push(pkes);
         Ok(self)
@@ -612,20 +612,16 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// Encrypt to a public key, but leave the recipient field unset
     ///
     /// See [encrypt_to_key][Self::encrypt_to_key] for more information
-    pub fn encrypt_to_key_anonymous<RAND, K>(
-        &mut self,
-        mut rng: RAND,
-        pkey: &K,
-    ) -> Result<&mut Self>
+    pub fn encrypt_to_key_anonymous<RAND, E>(&mut self, mut rng: RAND, enc: &E) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
-        K: crate::types::PublicKeyTrait,
+        E: EncryptionKey,
     {
         // Encrypt (asym) the session key using the provided public key.
         let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
             &mut rng,
             &self.encryption.session_key,
-            pkey,
+            enc,
         )?;
         // Blank out the recipient id
         if let PublicKeyEncryptedSessionKey::V6 { fingerprint, .. } = &mut pkes {
