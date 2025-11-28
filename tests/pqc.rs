@@ -104,7 +104,7 @@ impl TestCase {
                 builder
                     .sign(&*sec_key, Password::empty(), *hash)
                     // encrypting to the PQ subkey
-                    .encrypt_to_key(&mut rng, pub_key.public_subkeys.last().unwrap())?;
+                    .encrypt_to_key(&mut rng, &pub_key.public_subkeys.last().unwrap())?;
 
                 let out = builder.to_armored_string(&mut rng, Default::default())?;
 

@@ -108,7 +108,7 @@ fn rfc9580_seipdv1_roundtrip() {
         // SEIPDv1 encrypt/decrypt roundtrip
         let mut builder = MessageBuilder::from_bytes("", MSG.as_bytes())
             .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
-        builder.encrypt_to_key(&mut rng, enc_subkey).unwrap();
+        builder.encrypt_to_key(&mut rng, &enc_subkey).unwrap();
         let enc = builder.to_vec(&mut rng).unwrap();
 
         let msg = Message::from_bytes(&enc[..]).unwrap();
@@ -137,7 +137,7 @@ fn rfc9580_seipdv2_roundtrip() {
             AeadAlgorithm::Ocb,
             ChunkSize::default(),
         );
-        builder.encrypt_to_key(&mut rng, enc_subkey).unwrap();
+        builder.encrypt_to_key(&mut rng, &enc_subkey).unwrap();
         let enc = builder.to_vec(&mut rng).unwrap();
 
         let msg = Message::from_bytes(&enc[..]).unwrap();
