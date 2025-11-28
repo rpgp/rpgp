@@ -102,7 +102,7 @@ impl EncryptionKey for PublicKey {
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
-        self.inner.encrypt(rng, plain, typ)
+        encrypt(&self.inner, rng, plain, typ)
     }
 }
 
@@ -214,7 +214,7 @@ impl EncryptionKey for PublicSubkey {
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
-        self.inner.encrypt(rng, plain, typ)
+        encrypt(&self.inner, rng, plain, typ)
     }
 }
 
@@ -421,171 +421,170 @@ impl PubKeyInner {
 
         config.sign_key(key, key_pw, &self)
     }
+}
 
-    pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng>(
-        &self,
-        mut rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        match self.public_params() {
-            PublicParams::RSA(ref params) => crypto::rsa::encrypt(rng, &params.key, plain),
-            PublicParams::EdDSALegacy { .. } => bail!("EdDSALegacy is only used for signing"),
-            PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
-            PublicParams::Ed448 { .. } => bail!("Ed448 is only used for signing"),
-            PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
-            PublicParams::ECDH(ref params) => match params {
-                EcdhPublicParams::Unsupported { ref curve, .. } => {
-                    unsupported_err!("ECDH over curve {:?} is unsupported", curve)
-                }
-                _ => {
-                    if self.version() == KeyVersion::V6 {
-                        // An implementation MUST NOT encrypt any message to a version 6 ECDH key over a
-                        // listed curve that announces a different KDF or KEK parameter.
-                        //
-                        // (See https://www.rfoc-editor.org/rfc/rfc9580.html#section-11.5.1-2)
-                        let curve = params.curve();
-                        match params {
-                            EcdhPublicParams::Curve25519 { hash, alg_sym, .. }
-                            | EcdhPublicParams::P256 { hash, alg_sym, .. }
-                            | EcdhPublicParams::P521 { hash, alg_sym, .. }
-                            | EcdhPublicParams::P384 { hash, alg_sym, .. } => {
-                                if curve.hash_algo()? != *hash || curve.sym_algo()? != *alg_sym {
-                                    bail!("Unsupported KDF/KEK parameters for {:?} and KeyVersion::V6: {:?}, {:?}", curve, hash, alg_sym);
-                                }
+pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
+    key: &K,
+    mut rng: R,
+    plain: &[u8],
+    typ: EskType,
+) -> Result<PkeskBytes> {
+    match key.public_params() {
+        PublicParams::RSA(ref params) => crypto::rsa::encrypt(rng, &params.key, plain),
+        PublicParams::EdDSALegacy { .. } => bail!("EdDSALegacy is only used for signing"),
+        PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
+        PublicParams::Ed448 { .. } => bail!("Ed448 is only used for signing"),
+        PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
+        PublicParams::ECDH(ref params) => match params {
+            EcdhPublicParams::Unsupported { ref curve, .. } => {
+                unsupported_err!("ECDH over curve {:?} is unsupported", curve)
+            }
+            _ => {
+                if key.version() == KeyVersion::V6 {
+                    // An implementation MUST NOT encrypt any message to a version 6 ECDH key over a
+                    // listed curve that announces a different KDF or KEK parameter.
+                    //
+                    // (See https://www.rfoc-editor.org/rfc/rfc9580.html#section-11.5.1-2)
+                    let curve = params.curve();
+                    match params {
+                        EcdhPublicParams::Curve25519 { hash, alg_sym, .. }
+                        | EcdhPublicParams::P256 { hash, alg_sym, .. }
+                        | EcdhPublicParams::P521 { hash, alg_sym, .. }
+                        | EcdhPublicParams::P384 { hash, alg_sym, .. } => {
+                            if curve.hash_algo()? != *hash || curve.sym_algo()? != *alg_sym {
+                                bail!("Unsupported KDF/KEK parameters for {:?} and KeyVersion::V6: {:?}, {:?}", curve, hash, alg_sym);
                             }
-                            _ => unsupported_err!("{:?} for ECDH", params),
                         }
+                        _ => unsupported_err!("{:?} for ECDH", params),
                     }
-
-                    crypto::ecdh::encrypt(rng, params, self.fingerprint().as_bytes(), plain)
                 }
-            },
-            PublicParams::X25519(ref params) => {
-                let (sym_alg, plain) = match typ {
-                    EskType::V6 => (None, plain),
-                    EskType::V3_4 => {
-                        ensure!(!plain.is_empty(), "plain may not be empty");
 
-                        (
-                            Some(plain[0].into()), // byte 0 is the symmetric algorithm
-                            &plain[1..],           // strip symmetric algorithm
-                        )
-                    }
-                };
-
-                let (ephemeral, session_key) =
-                    crypto::x25519::encrypt(&mut rng, &params.key, plain)?;
-
-                Ok(PkeskBytes::X25519 {
-                    ephemeral,
-                    session_key: session_key.into(),
-                    sym_alg,
-                })
+                crypto::ecdh::encrypt(rng, params, key.fingerprint().as_bytes(), plain)
             }
-            PublicParams::X448(ref params) => {
-                let (sym_alg, plain) = match typ {
-                    EskType::V6 => (None, plain),
-                    EskType::V3_4 => {
-                        ensure!(!plain.is_empty(), "plain may not be empty");
+        },
+        PublicParams::X25519(ref params) => {
+            let (sym_alg, plain) = match typ {
+                EskType::V6 => (None, plain),
+                EskType::V3_4 => {
+                    ensure!(!plain.is_empty(), "plain may not be empty");
 
-                        (
-                            Some(plain[0].into()), // byte 0 is the symmetric algorithm
-                            &plain[1..],           // strip symmetric algorithm
-                        )
-                    }
-                };
+                    (
+                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                        &plain[1..],           // strip symmetric algorithm
+                    )
+                }
+            };
 
-                let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, params, plain)?;
+            let (ephemeral, session_key) = crypto::x25519::encrypt(&mut rng, &params.key, plain)?;
 
-                Ok(PkeskBytes::X448 {
-                    ephemeral,
-                    session_key: session_key.into(),
-                    sym_alg,
-                })
-            }
-            PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
-            PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
-            #[cfg(feature = "draft-pqc")]
-            PublicParams::MlKem768X25519(ref params) => {
-                let (sym_alg, plain) = match typ {
-                    EskType::V6 => (None, plain),
-                    EskType::V3_4 => {
-                        ensure!(!plain.is_empty(), "plain may not be empty");
-
-                        (
-                            Some(plain[0].into()), // byte 0 is the symmetric algorithm
-                            &plain[1..],           // strip symmetric algorithm
-                        )
-                    }
-                };
-
-                let (ecdh_ciphertext, ml_kem_ciphertext, session_key) =
-                    crypto::ml_kem768_x25519::encrypt(
-                        &mut rng,
-                        &params.x25519_key,
-                        &params.ml_kem_key,
-                        plain,
-                    )?;
-
-                Ok(PkeskBytes::MlKem768X25519 {
-                    ecdh_ciphertext,
-                    ml_kem_ciphertext,
-                    session_key: session_key.into(),
-                    sym_alg,
-                })
-            }
-            #[cfg(feature = "draft-pqc")]
-            PublicParams::MlKem1024X448(ref params) => {
-                let (sym_alg, plain) = match typ {
-                    EskType::V6 => (None, plain),
-                    EskType::V3_4 => {
-                        ensure!(!plain.is_empty(), "plain may not be empty");
-
-                        (
-                            Some(plain[0].into()), // byte 0 is the symmetric algorithm
-                            &plain[1..],           // strip symmetric algorithm
-                        )
-                    }
-                };
-
-                let (ecdh_ciphertext, ml_kem_ciphertext, session_key) =
-                    crypto::ml_kem1024_x448::encrypt(
-                        &mut rng,
-                        &params.x448_key,
-                        &params.ml_kem_key,
-                        plain,
-                    )?;
-
-                Ok(PkeskBytes::MlKem1024X448 {
-                    ecdh_ciphertext,
-                    ml_kem_ciphertext,
-                    session_key: session_key.into(),
-                    sym_alg,
-                })
-            }
-            #[cfg(feature = "draft-pqc")]
-            PublicParams::MlDsa65Ed25519(_) => {
-                bail!("ML DSA 65 ED2519 is only used for signing")
-            }
-            #[cfg(feature = "draft-pqc")]
-            PublicParams::MlDsa87Ed448(_) => {
-                bail!("ML DSA 87 ED448 is only used for signing")
-            }
-            #[cfg(feature = "draft-pqc")]
-            PublicParams::SlhDsaShake128s(_) => {
-                bail!("SLH DSA Shake 128s is only used for signing")
-            }
-            #[cfg(feature = "draft-pqc")]
-            PublicParams::SlhDsaShake128f(_) => {
-                bail!("SLH DSA Shake 128f is only used for signing")
-            }
-            #[cfg(feature = "draft-pqc")]
-            PublicParams::SlhDsaShake256s(_) => {
-                bail!("SLH DSA Shake 256s is only used for signing")
-            }
-            PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
+            Ok(PkeskBytes::X25519 {
+                ephemeral,
+                session_key: session_key.into(),
+                sym_alg,
+            })
         }
+        PublicParams::X448(ref params) => {
+            let (sym_alg, plain) = match typ {
+                EskType::V6 => (None, plain),
+                EskType::V3_4 => {
+                    ensure!(!plain.is_empty(), "plain may not be empty");
+
+                    (
+                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                        &plain[1..],           // strip symmetric algorithm
+                    )
+                }
+            };
+
+            let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, params, plain)?;
+
+            Ok(PkeskBytes::X448 {
+                ephemeral,
+                session_key: session_key.into(),
+                sym_alg,
+            })
+        }
+        PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
+        PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
+        #[cfg(feature = "draft-pqc")]
+        PublicParams::MlKem768X25519(ref params) => {
+            let (sym_alg, plain) = match typ {
+                EskType::V6 => (None, plain),
+                EskType::V3_4 => {
+                    ensure!(!plain.is_empty(), "plain may not be empty");
+
+                    (
+                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                        &plain[1..],           // strip symmetric algorithm
+                    )
+                }
+            };
+
+            let (ecdh_ciphertext, ml_kem_ciphertext, session_key) =
+                crypto::ml_kem768_x25519::encrypt(
+                    &mut rng,
+                    &params.x25519_key,
+                    &params.ml_kem_key,
+                    plain,
+                )?;
+
+            Ok(PkeskBytes::MlKem768X25519 {
+                ecdh_ciphertext,
+                ml_kem_ciphertext,
+                session_key: session_key.into(),
+                sym_alg,
+            })
+        }
+        #[cfg(feature = "draft-pqc")]
+        PublicParams::MlKem1024X448(ref params) => {
+            let (sym_alg, plain) = match typ {
+                EskType::V6 => (None, plain),
+                EskType::V3_4 => {
+                    ensure!(!plain.is_empty(), "plain may not be empty");
+
+                    (
+                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                        &plain[1..],           // strip symmetric algorithm
+                    )
+                }
+            };
+
+            let (ecdh_ciphertext, ml_kem_ciphertext, session_key) =
+                crypto::ml_kem1024_x448::encrypt(
+                    &mut rng,
+                    &params.x448_key,
+                    &params.ml_kem_key,
+                    plain,
+                )?;
+
+            Ok(PkeskBytes::MlKem1024X448 {
+                ecdh_ciphertext,
+                ml_kem_ciphertext,
+                session_key: session_key.into(),
+                sym_alg,
+            })
+        }
+        #[cfg(feature = "draft-pqc")]
+        PublicParams::MlDsa65Ed25519(_) => {
+            bail!("ML DSA 65 ED2519 is only used for signing")
+        }
+        #[cfg(feature = "draft-pqc")]
+        PublicParams::MlDsa87Ed448(_) => {
+            bail!("ML DSA 87 ED448 is only used for signing")
+        }
+        #[cfg(feature = "draft-pqc")]
+        PublicParams::SlhDsaShake128s(_) => {
+            bail!("SLH DSA Shake 128s is only used for signing")
+        }
+        #[cfg(feature = "draft-pqc")]
+        PublicParams::SlhDsaShake128f(_) => {
+            bail!("SLH DSA Shake 128f is only used for signing")
+        }
+        #[cfg(feature = "draft-pqc")]
+        PublicParams::SlhDsaShake256s(_) => {
+            bail!("SLH DSA Shake 256s is only used for signing")
+        }
+        PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
     }
 }
 
