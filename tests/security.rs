@@ -1,4 +1,7 @@
-use pgp::composed::{Deserializable, Message};
+use pgp::{
+    composed::{Deserializable, Message},
+    types::EncryptionKey,
+};
 
 /// RPG-022
 #[test]

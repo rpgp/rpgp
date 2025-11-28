@@ -14,8 +14,8 @@ use crate::{
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{
-        EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes,
-        PublicKeyTrait, PublicParams, SignatureBytes, Tag,
+        EncryptionKey, EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength,
+        PkeskBytes, PublicKeyTrait, PublicParams, SignatureBytes, Tag,
     },
 };
 
@@ -147,8 +147,10 @@ impl SignedPublicKey {
         let res = String::from_utf8(self.to_armored_bytes(opts)?).map_err(|e| e.utf8_error())?;
         Ok(res)
     }
+}
 
-    pub fn encrypt<R: Rng + CryptoRng>(
+impl EncryptionKey for SignedPublicKey {
+    fn encrypt<R: Rng + CryptoRng>(
         &self,
         rng: R,
         plain: &[u8],
@@ -273,8 +275,10 @@ impl SignedPublicSubKey {
 
         Ok(())
     }
+}
 
-    pub fn encrypt<R: Rng + CryptoRng>(
+impl EncryptionKey for SignedPublicSubKey {
+    fn encrypt<R: Rng + CryptoRng>(
         &self,
         rng: R,
         plain: &[u8],

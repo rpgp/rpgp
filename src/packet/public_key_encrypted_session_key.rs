@@ -13,8 +13,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PkeskBytes, PkeskVersion,
-        PublicKeyTrait, PublicParams, Tag,
+        EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PkeskBytes,
+        PkeskVersion, PublicParams, Tag,
     },
 };
 
@@ -159,19 +159,19 @@ impl PublicKeyEncryptedSessionKey {
     }
 
     /// Encrypts the given session key to `pkey` as a v3 pkesk.
-    pub fn from_session_key_v3<R: CryptoRng + Rng>(
+    pub fn from_session_key_v3<R: CryptoRng + Rng, E: EncryptionKey>(
         rng: R,
         session_key: &RawSessionKey,
         alg: SymmetricKeyAlgorithm,
-        pkey: &impl PublicKeyTrait,
+        enc: &E,
     ) -> Result<Self> {
         // the symmetric key algorithm, the session key, and a checksum (for some algorithms)
         let data =
-            Self::prepare_session_key_for_encryption(Some(alg), session_key, pkey.public_params());
+            Self::prepare_session_key_for_encryption(Some(alg), session_key, enc.public_params());
 
-        let values = crate::packet::key::encrypt(pkey, rng, &data, EskType::V3_4)?;
+        let values = enc.encrypt(rng, &data, EskType::V3_4)?;
 
-        let id = pkey.key_id();
+        let id = enc.key_id();
         let len = write_len_v3(&id, &values);
         let packet_header =
             PacketHeader::new_fixed(Tag::PublicKeyEncryptedSessionKey, len.try_into()?);
@@ -179,29 +179,28 @@ impl PublicKeyEncryptedSessionKey {
         Ok(PublicKeyEncryptedSessionKey::V3 {
             packet_header,
             id,
-            pk_algo: pkey.algorithm(),
+            pk_algo: enc.algorithm(),
             values,
         })
     }
 
     /// Encrypts the given session key to `pkey` as a v6 pkesk.
-    pub fn from_session_key_v6<R: CryptoRng + Rng>(
+    pub fn from_session_key_v6<R: CryptoRng + Rng, E: EncryptionKey>(
         rng: R,
         session_key: &RawSessionKey,
-        pkey: &impl PublicKeyTrait,
+        enc: &E,
     ) -> Result<Self> {
         // "An implementation MUST NOT generate ElGamal v6 PKESK packets."
         // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-5.1.4-6)
-        if pkey.algorithm() == PublicKeyAlgorithm::Elgamal {
+        if enc.algorithm() == PublicKeyAlgorithm::Elgamal {
             bail!("ElGamal is not a legal encryption mechanism for v6 PKESK");
         }
 
         // the session key, and a checksum (for some algorithms)
-        let data =
-            Self::prepare_session_key_for_encryption(None, session_key, pkey.public_params());
+        let data = Self::prepare_session_key_for_encryption(None, session_key, enc.public_params());
 
-        let values = crate::packet::key::encrypt(pkey, rng, &data, EskType::V6)?;
-        let fingerprint = Some(pkey.fingerprint());
+        let values = enc.encrypt(rng, &data, EskType::V6)?;
+        let fingerprint = Some(enc.fingerprint());
 
         let len = write_len_v6(&values, &fingerprint);
         let packet_header =
@@ -210,7 +209,7 @@ impl PublicKeyEncryptedSessionKey {
         Ok(PublicKeyEncryptedSessionKey::V6 {
             packet_header,
             fingerprint,
-            pk_algo: pkey.algorithm(),
+            pk_algo: enc.algorithm(),
             values,
         })
     }

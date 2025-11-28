@@ -21,9 +21,9 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EcdhPublicParams, EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails,
-        KeyId, KeyVersion, Mpi, Password, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait,
-        SignatureBytes, Tag,
+        EcdhPublicParams, EddsaLegacyPublicParams, EncryptionKey, EskType, Fingerprint, Imprint,
+        KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes, PublicKeyTrait, PublicParams,
+        SecretKeyTrait, SignatureBytes, Tag,
     },
 };
 
@@ -93,8 +93,10 @@ impl PublicKey {
             inner,
         })
     }
+}
 
-    pub fn encrypt<R: rand::CryptoRng + rand::Rng>(
+impl EncryptionKey for PublicKey {
+    fn encrypt<R: rand::CryptoRng + rand::Rng>(
         &self,
         rng: R,
         plain: &[u8],
@@ -203,8 +205,10 @@ impl PublicSubkey {
 
         config.sign_subkey_binding(primary_sec_key, primary_pub_key, key_pw, &self)
     }
+}
 
-    pub fn encrypt<R: rand::CryptoRng + rand::Rng>(
+impl EncryptionKey for PublicSubkey {
+    fn encrypt<R: rand::CryptoRng + rand::Rng>(
         &self,
         rng: R,
         plain: &[u8],
