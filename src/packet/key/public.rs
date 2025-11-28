@@ -421,10 +421,8 @@ impl PubKeyInner {
 
         config.sign_key(key, key_pw, &self)
     }
-}
 
-impl EncryptionKey for PubKeyInner {
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(
+    pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng>(
         &self,
         mut rng: R,
         plain: &[u8],
