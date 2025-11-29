@@ -408,7 +408,6 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     /// # Example
     /// ```rust,no_run
     /// use pgp::composed::MessageBuilder;
-    /// use pgp::types::PublicKeyTrait;
     /// use pgp::crypto::sym::SymmetricKeyAlgorithm;
     ///
     /// # use pgp::types::{KeyDetails, SignatureBytes, PublicParams, KeyId, Fingerprint, KeyVersion};
@@ -569,7 +568,6 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// # Example
     /// ```rust,no_run
     /// use pgp::composed::MessageBuilder;
-    /// use pgp::types::PublicKeyTrait;
     /// use pgp::crypto::sym::SymmetricKeyAlgorithm;
     ///
     /// # use pgp::types::{KeyDetails, SignatureBytes, PublicParams, KeyId, Fingerprint, KeyVersion};
