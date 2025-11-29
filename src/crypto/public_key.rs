@@ -107,4 +107,37 @@ impl PublicKeyAlgorithm {
             _ => false,
         }
     }
+
+    /// Can this algorithm sign data?
+    pub fn can_sign(self) -> bool {
+        use PublicKeyAlgorithm::*;
+
+        #[cfg(feature = "draft-pqc")]
+        if matches!(
+            self,
+            MlDsa65Ed25519 | MlDsa87Ed448 | SlhDsaShake128s | SlhDsaShake128f | SlhDsaShake256s
+        ) {
+            return true;
+        }
+
+        matches!(
+            self,
+            RSA | RSASign | Elgamal | DSA | ECDSA | EdDSALegacy | Ed25519 | Ed448
+        )
+    }
+
+    /// Can this algorithm encrypt data?
+    pub fn can_encrypt(self) -> bool {
+        use PublicKeyAlgorithm::*;
+
+        #[cfg(feature = "draft-pqc")]
+        if matches!(self, MlKem768X25519 | MlKem1024X448) {
+            return true;
+        }
+
+        matches!(
+            self,
+            RSA | RSAEncrypt | ECDH | DiffieHellman | Elgamal | ElgamalEncrypt | X25519 | X448
+        )
+    }
 }

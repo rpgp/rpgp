@@ -19,37 +19,6 @@ pub trait KeyDetails {
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc>;
     fn expiration(&self) -> Option<u16>;
     fn public_params(&self) -> &PublicParams;
-
-    fn is_signing_key(&self) -> bool {
-        use crate::crypto::public_key::PublicKeyAlgorithm::*;
-
-        #[cfg(feature = "draft-pqc")]
-        if matches!(
-            self.algorithm(),
-            MlDsa65Ed25519 | MlDsa87Ed448 | SlhDsaShake128s | SlhDsaShake128f | SlhDsaShake256s
-        ) {
-            return true;
-        }
-
-        matches!(
-            self.algorithm(),
-            RSA | RSASign | Elgamal | DSA | ECDSA | EdDSALegacy | Ed25519 | Ed448
-        )
-    }
-
-    fn is_encryption_key(&self) -> bool {
-        use crate::crypto::public_key::PublicKeyAlgorithm::*;
-
-        #[cfg(feature = "draft-pqc")]
-        if matches!(self.algorithm(), MlKem768X25519 | MlKem1024X448) {
-            return true;
-        }
-
-        matches!(
-            self.algorithm(),
-            RSA | RSAEncrypt | ECDH | DiffieHellman | Elgamal | ElgamalEncrypt | X25519 | X448
-        )
-    }
 }
 
 pub trait Imprint {
@@ -85,7 +54,6 @@ impl<T: KeyDetails> KeyDetails for &T {
         (*self).fingerprint()
     }
 
-    /// Returns the Key ID of the associated primary key.
     fn key_id(&self) -> KeyId {
         (*self).key_id()
     }

@@ -169,10 +169,6 @@ impl<C, T> KeyDetails for EcdsaSigner<T, C> {
         self.public_key.algorithm()
     }
 
-    fn is_encryption_key(&self) -> bool {
-        false
-    }
-
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
         self.public_key.created_at()
     }
