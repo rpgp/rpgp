@@ -22,8 +22,8 @@ use crate::{
     ser::Serialize,
     types::{
         EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PkeskBytes,
-        PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
-        SignatureBytes, Tag,
+        PlainSecretParams, PublicParams, SecretParams, SignatureBytes, SigningKey, Tag,
+        VerifyingKey,
     },
 };
 
@@ -255,8 +255,8 @@ impl Signer for PersistentSymmetricKey {
     }
 }
 
-impl SecretKeyTrait for PersistentSymmetricKey {
-    fn create_signature(
+impl SigningKey for PersistentSymmetricKey {
+    fn sign(
         &self,
         key_pw: &Password,
         hash: HashAlgorithm,
@@ -268,7 +268,7 @@ impl SecretKeyTrait for PersistentSymmetricKey {
 
             debug!("unlocked key");
             let sig = match *priv_key {
-                PlainSecretParams::AEAD(ref priv_key) => self.sign(hash, data)?,
+                PlainSecretParams::AEAD(ref priv_key) => Signer::sign(self, hash, data)?,
 
                 _ => {
                     unsupported_err!(
@@ -290,16 +290,8 @@ impl SecretKeyTrait for PersistentSymmetricKey {
     }
 }
 
-impl PublicKeyTrait for PersistentSymmetricKey {
-    fn created_at(&self) -> &DateTime<Utc> {
-        self.details.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.details.expiration()
-    }
-
-    fn verify_signature(
+impl VerifyingKey for PersistentSymmetricKey {
+    fn verify(
         &self,
         _hash: HashAlgorithm,
         data: &[u8],
@@ -335,10 +327,6 @@ impl PublicKeyTrait for PersistentSymmetricKey {
 
         Ok(())
     }
-
-    fn public_params(&self) -> &PublicParams {
-        self.details.public_params()
-    }
 }
 
 impl PacketTrait for PersistentSymmetricKey {
@@ -355,11 +343,23 @@ impl KeyDetails for PersistentSymmetricKey {
         self.details.fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        self.details.key_id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.details.legacy_key_id()
     }
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.details.algorithm()
+    }
+
+    fn created_at(&self) -> &DateTime<Utc> {
+        self.details.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.details.expiration()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.details.public_params()
     }
 }
 
@@ -435,7 +435,7 @@ mod tests {
         },
         ser::Serialize,
         types::{
-            AeadPublicParams, EskType, KeyVersion, Password, PlainSecretParams, PublicKeyTrait,
+            AeadPublicParams, EskType, KeyDetails, KeyVersion, Password, PlainSecretParams,
             PublicParams, SecretParams, Tag,
         },
     };
