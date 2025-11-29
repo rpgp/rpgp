@@ -7,7 +7,7 @@ use crate::{
     armor,
     composed::{ArmorOptions, Deserializable, SubpacketConfig},
     crypto::hash::HashAlgorithm,
-    errors::{Result, bail, format_err},
+    errors::{bail, format_err, Result},
     packet::{Packet, PacketTrait, Signature, SignatureConfig, SignatureType},
     ser::Serialize,
     types::{KeyVersion, Password, PublicKeyTrait, SigningKey, Tag},

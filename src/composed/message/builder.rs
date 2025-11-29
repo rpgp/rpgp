@@ -20,7 +20,7 @@ use crate::{
         hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{Result, bail, ensure, ensure_eq},
+    errors::{bail, ensure, ensure_eq, Result},
     line_writer::{LineBreak, LineWriter},
     packet::{
         CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader,
@@ -33,7 +33,7 @@ use crate::{
         CompressionAlgorithm, EncryptionKey, Fingerprint, KeyId, KeyVersion, PacketHeaderVersion,
         PacketLength, Password, SigningKey, StringToKey, Tag,
     },
-    util::{TeeWriter, fill_buffer},
+    util::{fill_buffer, TeeWriter},
 };
 
 pub type DummyReader = std::io::Cursor<Vec<u8>>;
@@ -1530,7 +1530,7 @@ mod tests {
         crypto::sym::SymmetricKeyAlgorithm,
         packet::SubpacketType,
         types::{EskType, KeyDetails},
-        util::test::{ChaosReader, check_strings, random_string},
+        util::test::{check_strings, random_string, ChaosReader},
     };
 
     #[test]
@@ -2197,8 +2197,8 @@ mod tests {
     }
 
     #[test]
-    fn utf8_reader_partial_size_compression_zip_roundtrip_public_key_x25519_seipdv2_sign_twice()
-    -> TestResult {
+    fn utf8_reader_partial_size_compression_zip_roundtrip_public_key_x25519_seipdv2_sign_twice(
+    ) -> TestResult {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
 
@@ -2291,8 +2291,8 @@ mod tests {
     }
 
     #[test]
-    fn utf8_reader_partial_size_compression_zip_roundtrip_no_encryption_seipdv2_sign_twice()
-    -> TestResult {
+    fn utf8_reader_partial_size_compression_zip_roundtrip_no_encryption_seipdv2_sign_twice(
+    ) -> TestResult {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
 
@@ -2517,11 +2517,9 @@ mod tests {
                 .unwrap(),
             SubpacketData::IssuerFingerprint(key.public_key().fingerprint())
         );
-        assert!(
-            hashed
-                .iter()
-                .any(|sp| sp.typ() == SubpacketType::SignatureCreationTime)
-        );
+        assert!(hashed
+            .iter()
+            .any(|sp| sp.typ() == SubpacketType::SignatureCreationTime));
         assert_eq!(
             hashed
                 .iter()

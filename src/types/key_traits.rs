@@ -16,39 +16,8 @@ pub trait KeyDetails {
     fn fingerprint(&self) -> Fingerprint;
     fn key_id(&self) -> KeyId;
     fn algorithm(&self) -> PublicKeyAlgorithm;
-}
-
-pub trait Imprint {
-    /// An imprint is a shorthand identifier for a key.
-    ///
-    /// The imprint is a generalization of the
-    /// [OpenPGP fingerprint](https://www.rfc-editor.org/rfc/rfc9580.html#key-ids-fingerprints).
-    /// It is calculated over the public key parameters and other non-secret inputs (depending on
-    /// the key version), in the same way as the fingerprint.
-    /// However, the imprint may use a digest algorithm other than the one specified for the
-    /// fingerprint of the given key version.
-    ///
-    /// See <https://www.ietf.org/archive/id/draft-ietf-openpgp-replacementkey-03.html#name-key-imprints>
-    ///
-    /// NOTE: Imprints are a special purpose tool! For most use cases, the OpenPGP fingerprint is
-    /// the most appropriate identifier for a certificate or a component key.
-    fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>>;
-}
-
-pub trait PublicKeyTrait: KeyDetails + std::fmt::Debug {
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc>;
     fn expiration(&self) -> Option<u16>;
-
-    /// Verify a signed message.
-    /// Data will be hashed using `hash`, before verifying.
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()>;
-
-    fn public_params(&self) -> &PublicParams;
 
     fn is_signing_key(&self) -> bool {
         use crate::crypto::public_key::PublicKeyAlgorithm::*;
@@ -82,6 +51,36 @@ pub trait PublicKeyTrait: KeyDetails + std::fmt::Debug {
     }
 }
 
+pub trait Imprint {
+    /// An imprint is a shorthand identifier for a key.
+    ///
+    /// The imprint is a generalization of the
+    /// [OpenPGP fingerprint](https://www.rfc-editor.org/rfc/rfc9580.html#key-ids-fingerprints).
+    /// It is calculated over the public key parameters and other non-secret inputs (depending on
+    /// the key version), in the same way as the fingerprint.
+    /// However, the imprint may use a digest algorithm other than the one specified for the
+    /// fingerprint of the given key version.
+    ///
+    /// See <https://www.ietf.org/archive/id/draft-ietf-openpgp-replacementkey-03.html#name-key-imprints>
+    ///
+    /// NOTE: Imprints are a special purpose tool! For most use cases, the OpenPGP fingerprint is
+    /// the most appropriate identifier for a certificate or a component key.
+    fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>>;
+}
+
+pub trait PublicKeyTrait: KeyDetails + std::fmt::Debug {
+    /// Verify a signed message.
+    /// Data will be hashed using `hash`, before verifying.
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()>;
+
+    fn public_params(&self) -> &PublicParams;
+}
+
 impl<T: KeyDetails> KeyDetails for &T {
     fn version(&self) -> KeyVersion {
         (*self).version()
@@ -99,6 +98,14 @@ impl<T: KeyDetails> KeyDetails for &T {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         (*self).algorithm()
     }
+
+    fn expiration(&self) -> Option<u16> {
+        (*self).expiration()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        (*self).created_at()
+    }
 }
 
 impl<T: PublicKeyTrait> PublicKeyTrait for &T {
@@ -113,14 +120,6 @@ impl<T: PublicKeyTrait> PublicKeyTrait for &T {
 
     fn public_params(&self) -> &PublicParams {
         (*self).public_params()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        (*self).expiration()
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        (*self).created_at()
     }
 }
 
@@ -139,6 +138,14 @@ impl KeyDetails for Box<&dyn SigningKey> {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         (**self).algorithm()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        (**self).expiration()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        (**self).created_at()
     }
 }
 

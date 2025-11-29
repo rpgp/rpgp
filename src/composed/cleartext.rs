@@ -10,12 +10,12 @@ use chrono::SubsecRound;
 use log::debug;
 
 use crate::{
-    armor::{self, BlockType, DearmorOptions, Headers, header_parser, read_from_buf},
+    armor::{self, header_parser, read_from_buf, BlockType, DearmorOptions, Headers},
     composed::ArmorOptions,
     crypto::hash::HashAlgorithm,
-    errors::{InvalidInputSnafu, Result, bail, ensure, ensure_eq, format_err},
+    errors::{bail, ensure, ensure_eq, format_err, InvalidInputSnafu, Result},
     line_writer::LineBreak,
-    normalize_lines::{NormalizedReader, normalize_lines},
+    normalize_lines::{normalize_lines, NormalizedReader},
     packet::{
         Packet, PacketParser, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
         SubpacketData,

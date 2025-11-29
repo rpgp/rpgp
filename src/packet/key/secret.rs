@@ -11,7 +11,7 @@ use crate::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{Result, bail, ensure_eq, unsupported_err},
+    errors::{bail, ensure_eq, unsupported_err, Result},
     packet::{
         KeyFlags, PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
         SubpacketData,
@@ -236,6 +236,14 @@ impl KeyDetails for SecretKey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.details.algorithm()
     }
+
+    fn expiration(&self) -> Option<u16> {
+        self.details.expiration()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.details.created_at()
+    }
 }
 
 impl Imprint for SecretKey {
@@ -257,6 +265,13 @@ impl KeyDetails for SecretSubkey {
     }
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.details.algorithm()
+    }
+    fn expiration(&self) -> Option<u16> {
+        self.details.expiration()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.details.created_at()
     }
 }
 

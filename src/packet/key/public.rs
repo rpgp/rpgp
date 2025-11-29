@@ -15,7 +15,7 @@ use crate::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{Result, bail, ensure, ensure_eq, unimplemented_err, unsupported_err},
+    errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     packet::{
         KeyFlags, PacketHeader, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
     },
@@ -787,6 +787,14 @@ impl KeyDetails for PubKeyInner {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.algorithm
     }
+
+    fn expiration(&self) -> Option<u16> {
+        self.expiration
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        &self.created_at
+    }
 }
 
 impl PublicKeyTrait for PubKeyInner {
@@ -920,14 +928,6 @@ impl PublicKeyTrait for PubKeyInner {
     fn public_params(&self) -> &PublicParams {
         &self.public_params
     }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        &self.created_at
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.expiration
-    }
 }
 
 impl KeyDetails for PublicKey {
@@ -945,6 +945,14 @@ impl KeyDetails for PublicKey {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.inner.algorithm()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        &self.inner.created_at
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.inner.expiration
     }
 }
 
@@ -967,14 +975,6 @@ impl PublicKeyTrait for PublicKey {
     fn public_params(&self) -> &PublicParams {
         PublicKeyTrait::public_params(&self.inner)
     }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        PublicKeyTrait::created_at(&self.inner)
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        PublicKeyTrait::expiration(&self.inner)
-    }
 }
 
 impl KeyDetails for PublicSubkey {
@@ -992,6 +992,14 @@ impl KeyDetails for PublicSubkey {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.inner.algorithm()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.inner.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.inner.expiration()
     }
 }
 
@@ -1013,14 +1021,6 @@ impl PublicKeyTrait for PublicSubkey {
 
     fn public_params(&self) -> &PublicParams {
         PublicKeyTrait::public_params(&self.inner)
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        PublicKeyTrait::created_at(&self.inner)
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        PublicKeyTrait::expiration(&self.inner)
     }
 }
 

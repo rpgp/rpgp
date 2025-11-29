@@ -3,7 +3,7 @@ use std::fs;
 use pgp::{
     composed::{Deserializable, Message, MessageBuilder, SignedPublicKey, SignedSecretKey},
     crypto::sym::SymmetricKeyAlgorithm,
-    types::PublicKeyTrait,
+    types::KeyDetails,
 };
 use rand::thread_rng;
 

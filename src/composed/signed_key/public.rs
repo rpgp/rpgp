@@ -176,6 +176,14 @@ impl KeyDetails for SignedPublicKey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.primary_key.algorithm()
     }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.primary_key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.primary_key.expiration()
+    }
 }
 
 impl Imprint for SignedPublicKey {
@@ -196,14 +204,6 @@ impl PublicKeyTrait for SignedPublicKey {
 
     fn public_params(&self) -> &PublicParams {
         self.primary_key.public_params()
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.primary_key.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.primary_key.expiration()
     }
 }
 
@@ -311,7 +311,16 @@ impl KeyDetails for SignedPublicSubKey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
     }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.key.expiration()
+    }
 }
+
 impl PublicKeyTrait for SignedPublicSubKey {
     fn verify_signature(
         &self,
@@ -324,14 +333,6 @@ impl PublicKeyTrait for SignedPublicSubKey {
 
     fn public_params(&self) -> &PublicParams {
         self.key.public_params()
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.key.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.key.expiration()
     }
 }
 

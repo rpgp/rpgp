@@ -68,14 +68,6 @@ impl PublicKeyTrait for FakeHsm {
     fn public_params(&self) -> &PublicParams {
         self.public_key.public_params()
     }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.public_key.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.public_key.expiration()
-    }
 }
 
 impl KeyDetails for FakeHsm {
@@ -93,6 +85,14 @@ impl KeyDetails for FakeHsm {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.public_key.algorithm()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.public_key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.public_key.expiration()
     }
 }
 

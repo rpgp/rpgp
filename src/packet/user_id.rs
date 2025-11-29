@@ -5,10 +5,10 @@ use chrono::{SubsecRound, Utc};
 use rand::{CryptoRng, Rng};
 
 use crate::{
-    errors::{Result, ensure},
+    errors::{ensure, Result},
     packet::{
-        CERTIFICATION_SIGNATURE_TYPES, PacketHeader, PacketTrait, Signature, SignatureConfig,
-        SignatureType, Subpacket, SubpacketData,
+        PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
+        SubpacketData, CERTIFICATION_SIGNATURE_TYPES,
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,

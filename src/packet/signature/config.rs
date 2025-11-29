@@ -11,10 +11,10 @@ use crate::{
         hash::{HashAlgorithm, WriteHasher},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{Result, bail, ensure, unimplemented_err, unsupported_err},
+    errors::{bail, ensure, unimplemented_err, unsupported_err, Result},
     packet::{
-        Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData, SubpacketType,
-        types::serialize_for_hashing,
+        types::serialize_for_hashing, Signature, SignatureType, SignatureVersion, Subpacket,
+        SubpacketData, SubpacketType,
     },
     ser::Serialize,
     types::{Fingerprint, KeyId, KeyVersion, Password, PublicKeyTrait, SigningKey, Tag},

@@ -1,13 +1,13 @@
 use std::marker::PhantomData;
 
 use chrono::{DateTime, Utc};
-use digest::{OutputSizeUser, typenum::Unsigned};
+use digest::{typenum::Unsigned, OutputSizeUser};
 use rsa::{
-    RsaPublicKey,
     pkcs1v15::{Signature, VerifyingKey},
+    RsaPublicKey,
 };
 use sha2::Digest;
-use signature::{Keypair, SignatureEncoding, hazmat::PrehashSigner};
+use signature::{hazmat::PrehashSigner, Keypair, SignatureEncoding};
 
 use crate::{
     adapter::PublicKey as HPublicKey,
@@ -15,7 +15,7 @@ use crate::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{Result, bail},
+    errors::{bail, Result},
     packet::{PubKeyInner, PublicKey},
     types::{
         Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicKeyTrait, PublicParams,
@@ -153,6 +153,18 @@ impl<D, T> KeyDetails for RsaSigner<T, D> {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.public_key.algorithm()
     }
+
+    fn is_encryption_key(&self) -> bool {
+        false
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.public_key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.public_key.expiration()
+    }
 }
 
 impl<D, T> PublicKeyTrait for RsaSigner<T, D> {
@@ -165,19 +177,7 @@ impl<D, T> PublicKeyTrait for RsaSigner<T, D> {
         self.public_key.verify_signature(hash, data, sig)
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.public_key.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.public_key.expiration()
-    }
-
     fn public_params(&self) -> &PublicParams {
         self.public_key.public_params()
-    }
-
-    fn is_encryption_key(&self) -> bool {
-        false
     }
 }

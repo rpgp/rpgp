@@ -1,13 +1,13 @@
 use std::marker::PhantomData;
 
 use chrono::{DateTime, Utc};
-use digest::{OutputSizeUser, typenum::Unsigned};
+use digest::{typenum::Unsigned, OutputSizeUser};
 use ecdsa::{
-    PrimeCurve, SignatureSize,
-    elliptic_curve::{CurveArithmetic, generic_array::ArrayLength},
+    elliptic_curve::{generic_array::ArrayLength, CurveArithmetic},
     hazmat::DigestPrimitive,
+    PrimeCurve, SignatureSize,
 };
-use signature::{Keypair, hazmat::PrehashSigner};
+use signature::{hazmat::PrehashSigner, Keypair};
 
 use crate::{
     adapter::PublicKey as HPublicKey,
@@ -15,7 +15,7 @@ use crate::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{Result, ensure_eq},
+    errors::{ensure_eq, Result},
     packet::{PubKeyInner, PublicKey},
     types::{
         EcdsaPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password,
@@ -168,6 +168,18 @@ impl<C, T> KeyDetails for EcdsaSigner<T, C> {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.public_key.algorithm()
     }
+
+    fn is_encryption_key(&self) -> bool {
+        false
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.public_key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.public_key.expiration()
+    }
 }
 
 impl<C, T> PublicKeyTrait for EcdsaSigner<T, C> {
@@ -180,19 +192,7 @@ impl<C, T> PublicKeyTrait for EcdsaSigner<T, C> {
         self.public_key.verify_signature(hash, data, sig)
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.public_key.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.public_key.expiration()
-    }
-
     fn public_params(&self) -> &PublicParams {
         self.public_key.public_params()
-    }
-
-    fn is_encryption_key(&self) -> bool {
-        false
     }
 }
