@@ -6,7 +6,6 @@ use std::io::BufRead;
 
 use aead::rand_core::CryptoRng;
 use bytes::{Bytes, BytesMut};
-use chrono::{DateTime, Utc};
 use hkdf::Hkdf;
 use log::debug;
 use rand::{thread_rng, Rng};
@@ -22,8 +21,8 @@ use crate::{
     ser::Serialize,
     types::{
         EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PkeskBytes,
-        PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
-        SignatureBytes, Tag,
+        PlainSecretParams, PublicParams, SecretParams, SignatureBytes, SigningKey, Tag, Timestamp,
+        VerifyingKey,
     },
 };
 
@@ -255,8 +254,8 @@ impl Signer for PersistentSymmetricKey {
     }
 }
 
-impl SecretKeyTrait for PersistentSymmetricKey {
-    fn create_signature(
+impl SigningKey for PersistentSymmetricKey {
+    fn sign(
         &self,
         key_pw: &Password,
         hash: HashAlgorithm,
@@ -268,7 +267,7 @@ impl SecretKeyTrait for PersistentSymmetricKey {
 
             debug!("unlocked key");
             let sig = match *priv_key {
-                PlainSecretParams::AEAD(ref priv_key) => self.sign(hash, data)?,
+                PlainSecretParams::AEAD(ref priv_key) => Signer::sign(self, hash, data)?,
 
                 _ => {
                     unsupported_err!(
@@ -290,16 +289,8 @@ impl SecretKeyTrait for PersistentSymmetricKey {
     }
 }
 
-impl PublicKeyTrait for PersistentSymmetricKey {
-    fn created_at(&self) -> &DateTime<Utc> {
-        self.details.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.details.expiration()
-    }
-
-    fn verify_signature(
+impl VerifyingKey for PersistentSymmetricKey {
+    fn verify(
         &self,
         _hash: HashAlgorithm,
         data: &[u8],
@@ -335,10 +326,6 @@ impl PublicKeyTrait for PersistentSymmetricKey {
 
         Ok(())
     }
-
-    fn public_params(&self) -> &PublicParams {
-        self.details.public_params()
-    }
 }
 
 impl PacketTrait for PersistentSymmetricKey {
@@ -355,11 +342,23 @@ impl KeyDetails for PersistentSymmetricKey {
         self.details.fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        self.details.key_id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.details.legacy_key_id()
     }
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.details.algorithm()
+    }
+
+    fn created_at(&self) -> Timestamp {
+        self.details.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.details.expiration()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.details.public_params()
     }
 }
 
@@ -415,7 +414,6 @@ pub(crate) fn derive(
 mod tests {
     use std::io::BufReader;
 
-    use chrono::Utc;
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
 
@@ -435,8 +433,8 @@ mod tests {
         },
         ser::Serialize,
         types::{
-            AeadPublicParams, EskType, KeyVersion, Password, PlainSecretParams, PublicKeyTrait,
-            PublicParams, SecretParams, Tag,
+            AeadPublicParams, EskType, KeyDetails, KeyVersion, Password, PlainSecretParams,
+            PublicParams, SecretParams, Tag, Timestamp,
         },
     };
 
@@ -453,7 +451,7 @@ mod tests {
         let inner = PubKeyInner::new(
             KeyVersion::V6,
             PublicKeyAlgorithm::AEAD,
-            Utc::now(),
+            Timestamp::now(),
             None,
             pp,
         )
