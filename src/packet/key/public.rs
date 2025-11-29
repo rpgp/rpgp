@@ -15,7 +15,7 @@ use crate::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
+    errors::{Result, bail, ensure, ensure_eq, unimplemented_err, unsupported_err},
     packet::{
         KeyFlags, PacketHeader, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
     },
@@ -23,7 +23,7 @@ use crate::{
     types::{
         EcdhPublicParams, EddsaLegacyPublicParams, EncryptionKey, EskType, Fingerprint, Imprint,
         KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes, PublicKeyTrait, PublicParams,
-        SecretKeyTrait, SignatureBytes, Tag,
+        SignatureBytes, SigningKey, Tag,
     },
 };
 
@@ -171,7 +171,7 @@ impl PublicSubkey {
         embedded: Option<Signature>,
     ) -> Result<Signature>
     where
-        K: SecretKeyTrait,
+        K: SigningKey,
         P: PublicKeyTrait + Serialize,
     {
         let mut config =
@@ -403,7 +403,7 @@ impl PubKeyInner {
         sig_type: SignatureType,
     ) -> Result<Signature>
     where
-        K: SecretKeyTrait + Serialize,
+        K: SigningKey + Serialize,
     {
         use chrono::SubsecRound;
 
@@ -452,7 +452,12 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
                         | EcdhPublicParams::P521 { hash, alg_sym, .. }
                         | EcdhPublicParams::P384 { hash, alg_sym, .. } => {
                             if curve.hash_algo()? != *hash || curve.sym_algo()? != *alg_sym {
-                                bail!("Unsupported KDF/KEK parameters for {:?} and KeyVersion::V6: {:?}, {:?}", curve, hash, alg_sym);
+                                bail!(
+                                    "Unsupported KDF/KEK parameters for {:?} and KeyVersion::V6: {:?}, {:?}",
+                                    curve,
+                                    hash,
+                                    alg_sym
+                                );
                             }
                         }
                         _ => unsupported_err!("{:?} for ECDH", params),

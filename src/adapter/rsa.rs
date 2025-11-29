@@ -1,13 +1,13 @@
 use std::marker::PhantomData;
 
 use chrono::{DateTime, Utc};
-use digest::{typenum::Unsigned, OutputSizeUser};
+use digest::{OutputSizeUser, typenum::Unsigned};
 use rsa::{
-    pkcs1v15::{Signature, VerifyingKey},
     RsaPublicKey,
+    pkcs1v15::{Signature, VerifyingKey},
 };
 use sha2::Digest;
-use signature::{hazmat::PrehashSigner, Keypair, SignatureEncoding};
+use signature::{Keypair, SignatureEncoding, hazmat::PrehashSigner};
 
 use crate::{
     adapter::PublicKey as HPublicKey,
@@ -15,11 +15,11 @@ use crate::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{bail, Result},
+    errors::{Result, bail},
     packet::{PubKeyInner, PublicKey},
     types::{
         Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicKeyTrait, PublicParams,
-        RsaPublicParams, SecretKeyTrait, SignatureBytes,
+        RsaPublicParams, SignatureBytes, SigningKey,
     },
 };
 
@@ -109,12 +109,12 @@ where
     }
 }
 
-impl<D, T> SecretKeyTrait for RsaSigner<T, D>
+impl<D, T> SigningKey for RsaSigner<T, D>
 where
     T: PrehashSigner<Signature>,
     D: Digest + KnownDigest,
 {
-    fn create_signature(
+    fn sign(
         &self,
         _key_pw: &Password,
         hash: HashAlgorithm,

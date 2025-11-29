@@ -7,10 +7,10 @@ use crate::{
     armor,
     composed::{ArmorOptions, Deserializable, SubpacketConfig},
     crypto::hash::HashAlgorithm,
-    errors::{bail, format_err, Result},
+    errors::{Result, bail, format_err},
     packet::{Packet, PacketTrait, Signature, SignatureConfig, SignatureType},
     ser::Serialize,
-    types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait, Tag},
+    types::{KeyVersion, Password, PublicKeyTrait, SigningKey, Tag},
 };
 
 /// An OpenPGP data signature that occurs outside an OpenPGP Message,
@@ -32,7 +32,7 @@ impl DetachedSignature {
     /// Create a detached data signature over `data`, with [SignatureType::Binary].
     pub fn sign_binary_data<RNG: Rng + CryptoRng, R: Read>(
         rng: RNG,
-        key: &impl SecretKeyTrait,
+        key: &impl SigningKey,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,
@@ -54,7 +54,7 @@ impl DetachedSignature {
     /// This gives callers full control of the hashed and unhashed subpacket areas.
     pub fn sign_binary_data_with_subpackets<RNG: Rng + CryptoRng, R: Read>(
         rng: RNG,
-        key: &impl SecretKeyTrait,
+        key: &impl SigningKey,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,
@@ -78,7 +78,7 @@ impl DetachedSignature {
     /// "LF" line endings or "CR+LF" line endings.
     pub fn sign_text_data<RNG: Rng + CryptoRng, R: Read>(
         rng: RNG,
-        key: &impl SecretKeyTrait,
+        key: &impl SigningKey,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,
@@ -104,7 +104,7 @@ impl DetachedSignature {
     /// "LF" line endings or "CR+LF" line endings.
     pub fn sign_text_data_with_subpackets<RNG: Rng + CryptoRng, R: Read>(
         rng: RNG,
-        key: &impl SecretKeyTrait,
+        key: &impl SigningKey,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,
@@ -124,7 +124,7 @@ impl DetachedSignature {
     fn sign_data<RNG: Rng + CryptoRng, R: Read>(
         rng: RNG,
         typ: SignatureType,
-        key: &impl SecretKeyTrait,
+        key: &impl SigningKey,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,

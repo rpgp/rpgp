@@ -13,7 +13,7 @@ use pgp::{
     packet::{self, PubKeyInner, PublicKey, SignatureConfig},
     types::{
         EcdhPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes,
-        PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes,
+        PublicKeyTrait, PublicParams, SignatureBytes, SigningKey,
     },
 };
 
@@ -96,8 +96,8 @@ impl KeyDetails for FakeHsm {
     }
 }
 
-impl SecretKeyTrait for FakeHsm {
-    fn create_signature(
+impl SigningKey for FakeHsm {
+    fn sign(
         &self,
         _key_pw: &Password,
         _hash: HashAlgorithm,

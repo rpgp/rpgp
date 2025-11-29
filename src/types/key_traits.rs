@@ -124,7 +124,7 @@ impl<T: PublicKeyTrait> PublicKeyTrait for &T {
     }
 }
 
-impl KeyDetails for Box<&dyn SecretKeyTrait> {
+impl KeyDetails for Box<&dyn SigningKey> {
     fn version(&self) -> KeyVersion {
         (**self).version()
     }
@@ -142,23 +142,11 @@ impl KeyDetails for Box<&dyn SecretKeyTrait> {
     }
 }
 
-impl SecretKeyTrait for Box<&dyn SecretKeyTrait> {
-    fn create_signature(
-        &self,
-        key_pw: &Password,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<crate::types::SignatureBytes> {
-        (**self).create_signature(key_pw, hash, data)
-    }
-
-    fn hash_alg(&self) -> HashAlgorithm {
-        (**self).hash_alg()
-    }
-}
-
-pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
-    fn create_signature(
+/// Keys that can sign data.
+///
+/// Contains private data.
+pub trait SigningKey: KeyDetails + std::fmt::Debug {
+    fn sign(
         &self,
         key_pw: &Password,
         hash: HashAlgorithm,
@@ -168,6 +156,21 @@ pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
     /// The recommended hash algorithm to calculate the signature hash digest with,
     /// when using this as a signer
     fn hash_alg(&self) -> HashAlgorithm;
+}
+
+impl SigningKey for Box<&dyn SigningKey> {
+    fn sign(
+        &self,
+        key_pw: &Password,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<crate::types::SignatureBytes> {
+        (**self).sign(key_pw, hash, data)
+    }
+
+    fn hash_alg(&self) -> HashAlgorithm {
+        (**self).hash_alg()
+    }
 }
 
 /// Describes keys that can encrypt plain data (i.e. a session key) into data for a

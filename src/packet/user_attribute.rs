@@ -7,14 +7,14 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 use rand::{CryptoRng, Rng};
 
 use crate::{
-    errors::{ensure, ensure_eq, Result},
+    errors::{Result, ensure, ensure_eq},
     packet::{
-        PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
-        SubpacketData, SubpacketLength, CERTIFICATION_SIGNATURE_TYPES,
+        CERTIFICATION_SIGNATURE_TYPES, PacketHeader, PacketTrait, Signature, SignatureConfig,
+        SignatureType, Subpacket, SubpacketData, SubpacketLength,
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag},
+    types::{KeyVersion, Password, PublicKeyTrait, SignedUserAttribute, SigningKey, Tag},
 };
 
 /// The type of a user attribute. Only `Image` is a known type currently
@@ -228,7 +228,7 @@ impl UserAttribute {
     ) -> Result<SignedUserAttribute>
     where
         R: CryptoRng + Rng,
-        P: SecretKeyTrait,
+        P: SigningKey,
         K: PublicKeyTrait + Serialize,
     {
         // Self-signatures use CertPositive, see
@@ -253,7 +253,7 @@ impl UserAttribute {
     ) -> Result<SignedUserAttribute>
     where
         R: CryptoRng + Rng,
-        P: SecretKeyTrait,
+        P: SigningKey,
         K: PublicKeyTrait + Serialize,
     {
         ensure!(

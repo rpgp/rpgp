@@ -20,7 +20,7 @@ use crate::{
         hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{bail, ensure, ensure_eq, Result},
+    errors::{Result, bail, ensure, ensure_eq},
     line_writer::{LineBreak, LineWriter},
     packet::{
         CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader,
@@ -31,9 +31,9 @@ use crate::{
     ser::Serialize,
     types::{
         CompressionAlgorithm, EncryptionKey, Fingerprint, KeyId, KeyVersion, PacketHeaderVersion,
-        PacketLength, Password, SecretKeyTrait, StringToKey, Tag,
+        PacketLength, Password, SigningKey, StringToKey, Tag,
     },
-    util::{fill_buffer, TeeWriter},
+    util::{TeeWriter, fill_buffer},
 };
 
 pub type DummyReader = std::io::Cursor<Vec<u8>>;
@@ -152,7 +152,7 @@ impl SubpacketConfig {
     /// and the signing key (which is only actually needed for the `Default` case)
     pub(crate) fn to_subpackets(
         &self,
-        signer: &dyn SecretKeyTrait,
+        signer: &dyn SigningKey,
     ) -> Result<(Vec<Subpacket>, Vec<Subpacket>)> {
         match self {
             SubpacketConfig::Default => {
@@ -181,7 +181,7 @@ impl SubpacketConfig {
 #[derive(Debug)]
 struct SigningConfig<'a> {
     /// The key to sign with
-    key: &'a dyn SecretKeyTrait,
+    key: &'a dyn SigningKey,
     /// A password to unlock it
     key_pw: Password,
     /// The hash algorithm to be used when signing.
@@ -193,12 +193,12 @@ struct SigningConfig<'a> {
 
 impl<'a> SigningConfig<'a> {
     /// Create a new signing configuration.
-    fn new(key: &'a dyn SecretKeyTrait, key_pw: Password, hash: HashAlgorithm) -> Self {
+    fn new(key: &'a dyn SigningKey, key_pw: Password, hash: HashAlgorithm) -> Self {
         Self::with_subpackets(key, key_pw, hash, SubpacketConfig::Default)
     }
 
     fn with_subpackets(
-        key: &'a dyn SecretKeyTrait,
+        key: &'a dyn SigningKey,
         key_pw: Password,
         hash: HashAlgorithm,
         subpackets: SubpacketConfig,
@@ -780,7 +780,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     /// Produce a data signature with the signing key `key`.
     pub fn sign(
         &mut self,
-        key: &'a dyn SecretKeyTrait,
+        key: &'a dyn SigningKey,
         key_pw: Password,
         hash_algorithm: HashAlgorithm,
     ) -> &mut Self {
@@ -794,7 +794,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     /// This gives callers full control of the hashed and unhashed subpacket areas.
     pub fn sign_with_subpackets(
         &mut self,
-        key: &'a dyn SecretKeyTrait,
+        key: &'a dyn SigningKey,
         key_pw: Password,
         hash_algorithm: HashAlgorithm,
         subpackets: SubpacketConfig,
@@ -1530,7 +1530,7 @@ mod tests {
         crypto::sym::SymmetricKeyAlgorithm,
         packet::SubpacketType,
         types::{EskType, KeyDetails},
-        util::test::{check_strings, random_string, ChaosReader},
+        util::test::{ChaosReader, check_strings, random_string},
     };
 
     #[test]
@@ -2197,8 +2197,8 @@ mod tests {
     }
 
     #[test]
-    fn utf8_reader_partial_size_compression_zip_roundtrip_public_key_x25519_seipdv2_sign_twice(
-    ) -> TestResult {
+    fn utf8_reader_partial_size_compression_zip_roundtrip_public_key_x25519_seipdv2_sign_twice()
+    -> TestResult {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
 
@@ -2291,8 +2291,8 @@ mod tests {
     }
 
     #[test]
-    fn utf8_reader_partial_size_compression_zip_roundtrip_no_encryption_seipdv2_sign_twice(
-    ) -> TestResult {
+    fn utf8_reader_partial_size_compression_zip_roundtrip_no_encryption_seipdv2_sign_twice()
+    -> TestResult {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
 
@@ -2517,9 +2517,11 @@ mod tests {
                 .unwrap(),
             SubpacketData::IssuerFingerprint(key.public_key().fingerprint())
         );
-        assert!(hashed
-            .iter()
-            .any(|sp| sp.typ() == SubpacketType::SignatureCreationTime));
+        assert!(
+            hashed
+                .iter()
+                .any(|sp| sp.typ() == SubpacketType::SignatureCreationTime)
+        );
         assert_eq!(
             hashed
                 .iter()

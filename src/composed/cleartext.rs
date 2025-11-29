@@ -10,18 +10,18 @@ use chrono::SubsecRound;
 use log::debug;
 
 use crate::{
-    armor::{self, header_parser, read_from_buf, BlockType, DearmorOptions, Headers},
+    armor::{self, BlockType, DearmorOptions, Headers, header_parser, read_from_buf},
     composed::ArmorOptions,
     crypto::hash::HashAlgorithm,
-    errors::{bail, ensure, ensure_eq, format_err, InvalidInputSnafu, Result},
+    errors::{InvalidInputSnafu, Result, bail, ensure, ensure_eq, format_err},
     line_writer::LineBreak,
-    normalize_lines::{normalize_lines, NormalizedReader},
+    normalize_lines::{NormalizedReader, normalize_lines},
     packet::{
         Packet, PacketParser, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
         SubpacketData,
     },
     ser::Serialize,
-    types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
+    types::{KeyVersion, Password, PublicKeyTrait, SigningKey},
 };
 
 /// Implementation of a Cleartext Signed Message.
@@ -47,7 +47,7 @@ impl CleartextSignedMessage {
     pub fn new(
         text: &str,
         config: SignatureConfig,
-        key: &impl SecretKeyTrait,
+        key: &impl SigningKey,
         key_pw: &Password,
     ) -> Result<Self>
 where {
@@ -64,7 +64,7 @@ where {
     }
 
     /// Sign the given text.
-    pub fn sign<R>(rng: R, text: &str, key: &impl SecretKeyTrait, key_pw: &Password) -> Result<Self>
+    pub fn sign<R>(rng: R, text: &str, key: &impl SigningKey, key_pw: &Password) -> Result<Self>
     where
         R: rand::Rng + rand::CryptoRng,
     {
@@ -428,7 +428,12 @@ mod tests {
 
         let (msg, headers) = CleartextSignedMessage::from_string(&data).unwrap();
 
-        assert_eq!(normalize(msg.text()), normalize("You are scrupulously honest, frank, and straightforward.  Therefore you\nhave few friends."));
+        assert_eq!(
+            normalize(msg.text()),
+            normalize(
+                "You are scrupulously honest, frank, and straightforward.  Therefore you\nhave few friends."
+            )
+        );
         assert_eq!(headers.len(), 1);
         assert_eq!(
             headers.get("Version").unwrap(),
@@ -475,7 +480,9 @@ mod tests {
 
         assert_eq!(
             normalize(msg.text()),
-            normalize("The very remembrance of my former misfortune proves a new one to me.\n		-- Miguel de Cervantes")
+            normalize(
+                "The very remembrance of my former misfortune proves a new one to me.\n		-- Miguel de Cervantes"
+            )
         );
         assert_eq!(headers.len(), 1);
         assert_eq!(

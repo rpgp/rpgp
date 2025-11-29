@@ -1,13 +1,13 @@
 use std::marker::PhantomData;
 
 use chrono::{DateTime, Utc};
-use digest::{typenum::Unsigned, OutputSizeUser};
+use digest::{OutputSizeUser, typenum::Unsigned};
 use ecdsa::{
-    elliptic_curve::{generic_array::ArrayLength, CurveArithmetic},
-    hazmat::DigestPrimitive,
     PrimeCurve, SignatureSize,
+    elliptic_curve::{CurveArithmetic, generic_array::ArrayLength},
+    hazmat::DigestPrimitive,
 };
-use signature::{hazmat::PrehashSigner, Keypair};
+use signature::{Keypair, hazmat::PrehashSigner};
 
 use crate::{
     adapter::PublicKey as HPublicKey,
@@ -15,11 +15,11 @@ use crate::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{ensure_eq, Result},
+    errors::{Result, ensure_eq},
     packet::{PubKeyInner, PublicKey},
     types::{
         EcdsaPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password,
-        PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes,
+        PublicKeyTrait, PublicParams, SignatureBytes, SigningKey,
     },
 };
 
@@ -125,14 +125,14 @@ where
     }
 }
 
-impl<C, T> SecretKeyTrait for EcdsaSigner<T, C>
+impl<C, T> SigningKey for EcdsaSigner<T, C>
 where
     C: PrimeCurve + DigestPrimitive,
     SignatureSize<C>: ArrayLength<u8>,
     T: PrehashSigner<ecdsa::Signature<C>>,
     C::Digest: KnownDigest,
 {
-    fn create_signature(
+    fn sign(
         &self,
         _key_pw: &Password,
         hash: HashAlgorithm,

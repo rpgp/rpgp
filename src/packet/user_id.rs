@@ -5,16 +5,16 @@ use chrono::{SubsecRound, Utc};
 use rand::{CryptoRng, Rng};
 
 use crate::{
-    errors::{ensure, Result},
+    errors::{Result, ensure},
     packet::{
-        PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
-        SubpacketData, CERTIFICATION_SIGNATURE_TYPES,
+        CERTIFICATION_SIGNATURE_TYPES, PacketHeader, PacketTrait, Signature, SignatureConfig,
+        SignatureType, Subpacket, SubpacketData,
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        KeyVersion, PacketHeaderVersion, PacketLength, Password, PublicKeyTrait, SecretKeyTrait,
-        SignedUser, Tag,
+        KeyVersion, PacketHeaderVersion, PacketLength, Password, PublicKeyTrait, SignedUser,
+        SigningKey, Tag,
     },
 };
 
@@ -106,7 +106,7 @@ impl UserId {
     ) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
-        K: SecretKeyTrait,
+        K: SigningKey,
         P: PublicKeyTrait + Serialize,
     {
         // Self-signatures use CertPositive, see
@@ -131,7 +131,7 @@ impl UserId {
     ) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
-        P: SecretKeyTrait,
+        P: SigningKey,
         K: PublicKeyTrait + Serialize,
     {
         ensure!(
