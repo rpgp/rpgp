@@ -475,7 +475,8 @@ fn card_sign() {
                 DateTime::<Utc>::from_timestamp(sig_creation, 0).unwrap(),
             ))
             .unwrap(),
-            packet::Subpacket::regular(packet::SubpacketData::Issuer(hsm.legacy_key_id())).unwrap(),
+            packet::Subpacket::regular(packet::SubpacketData::IssuerKeyId(hsm.legacy_key_id()))
+                .unwrap(),
         ];
 
         let signature = config.sign(&hsm, &"".into(), DATA).unwrap();
@@ -504,7 +505,8 @@ fn ecdsa_signer() {
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
         ))
         .unwrap(),
-        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.legacy_key_id())).unwrap(),
+        packet::Subpacket::regular(packet::SubpacketData::IssuerKeyId(signer.legacy_key_id()))
+            .unwrap(),
     ];
 
     let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();
@@ -533,7 +535,8 @@ fn rsa_signer() {
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
         ))
         .unwrap(),
-        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.legacy_key_id())).unwrap(),
+        packet::Subpacket::regular(packet::SubpacketData::IssuerKeyId(signer.legacy_key_id()))
+            .unwrap(),
     ];
 
     let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();

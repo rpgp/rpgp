@@ -271,7 +271,7 @@ fn subpacket<B: BufRead>(
         KeyExpirationTime => key_expiration(body),
         PreferredSymmetricAlgorithms => pref_sym_alg(body),
         RevocationKey => revocation_key(body),
-        Issuer => issuer(body),
+        IssuerKeyId => issuer(body),
         Notation => notation_data(body),
         PreferredHashAlgorithms => pref_hash_alg(body),
         PreferredCompressionAlgorithms => pref_com_alg(body),
@@ -383,7 +383,7 @@ fn signature_creation_time<B: BufRead>(mut i: B) -> Result<SubpacketData> {
 fn issuer<B: BufRead>(mut i: B) -> Result<SubpacketData> {
     let key_id = i.read_array::<8>().map(KeyId::from)?;
 
-    Ok(SubpacketData::Issuer(key_id))
+    Ok(SubpacketData::IssuerKeyId(key_id))
 }
 
 /// Parse a Key Expiration Time subpacket

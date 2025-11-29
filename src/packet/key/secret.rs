@@ -179,7 +179,7 @@ impl SecretSubkey {
         // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
         // the signature.
         if self.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::IssuerKeyId(
                 self.legacy_key_id(),
             ))?];
         }
@@ -633,7 +633,7 @@ where
         Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
     ];
     if key.version() <= KeyVersion::V4 {
-        config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+        config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::IssuerKeyId(
             key.legacy_key_id(),
         ))?];
     }

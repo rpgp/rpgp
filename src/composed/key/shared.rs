@@ -134,7 +134,7 @@ impl KeyDetails {
                 .push(Subpacket::regular(SubpacketData::IsPrimary(true))?);
 
             if key.version() <= KeyVersion::V4 {
-                config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+                config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::IssuerKeyId(
                     key.legacy_key_id(),
                 ))?];
             }
@@ -167,7 +167,7 @@ impl KeyDetails {
 
                     if key.version() <= KeyVersion::V4 {
                         config.unhashed_subpackets = vec![Subpacket::regular(
-                            SubpacketData::Issuer(key.legacy_key_id()),
+                            SubpacketData::IssuerKeyId(key.legacy_key_id()),
                         )?];
                     }
 

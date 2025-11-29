@@ -270,7 +270,7 @@ mod tests {
         assert_eq!(cfg.unhashed_subpackets.len(), 1);
 
         assert_eq!(sig.signature.issuer_fingerprint().len(), 1);
-        assert_eq!(sig.signature.issuer().len(), 1);
+        assert_eq!(sig.signature.issuer_key_id().len(), 1);
 
         // differently normalized plaintext should not verify for SignatureType::Binary
         sig.verify(alice.primary_key.public_key(), PLAIN_LF.as_bytes())
@@ -304,7 +304,7 @@ mod tests {
         assert_eq!(cfg.unhashed_subpackets.len(), 1);
 
         assert_eq!(sig.signature.issuer_fingerprint().len(), 1);
-        assert_eq!(sig.signature.issuer().len(), 1);
+        assert_eq!(sig.signature.issuer_key_id().len(), 1);
 
         // differently normalized plaintext should verify as ok for SignatureType::Text
         sig.verify(alice.primary_key.public_key(), PLAIN_LF.as_bytes())

@@ -106,7 +106,7 @@ impl Subpacket {
             SubpacketData::SignatureCreationTime(_) => SubpacketType::SignatureCreationTime,
             SubpacketData::SignatureExpirationTime(_) => SubpacketType::SignatureExpirationTime,
             SubpacketData::KeyExpirationTime(_) => SubpacketType::KeyExpirationTime,
-            SubpacketData::Issuer(_) => SubpacketType::Issuer,
+            SubpacketData::IssuerKeyId(_) => SubpacketType::IssuerKeyId,
             SubpacketData::PreferredSymmetricAlgorithms(_) => {
                 SubpacketType::PreferredSymmetricAlgorithms
             }
@@ -155,7 +155,7 @@ impl Serialize for SubpacketData {
             SubpacketData::KeyExpirationTime(d) => {
                 writer.write_u32::<BigEndian>(duration_to_u32(d))?;
             }
-            SubpacketData::Issuer(id) => {
+            SubpacketData::IssuerKeyId(id) => {
                 writer.write_all(id.as_ref())?;
             }
             SubpacketData::PreferredSymmetricAlgorithms(algs) => {
@@ -272,7 +272,7 @@ impl Serialize for SubpacketData {
             SubpacketData::SignatureCreationTime(_) => 4,
             SubpacketData::SignatureExpirationTime(_) => 4,
             SubpacketData::KeyExpirationTime(_) => 4,
-            SubpacketData::Issuer(_) => 8,
+            SubpacketData::IssuerKeyId(_) => 8,
             SubpacketData::PreferredSymmetricAlgorithms(algs) => algs.len(),
             SubpacketData::PreferredHashAlgorithms(algs) => algs.len(),
             SubpacketData::PreferredCompressionAlgorithms(algs) => algs.len(),
@@ -336,8 +336,14 @@ impl SignatureConfig {
         writer.write_u8(0x05)?; // 1-octet length of the following hashed material; it MUST be 5
         writer.write_u8(self.typ.into())?; // type
 
-        if let SignatureVersionSpecific::V2 { created, issuer }
-        | SignatureVersionSpecific::V3 { created, issuer } = &self.version_specific
+        if let SignatureVersionSpecific::V2 {
+            created,
+            issuer_key_id: issuer,
+        }
+        | SignatureVersionSpecific::V3 {
+            created,
+            issuer_key_id: issuer,
+        } = &self.version_specific
         {
             writer.write_u32::<BigEndian>(created.timestamp().try_into()?)?;
             writer.write_all(issuer.as_ref())?;
@@ -354,8 +360,14 @@ impl SignatureConfig {
     pub(super) fn write_len_v3(&self) -> usize {
         let mut sum = 1 + 1;
 
-        if let SignatureVersionSpecific::V2 { issuer, .. }
-        | SignatureVersionSpecific::V3 { issuer, .. } = &self.version_specific
+        if let SignatureVersionSpecific::V2 {
+            issuer_key_id: issuer,
+            ..
+        }
+        | SignatureVersionSpecific::V3 {
+            issuer_key_id: issuer,
+            ..
+        } = &self.version_specific
         {
             sum += 4;
             sum += issuer.as_ref().len();

@@ -29,7 +29,7 @@ pub enum SubpacketType {
     KeyExpirationTime,
     PreferredSymmetricAlgorithms,
     RevocationKey,
-    Issuer,
+    IssuerKeyId,
     Notation,
     PreferredHashAlgorithms,
     PreferredCompressionAlgorithms,
@@ -65,7 +65,7 @@ impl SubpacketType {
             SubpacketType::KeyExpirationTime => 9,
             SubpacketType::PreferredSymmetricAlgorithms => 11,
             SubpacketType::RevocationKey => 12,
-            SubpacketType::Issuer => 16,
+            SubpacketType::IssuerKeyId => 16,
             SubpacketType::Notation => 20,
             SubpacketType::PreferredHashAlgorithms => 21,
             SubpacketType::PreferredCompressionAlgorithms => 22,
@@ -113,7 +113,7 @@ impl SubpacketType {
             9 => SubpacketType::KeyExpirationTime,
             11 => SubpacketType::PreferredSymmetricAlgorithms,
             12 => SubpacketType::RevocationKey,
-            16 => SubpacketType::Issuer,
+            16 => SubpacketType::IssuerKeyId,
             20 => SubpacketType::Notation,
             21 => SubpacketType::PreferredHashAlgorithms,
             22 => SubpacketType::PreferredCompressionAlgorithms,
@@ -274,7 +274,7 @@ pub enum SubpacketData {
     /// When the key is going to expire
     KeyExpirationTime(Duration),
     /// The OpenPGP Key ID of the key issuing the signature.
-    Issuer(KeyId),
+    IssuerKeyId(KeyId),
     /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
     /// Renamed to "Preferred Symmetric Ciphers for v1 SEIPD" in RFC 9580
     PreferredSymmetricAlgorithms(SmallVec<[SymmetricKeyAlgorithm; 8]>),
