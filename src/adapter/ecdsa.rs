@@ -18,8 +18,8 @@ use crate::{
     errors::{ensure_eq, Result},
     packet::{PubKeyInner, PublicKey},
     types::{
-        EcdsaPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password,
-        PublicKeyTrait, PublicParams, SignatureBytes, SigningKey,
+        EcdsaPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicParams,
+        SignatureBytes, SigningKey, VerifyingKey,
     },
 };
 
@@ -180,19 +180,14 @@ impl<C, T> KeyDetails for EcdsaSigner<T, C> {
     fn expiration(&self) -> Option<u16> {
         self.public_key.expiration()
     }
-}
-
-impl<C, T> PublicKeyTrait for EcdsaSigner<T, C> {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.public_key.verify_signature(hash, data, sig)
-    }
 
     fn public_params(&self) -> &PublicParams {
         self.public_key.public_params()
+    }
+}
+
+impl<C, T> VerifyingKey for EcdsaSigner<T, C> {
+    fn verify(&self, hash: HashAlgorithm, data: &[u8], sig: &SignatureBytes) -> Result<()> {
+        self.public_key.verify(hash, data, sig)
     }
 }

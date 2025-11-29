@@ -15,7 +15,7 @@ use crate::{
     ser::Serialize,
     types::{
         EncryptionKey, EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength,
-        PkeskBytes, PublicKeyTrait, PublicParams, SignatureBytes, Tag,
+        PkeskBytes, PublicParams, SignatureBytes, Tag, VerifyingKey,
     },
 };
 
@@ -184,6 +184,10 @@ impl KeyDetails for SignedPublicKey {
     fn expiration(&self) -> Option<u16> {
         self.primary_key.expiration()
     }
+
+    fn public_params(&self) -> &PublicParams {
+        self.primary_key.public_params()
+    }
 }
 
 impl Imprint for SignedPublicKey {
@@ -192,18 +196,9 @@ impl Imprint for SignedPublicKey {
     }
 }
 
-impl PublicKeyTrait for SignedPublicKey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.primary_key.verify_signature(hash, data, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.primary_key.public_params()
+impl VerifyingKey for SignedPublicKey {
+    fn verify(&self, hash: HashAlgorithm, data: &[u8], sig: &SignatureBytes) -> Result<()> {
+        self.primary_key.verify(hash, data, sig)
     }
 }
 
@@ -256,7 +251,7 @@ impl SignedPublicSubKey {
 
     pub fn verify<P>(&self, key: &P) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         ensure!(!self.signatures.is_empty(), "missing subkey bindings");
 
@@ -319,20 +314,15 @@ impl KeyDetails for SignedPublicSubKey {
     fn expiration(&self) -> Option<u16> {
         self.key.expiration()
     }
-}
-
-impl PublicKeyTrait for SignedPublicSubKey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.key.verify_signature(hash, data, sig)
-    }
 
     fn public_params(&self) -> &PublicParams {
         self.key.public_params()
+    }
+}
+
+impl VerifyingKey for SignedPublicSubKey {
+    fn verify(&self, hash: HashAlgorithm, data: &[u8], sig: &SignatureBytes) -> Result<()> {
+        self.key.verify(hash, data, sig)
     }
 }
 

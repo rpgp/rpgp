@@ -13,7 +13,7 @@ use pgp::{
     packet::{self, PubKeyInner, PublicKey, SignatureConfig},
     types::{
         EcdhPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes,
-        PublicKeyTrait, PublicParams, SignatureBytes, SigningKey,
+        PublicParams, SignatureBytes, SigningKey, VerifyingKey,
     },
 };
 
@@ -55,18 +55,14 @@ impl FakeHsm {
     }
 }
 
-impl PublicKeyTrait for FakeHsm {
-    fn verify_signature(
+impl VerifyingKey for FakeHsm {
+    fn verify(
         &self,
         hash: HashAlgorithm,
         data: &[u8],
         sig: &SignatureBytes,
     ) -> pgp::errors::Result<()> {
-        self.public_key.verify_signature(hash, data, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.public_key.public_params()
+        self.public_key.verify(hash, data, sig)
     }
 }
 
@@ -93,6 +89,10 @@ impl KeyDetails for FakeHsm {
 
     fn expiration(&self) -> Option<u16> {
         self.public_key.expiration()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.public_key.public_params()
     }
 }
 

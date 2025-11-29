@@ -14,7 +14,7 @@ use crate::{
     packet,
     packet::{Features, KeyFlags, PacketTrait, SignatureVersion},
     ser::Serialize,
-    types::{PacketLength, PublicKeyTrait, SignedUser, SignedUserAttribute},
+    types::{PacketLength, SignedUser, SignedUserAttribute, VerifyingKey},
 };
 
 /// Shared details between secret and public keys.
@@ -61,7 +61,7 @@ impl SignedKeyDetails {
 
     fn verify_users<P>(&self, key: &P) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         for user in &self.users {
             user.verify(key)?;
@@ -72,7 +72,7 @@ impl SignedKeyDetails {
 
     fn verify_attributes<P>(&self, key: &P) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         for attr in &self.user_attributes {
             attr.verify(key)?;
@@ -83,7 +83,7 @@ impl SignedKeyDetails {
 
     fn verify_revocation_signatures<P>(&self, key: &P) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         for sig in &self.revocation_signatures {
             sig.verify_key(key)?;
@@ -94,7 +94,7 @@ impl SignedKeyDetails {
 
     fn verify_direct_signatures<P>(&self, key: &P) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         for sig in &self.direct_signatures {
             sig.verify_key(key)?;
@@ -105,7 +105,7 @@ impl SignedKeyDetails {
 
     pub fn verify<P>(&self, key: &P) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         self.verify_users(key)?;
         self.verify_attributes(key)?;

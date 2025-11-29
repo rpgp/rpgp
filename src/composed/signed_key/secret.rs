@@ -13,7 +13,7 @@ use crate::{
     errors::{ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
-    types::{EskType, Imprint, Password, PkeskBytes, PublicKeyTrait, Tag},
+    types::{EskType, Imprint, Password, PkeskBytes, Tag, VerifyingKey},
 };
 
 /// Represents a secret signed PGP key.
@@ -257,7 +257,7 @@ impl SignedSecretSubKey {
 
     pub fn verify<P>(&self, key: &P) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         ensure!(!self.signatures.is_empty(), "missing subkey bindings");
 

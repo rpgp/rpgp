@@ -18,6 +18,7 @@ pub trait KeyDetails {
     fn algorithm(&self) -> PublicKeyAlgorithm;
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc>;
     fn expiration(&self) -> Option<u16>;
+    fn public_params(&self) -> &PublicParams;
 
     fn is_signing_key(&self) -> bool {
         use crate::crypto::public_key::PublicKeyAlgorithm::*;
@@ -68,17 +69,11 @@ pub trait Imprint {
     fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>>;
 }
 
-pub trait PublicKeyTrait: KeyDetails + std::fmt::Debug {
+/// Keys that can verify signatures.
+pub trait VerifyingKey: KeyDetails + std::fmt::Debug {
     /// Verify a signed message.
     /// Data will be hashed using `hash`, before verifying.
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()>;
-
-    fn public_params(&self) -> &PublicParams;
+    fn verify(&self, hash: HashAlgorithm, data: &[u8], sig: &SignatureBytes) -> Result<()>;
 }
 
 impl<T: KeyDetails> KeyDetails for &T {
@@ -106,20 +101,15 @@ impl<T: KeyDetails> KeyDetails for &T {
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
         (*self).created_at()
     }
-}
-
-impl<T: PublicKeyTrait> PublicKeyTrait for &T {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        (*self).verify_signature(hash, data, sig)
-    }
 
     fn public_params(&self) -> &PublicParams {
         (*self).public_params()
+    }
+}
+
+impl<T: VerifyingKey> VerifyingKey for &T {
+    fn verify(&self, hash: HashAlgorithm, data: &[u8], sig: &SignatureBytes) -> Result<()> {
+        (*self).verify(hash, data, sig)
     }
 }
 
@@ -146,6 +136,10 @@ impl KeyDetails for Box<&dyn SigningKey> {
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
         (**self).created_at()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        (**self).public_params()
     }
 }
 
@@ -182,7 +176,7 @@ impl SigningKey for Box<&dyn SigningKey> {
 
 /// Describes keys that can encrypt plain data (i.e. a session key) into data for a
 /// [PKESK](https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio).
-pub trait EncryptionKey: PublicKeyTrait {
+pub trait EncryptionKey: VerifyingKey {
     fn encrypt<R: rand::CryptoRng + rand::Rng>(
         &self,
         rng: R,

@@ -25,7 +25,7 @@ use crate::{
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::{EskType, PkeskBytes, PublicKeyTrait, PublicParams, *},
+    types::{EskType, PkeskBytes, PublicParams, VerifyingKey, *},
     util::TeeWriter,
 };
 
@@ -296,7 +296,7 @@ impl PlainSecretParams {
         &self,
         passphrase: &[u8],
         s2k_params: S2kParams,
-        pub_key: &(impl PublicKeyTrait + Serialize),
+        pub_key: &(impl VerifyingKey + Serialize),
         secret_tag: Option<Tag>,
     ) -> Result<EncryptedSecretParams> {
         let version = pub_key.version();
@@ -402,7 +402,7 @@ impl PlainSecretParams {
         recipient: &P,
     ) -> Result<PlainSessionKey>
     where
-        P: PublicKeyTrait,
+        P: VerifyingKey,
     {
         let decrypted_key = match (self, values) {
             (PlainSecretParams::RSA(ref priv_key), PkeskBytes::Rsa { mpi }) => {
@@ -796,7 +796,7 @@ impl PlainSecretParams {
 pub(crate) fn s2k_usage_aead(
     derived: &[u8],
     secret_tag: Tag,
-    pub_key: &(impl PublicKeyTrait + Serialize),
+    pub_key: &(impl VerifyingKey + Serialize),
     sym_alg: SymmetricKeyAlgorithm,
     aead_mode: AeadAlgorithm,
 ) -> Result<([u8; 32], Vec<u8>)> {

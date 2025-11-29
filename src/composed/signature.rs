@@ -10,7 +10,7 @@ use crate::{
     errors::{bail, format_err, Result},
     packet::{Packet, PacketTrait, Signature, SignatureConfig, SignatureType},
     ser::Serialize,
-    types::{KeyVersion, Password, PublicKeyTrait, SigningKey, Tag},
+    types::{KeyVersion, Password, SigningKey, Tag, VerifyingKey},
 };
 
 /// An OpenPGP data signature that occurs outside an OpenPGP Message,
@@ -173,7 +173,7 @@ impl DetachedSignature {
     }
 
     /// Verify this signature.
-    pub fn verify(&self, key: &impl PublicKeyTrait, content: &[u8]) -> Result<()> {
+    pub fn verify(&self, key: &impl VerifyingKey, content: &[u8]) -> Result<()> {
         self.signature.verify(key, content)
     }
 }

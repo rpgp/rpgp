@@ -19,8 +19,8 @@ use crate::{
     ser::Serialize,
     types::{
         EddsaLegacyPublicParams, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Password,
-        PlainSecretParams, PublicKeyTrait, PublicParams, SecretParams, SignatureBytes, SigningKey,
-        Tag,
+        PlainSecretParams, PublicParams, SecretParams, SignatureBytes, SigningKey, Tag,
+        VerifyingKey,
     },
 };
 
@@ -165,7 +165,7 @@ impl SecretSubkey {
         key_pw: &Password,
     ) -> Result<Signature>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         let mut config = SignatureConfig::from_key(rng, self, SignatureType::KeyBinding)?;
 
@@ -244,6 +244,10 @@ impl KeyDetails for SecretKey {
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
         self.details.created_at()
     }
+
+    fn public_params(&self) -> &PublicParams {
+        self.details.public_params()
+    }
 }
 
 impl Imprint for SecretKey {
@@ -272,6 +276,10 @@ impl KeyDetails for SecretSubkey {
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
         self.details.created_at()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.details.public_params()
     }
 }
 
@@ -472,7 +480,7 @@ impl SecretSubkey {
     ) -> Result<Signature>
     where
         K: SigningKey,
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         self.details.sign(
             &mut rng,
@@ -612,7 +620,7 @@ fn sign<R: CryptoRng + Rng, K, P>(
 ) -> Result<Signature>
 where
     K: SigningKey,
-    P: PublicKeyTrait + Serialize,
+    P: VerifyingKey + Serialize,
 {
     use chrono::SubsecRound;
 

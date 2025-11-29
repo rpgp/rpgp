@@ -22,8 +22,8 @@ use crate::{
     ser::Serialize,
     types::{
         EcdhPublicParams, EddsaLegacyPublicParams, EncryptionKey, EskType, Fingerprint, Imprint,
-        KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes, PublicKeyTrait, PublicParams,
-        SignatureBytes, SigningKey, Tag,
+        KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes, PublicParams, SignatureBytes,
+        SigningKey, Tag, VerifyingKey,
     },
 };
 
@@ -172,7 +172,7 @@ impl PublicSubkey {
     ) -> Result<Signature>
     where
         K: SigningKey,
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         let mut config =
             SignatureConfig::from_key(rng, primary_sec_key, SignatureType::SubkeyBinding)?;
@@ -423,7 +423,7 @@ impl PubKeyInner {
     }
 }
 
-pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
+pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: VerifyingKey>(
     key: &K,
     mut rng: R,
     plain: &[u8],
@@ -795,15 +795,14 @@ impl KeyDetails for PubKeyInner {
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
         &self.created_at
     }
+
+    fn public_params(&self) -> &PublicParams {
+        &self.public_params
+    }
 }
 
-impl PublicKeyTrait for PubKeyInner {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        hashed: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
+impl VerifyingKey for PubKeyInner {
+    fn verify(&self, hash: HashAlgorithm, hashed: &[u8], sig: &SignatureBytes) -> Result<()> {
         match self.public_params {
             PublicParams::RSA(ref params) => {
                 let sig: &[Mpi] = sig.try_into()?;
@@ -924,10 +923,6 @@ impl PublicKeyTrait for PubKeyInner {
             }
         }
     }
-
-    fn public_params(&self) -> &PublicParams {
-        &self.public_params
-    }
 }
 
 impl KeyDetails for PublicKey {
@@ -954,6 +949,10 @@ impl KeyDetails for PublicKey {
     fn expiration(&self) -> Option<u16> {
         self.inner.expiration
     }
+
+    fn public_params(&self) -> &PublicParams {
+        self.inner.public_params()
+    }
 }
 
 impl Imprint for PublicKey {
@@ -962,18 +961,9 @@ impl Imprint for PublicKey {
     }
 }
 
-impl PublicKeyTrait for PublicKey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        hashed: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        PublicKeyTrait::verify_signature(&self.inner, hash, hashed, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        PublicKeyTrait::public_params(&self.inner)
+impl VerifyingKey for PublicKey {
+    fn verify(&self, hash: HashAlgorithm, hashed: &[u8], sig: &SignatureBytes) -> Result<()> {
+        self.inner.verify(hash, hashed, sig)
     }
 }
 
@@ -1001,6 +991,10 @@ impl KeyDetails for PublicSubkey {
     fn expiration(&self) -> Option<u16> {
         self.inner.expiration()
     }
+
+    fn public_params(&self) -> &PublicParams {
+        self.inner.public_params()
+    }
 }
 
 impl Imprint for PublicSubkey {
@@ -1009,18 +1003,9 @@ impl Imprint for PublicSubkey {
     }
 }
 
-impl PublicKeyTrait for PublicSubkey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        hashed: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        PublicKeyTrait::verify_signature(&self.inner, hash, hashed, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        PublicKeyTrait::public_params(&self.inner)
+impl VerifyingKey for PublicSubkey {
+    fn verify(&self, hash: HashAlgorithm, hashed: &[u8], sig: &SignatureBytes) -> Result<()> {
+        VerifyingKey::verify(&self.inner, hash, hashed, sig)
     }
 }
 
@@ -1139,7 +1124,7 @@ mod tests {
         #[ignore]
         fn public_key_packet_roundtrip(packet: PublicKey) {
             // dyn compat
-            let _: Box<&dyn PublicKeyTrait> = Box::new(&packet);
+            let _: Box<&dyn VerifyingKey> = Box::new(&packet);
 
             let mut buf = Vec::new();
             packet.to_writer(&mut buf)?;

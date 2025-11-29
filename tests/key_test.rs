@@ -27,8 +27,8 @@ use pgp::{
     ser::Serialize,
     types::{
         CompressionAlgorithm, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Mpi,
-        PacketHeaderVersion, PacketLength, Password, PlainSecretParams, PublicKeyTrait,
-        PublicParams, S2kParams, SecretParams, SignedUser, StringToKey, Tag,
+        PacketHeaderVersion, PacketLength, Password, PlainSecretParams, PublicParams, S2kParams,
+        SecretParams, SignedUser, StringToKey, Tag,
     },
 };
 use rand::SeedableRng;

@@ -13,8 +13,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        KeyVersion, PacketHeaderVersion, PacketLength, Password, PublicKeyTrait, SignedUser,
-        SigningKey, Tag,
+        KeyVersion, PacketHeaderVersion, PacketLength, Password, SignedUser, SigningKey, Tag,
+        VerifyingKey,
     },
 };
 
@@ -107,7 +107,7 @@ impl UserId {
     where
         R: CryptoRng + Rng,
         K: SigningKey,
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         // Self-signatures use CertPositive, see
         // <https://www.ietf.org/archive/id/draft-gallagher-openpgp-signatures-01.html#name-certification-signature-typ>
@@ -132,7 +132,7 @@ impl UserId {
     where
         R: CryptoRng + Rng,
         P: SigningKey,
-        K: PublicKeyTrait + Serialize,
+        K: VerifyingKey + Serialize,
     {
         ensure!(
             CERTIFICATION_SIGNATURE_TYPES.contains(&typ),

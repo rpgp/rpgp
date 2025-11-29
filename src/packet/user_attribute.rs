@@ -14,7 +14,7 @@ use crate::{
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::{KeyVersion, Password, PublicKeyTrait, SignedUserAttribute, SigningKey, Tag},
+    types::{KeyVersion, Password, SignedUserAttribute, SigningKey, Tag, VerifyingKey},
 };
 
 /// The type of a user attribute. Only `Image` is a known type currently
@@ -229,7 +229,7 @@ impl UserAttribute {
     where
         R: CryptoRng + Rng,
         P: SigningKey,
-        K: PublicKeyTrait + Serialize,
+        K: VerifyingKey + Serialize,
     {
         // Self-signatures use CertPositive, see
         // <https://www.ietf.org/archive/id/draft-gallagher-openpgp-signatures-01.html#name-certification-signature-typ>
@@ -254,7 +254,7 @@ impl UserAttribute {
     where
         R: CryptoRng + Rng,
         P: SigningKey,
-        K: PublicKeyTrait + Serialize,
+        K: VerifyingKey + Serialize,
     {
         ensure!(
             CERTIFICATION_SIGNATURE_TYPES.contains(&typ),

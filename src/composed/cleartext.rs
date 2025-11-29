@@ -21,7 +21,7 @@ use crate::{
         SubpacketData,
     },
     ser::Serialize,
-    types::{KeyVersion, Password, PublicKeyTrait, SigningKey},
+    types::{KeyVersion, Password, SigningKey, VerifyingKey},
 };
 
 /// Implementation of a Cleartext Signed Message.
@@ -125,7 +125,7 @@ where {
     /// Verify the signature against the normalized cleartext.
     ///
     /// On success returns the first signature that verified against this key.
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<&Signature> {
+    pub fn verify(&self, key: &impl VerifyingKey) -> Result<&Signature> {
         let nt = self.signed_text();
         for signature in &self.signatures {
             if signature.verify(key, nt.as_bytes()).is_ok() {

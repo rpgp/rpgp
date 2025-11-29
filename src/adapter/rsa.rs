@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use chrono::{DateTime, Utc};
 use digest::{typenum::Unsigned, OutputSizeUser};
 use rsa::{
-    pkcs1v15::{Signature, VerifyingKey},
+    pkcs1v15::{self, Signature},
     RsaPublicKey,
 };
 use sha2::Digest;
@@ -18,8 +18,8 @@ use crate::{
     errors::{bail, Result},
     packet::{PubKeyInner, PublicKey},
     types::{
-        Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicKeyTrait, PublicParams,
-        RsaPublicParams, SignatureBytes, SigningKey,
+        Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicParams, RsaPublicParams,
+        SignatureBytes, SigningKey, VerifyingKey,
     },
 };
 
@@ -44,7 +44,7 @@ pub struct RsaSigner<T, D> {
 impl<T, D> RsaSigner<T, D>
 where
     D: Digest,
-    T: Keypair<VerifyingKey = VerifyingKey<D>>,
+    T: Keypair<VerifyingKey = pkcs1v15::VerifyingKey<D>>,
 {
     /// Create a new signer with a given public key
     pub fn new(inner: T, version: KeyVersion, created_at: DateTime<Utc>) -> Result<Self> {
@@ -165,19 +165,14 @@ impl<D, T> KeyDetails for RsaSigner<T, D> {
     fn expiration(&self) -> Option<u16> {
         self.public_key.expiration()
     }
-}
-
-impl<D, T> PublicKeyTrait for RsaSigner<T, D> {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.public_key.verify_signature(hash, data, sig)
-    }
 
     fn public_params(&self) -> &PublicParams {
         self.public_key.public_params()
+    }
+}
+
+impl<D, T> VerifyingKey for RsaSigner<T, D> {
+    fn verify(&self, hash: HashAlgorithm, data: &[u8], sig: &SignatureBytes) -> Result<()> {
+        self.public_key.verify(hash, data, sig)
     }
 }

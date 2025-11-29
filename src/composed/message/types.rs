@@ -18,8 +18,7 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        EskType, KeyDetails, Password, PkeskVersion, PublicKeyTrait, SecretParams, SkeskVersion,
-        Tag,
+        EskType, KeyDetails, Password, PkeskVersion, SecretParams, SkeskVersion, Tag, VerifyingKey,
     },
     util::impl_try_from_into,
 };
@@ -657,14 +656,18 @@ impl<'a> Edata<'a> {
                 if options.legacy {
                     reader.decrypt(key)?;
                 } else {
-                    bail!("Decryption of SymEncryptedData is discouraged, 'DecryptionOptions' allows opting into it")
+                    bail!(
+                        "Decryption of SymEncryptedData is discouraged, 'DecryptionOptions' allows opting into it"
+                    )
                 }
             }
             Self::GnupgAeadData { reader } => {
                 if options.gnupg_aead {
                     reader.decrypt(key)?;
                 } else {
-                    bail!("GnuPG's AEAD packet (type 20) is non-standard, 'DecryptionOptions' allows opting into it")
+                    bail!(
+                        "GnuPG's AEAD packet (type 20) is non-standard, 'DecryptionOptions' allows opting into it"
+                    )
                 }
             }
         }
@@ -710,7 +713,7 @@ impl<'a> Message<'a> {
     /// The message must have been read to the end before calling this.
     ///
     /// The current recursion limit is `1024`.
-    pub fn verify_nested(&self, keys: &[&dyn PublicKeyTrait]) -> Result<Vec<VerificationResult>> {
+    pub fn verify_nested(&self, keys: &[&dyn VerifyingKey]) -> Result<Vec<VerificationResult>> {
         let mut out = vec![VerificationResult::Invalid; keys.len()];
 
         let mut current_message = self;
@@ -761,7 +764,7 @@ impl<'a> Message<'a> {
     }
 
     /// Reads the contents and discards it, then verifies the message.
-    pub fn verify_read(&mut self, key: &dyn PublicKeyTrait) -> Result<&Signature> {
+    pub fn verify_read(&mut self, key: &dyn VerifyingKey) -> Result<&Signature> {
         self.drain()?;
         let sig = self.verify(key)?;
         Ok(sig)
@@ -773,7 +776,7 @@ impl<'a> Message<'a> {
     /// The message must have been read to the end before calling this.
     ///
     /// If the signature is valid, returns the matching signature.
-    pub fn verify(&self, key: &dyn PublicKeyTrait) -> Result<&Signature> {
+    pub fn verify(&self, key: &dyn VerifyingKey) -> Result<&Signature> {
         match self {
             Message::SignedOnePass { reader, .. } => {
                 let Some(calculated_hash) = reader.hash() else {
@@ -806,7 +809,7 @@ impl<'a> Message<'a> {
                     &calculated_hash[0..2],
                     "signature: invalid signed hash value"
                 );
-                key.verify_signature(config.hash_alg, calculated_hash, signature_bytes)?;
+                key.verify(config.hash_alg, calculated_hash, signature_bytes)?;
                 Ok(signature)
             }
             Message::Signed { reader, .. } => {
@@ -838,7 +841,7 @@ impl<'a> Message<'a> {
                     &calculated_hash[0..2],
                     "signature: invalid signed hash value"
                 );
-                key.verify_signature(config.hash_alg, calculated_hash, signature_bytes)?;
+                key.verify(config.hash_alg, calculated_hash, signature_bytes)?;
 
                 Ok(reader.signature())
             }
