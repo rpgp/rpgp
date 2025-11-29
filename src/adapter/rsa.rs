@@ -146,8 +146,8 @@ impl<D, T> KeyDetails for RsaSigner<T, D> {
         self.public_key.fingerprint()
     }
 
-    fn id(&self) -> KeyId {
-        self.public_key.id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.public_key.legacy_key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {

@@ -18,7 +18,7 @@ pub trait KeyDetails: std::fmt::Debug {
     /// Returns the [`KeyId`] for this key.
     ///
     /// <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.5.4>
-    fn id(&self) -> KeyId;
+    fn legacy_key_id(&self) -> KeyId;
 
     /// Returns the [`Fingerprint`] for this key.
     fn fingerprint(&self) -> Fingerprint;
@@ -65,8 +65,8 @@ impl<T: KeyDetails> KeyDetails for &T {
         (*self).fingerprint()
     }
 
-    fn id(&self) -> KeyId {
-        (*self).id()
+    fn legacy_key_id(&self) -> KeyId {
+        (*self).legacy_key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
@@ -101,8 +101,8 @@ impl KeyDetails for Box<&dyn SigningKey> {
         (**self).fingerprint()
     }
 
-    fn id(&self) -> KeyId {
-        (**self).id()
+    fn legacy_key_id(&self) -> KeyId {
+        (**self).legacy_key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {

@@ -367,7 +367,7 @@ impl Signature {
         }
 
         // Does any issuer or issuer fingerprint subpacket matche the identity of `sig`?
-        issuers.iter().any(|&key_id| key_id == &key.id())
+        issuers.iter().any(|&key_id| key_id == &key.legacy_key_id())
             || issuer_fps.iter().any(|&fp| fp == &key.fingerprint())
     }
 
@@ -444,7 +444,7 @@ impl Signature {
         ensure!(
             Self::match_identity(self, key),
             "verify: No matching issuer or issuer_fingerprint for Key ID: {:?}",
-            &key.id(),
+            &key.legacy_key_id(),
         );
 
         let mut hasher = config.hash_alg.new_hasher()?;
@@ -523,7 +523,7 @@ impl Signature {
         else {
             unsupported_err!("signature version {:?}", self.version());
         };
-        let key_id = signee.id();
+        let key_id = signee.legacy_key_id();
         debug!("verifying certification {key_id:?} {self:#?}");
 
         Self::check_signature_key_version_alignment(&signer, config)?;
@@ -713,7 +713,7 @@ impl Signature {
         ensure!(
             Self::match_identity(self, signer),
             "verify_key: No matching issuer or issuer_fingerprint for Key ID: {:?}",
-            &signer.id(),
+            &signer.legacy_key_id(),
         );
 
         let mut hasher = config.hash_alg.new_hasher()?;

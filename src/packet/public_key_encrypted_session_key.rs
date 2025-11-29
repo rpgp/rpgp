@@ -171,7 +171,7 @@ impl PublicKeyEncryptedSessionKey {
 
         let values = enc.encrypt(rng, &data, EskType::V3_4)?;
 
-        let id = enc.id();
+        let id = enc.legacy_key_id();
         let len = write_len_v3(&id, &values);
         let packet_header =
             PacketHeader::new_fixed(Tag::PublicKeyEncryptedSessionKey, len.try_into()?);
@@ -219,7 +219,7 @@ impl PublicKeyEncryptedSessionKey {
     /// - for v6: is PKESK fingerprint the wildcard (represented as `None`), or does it match the fingerprint of `pkey`?
     pub fn match_identity(&self, pkey: &impl KeyDetails) -> bool {
         match self {
-            Self::V3 { id, .. } => id.is_wildcard() || (id == &pkey.id()),
+            Self::V3 { id, .. } => id.is_wildcard() || (id == &pkey.legacy_key_id()),
             Self::V6 { fingerprint, .. } => {
                 if let Some(fingerprint) = fingerprint {
                     fingerprint == &pkey.fingerprint()

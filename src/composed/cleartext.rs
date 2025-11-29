@@ -81,7 +81,9 @@ where {
         // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
         // the signature.
         if key.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.id()))?];
+            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+                key.legacy_key_id(),
+            ))?];
         }
 
         Self::new(text, config, key, key_pw)

@@ -1200,7 +1200,10 @@ impl TheRing<'_> {
 
                 macro_rules! try_key {
                     ($skey:expr, $pkey:expr, $values:expr) => {
-                        debug!("found matching key {:?}, trying to decrypt", $skey.id());
+                        debug!(
+                            "found matching key {:?}, trying to decrypt",
+                            $skey.fingerprint()
+                        );
                         match $skey.secret_params() {
                             SecretParams::Encrypted(_) => {
                                 // unlock
@@ -1245,14 +1248,17 @@ impl TheRing<'_> {
                 }
 
                 // check primary key
-                debug!("checking primary key: {:?}", key.primary_key.id());
+                debug!(
+                    "checking primary key: {:?}",
+                    key.primary_key.legacy_key_id()
+                );
                 if esk.match_identity(key.primary_key.public_key()) {
                     let values = esk.values()?;
                     try_key!(key, key.primary_key.public_key(), values);
                 }
                 // search subkeys
                 for subkey in &key.secret_subkeys {
-                    debug!("checking subkey: {:?}", subkey.id());
+                    debug!("checking subkey: {:?}", subkey.legacy_key_id());
                     if esk.match_identity(&subkey.public_key()) {
                         let values = esk.values()?;
                         try_key!(subkey, subkey.key.public_key(), values);

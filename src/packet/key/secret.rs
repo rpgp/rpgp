@@ -179,8 +179,9 @@ impl SecretSubkey {
         // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
         // the signature.
         if self.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets =
-                vec![Subpacket::regular(SubpacketData::Issuer(self.id()))?];
+            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+                self.legacy_key_id(),
+            ))?];
         }
 
         config.sign_primary_key_binding(self, &self.public_key(), key_pw, &pub_key)
@@ -230,8 +231,8 @@ impl KeyDetails for SecretKey {
         self.details.fingerprint()
     }
 
-    fn id(&self) -> KeyId {
-        self.details.id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.details.legacy_key_id()
     }
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.details.algorithm()
@@ -264,8 +265,8 @@ impl KeyDetails for SecretSubkey {
         self.details.fingerprint()
     }
 
-    fn id(&self) -> KeyId {
-        self.details.id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.details.legacy_key_id()
     }
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.details.algorithm()
@@ -632,7 +633,9 @@ where
         Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
     ];
     if key.version() <= KeyVersion::V4 {
-        config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.id()))?];
+        config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+            key.legacy_key_id(),
+        ))?];
     }
 
     config.sign_key(key, key_pw, pub_key)

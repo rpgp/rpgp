@@ -134,8 +134,9 @@ impl KeyDetails {
                 .push(Subpacket::regular(SubpacketData::IsPrimary(true))?);
 
             if key.version() <= KeyVersion::V4 {
-                config.unhashed_subpackets =
-                    vec![Subpacket::regular(SubpacketData::Issuer(key.id()))?];
+                config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+                    key.legacy_key_id(),
+                ))?];
             }
 
             let sig = config.sign_certification(
@@ -165,8 +166,9 @@ impl KeyDetails {
                     };
 
                     if key.version() <= KeyVersion::V4 {
-                        config.unhashed_subpackets =
-                            vec![Subpacket::regular(SubpacketData::Issuer(key.id()))?];
+                        config.unhashed_subpackets = vec![Subpacket::regular(
+                            SubpacketData::Issuer(key.legacy_key_id()),
+                        )?];
                     }
 
                     let sig = config.sign_certification(key, pub_key, key_pw, id.tag(), &id)?;

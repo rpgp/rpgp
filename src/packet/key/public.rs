@@ -199,7 +199,7 @@ impl PublicSubkey {
         // the signature.
         if primary_sec_key.version() <= KeyVersion::V4 {
             config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
-                primary_sec_key.id(),
+                primary_sec_key.legacy_key_id(),
             ))?];
         }
 
@@ -415,7 +415,9 @@ impl PubKeyInner {
             Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
         ];
         if key.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.id()))?];
+            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+                key.legacy_key_id(),
+            ))?];
         }
 
         config.sign_key(key, key_pw, &self)
@@ -754,7 +756,7 @@ impl KeyDetails for PubKeyInner {
         }
     }
 
-    fn id(&self) -> KeyId {
+    fn legacy_key_id(&self) -> KeyId {
         match self.version {
             KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
                 PublicParams::RSA(params) => {
@@ -933,8 +935,8 @@ impl KeyDetails for PublicKey {
         self.inner.fingerprint()
     }
 
-    fn id(&self) -> KeyId {
-        self.inner.id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.inner.legacy_key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
@@ -975,8 +977,8 @@ impl KeyDetails for PublicSubkey {
         self.inner.fingerprint()
     }
 
-    fn id(&self) -> KeyId {
-        self.inner.id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.inner.legacy_key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {

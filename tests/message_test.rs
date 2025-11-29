@@ -52,7 +52,7 @@ fn test_parse_msg(entry: &str, base_path: &str, _is_normalized: bool) {
         .expect("failed to read decryption key");
     decrypt_key.verify().expect("invalid decryption key");
 
-    let decrypt_id = hex::encode(decrypt_key.id());
+    let decrypt_id = hex::encode(decrypt_key.legacy_key_id());
 
     info!("decrypt key (ID={})", &decrypt_id);
     if let Some(id) = &details.keyid {
@@ -65,7 +65,7 @@ fn test_parse_msg(entry: &str, base_path: &str, _is_normalized: bool) {
             .expect("failed to read verification key");
         verify_key.verify().expect("invalid verification key");
 
-        let verify_id = hex::encode(verify_key.id());
+        let verify_id = hex::encode(verify_key.legacy_key_id());
         info!("verify key (ID={})", &verify_id);
         Some(verify_key)
     } else {
@@ -438,7 +438,9 @@ fn test_text_signature_normalization() {
     let signing = skey
         .secret_subkeys
         .iter()
-        .find(|key| key.id() == KeyId::from([0x64, 0x35, 0x7E, 0xB6, 0xBB, 0x55, 0xDE, 0x12]))
+        .find(|key| {
+            key.legacy_key_id() == KeyId::from([0x64, 0x35, 0x7E, 0xB6, 0xBB, 0x55, 0xDE, 0x12])
+        })
         .unwrap();
 
     // And transform it into a public subkey for signature verification
