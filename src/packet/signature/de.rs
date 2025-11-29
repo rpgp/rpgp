@@ -1,7 +1,10 @@
-use std::{io::BufRead, str};
+use std::{
+    io::BufRead,
+    str,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use bytes::Buf;
-use chrono::{DateTime, Duration, TimeZone, Utc};
 use log::{debug, warn};
 use smallvec::SmallVec;
 
@@ -58,8 +61,8 @@ fn v3_parser<B: BufRead>(
     // Four-octet creation time.
     let created = i
         .read_be_u32()
-        .map(|v| Utc.timestamp_opt(i64::from(v), 0).single())?
-        .ok_or_else(|| format_err!("invalid creation time"))?;
+        .map(|v| UNIX_EPOCH + Duration::from_secs(u64::from(v)))?;
+
     // Eight-octet Key ID of signer.
     let issuer = i.read_array::<8>().map(KeyId::from)?;
     // One-octet public-key algorithm.
@@ -358,14 +361,14 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
     }
 }
 
-/// Convert an epoch timestamp to a `DateTime`
-fn dt_from_timestamp(ts: u32) -> Option<DateTime<Utc>> {
-    DateTime::from_timestamp(i64::from(ts), 0)
+/// Convert an epoch timestamp to a `SystemTime`
+fn dt_from_timestamp(ts: u32) -> SystemTime {
+    UNIX_EPOCH + Duration::from_secs(u64::from(ts))
 }
 
 /// Convert a u32 to a `Duration`
-fn duration_from_timestamp(ts: u32) -> Option<Duration> {
-    Duration::try_seconds(i64::from(ts))
+fn duration_from_timestamp(ts: u32) -> Duration {
+    Duration::from_secs(u64::from(ts))
 }
 
 /// Parse a Signature Creation Time subpacket
@@ -373,7 +376,7 @@ fn duration_from_timestamp(ts: u32) -> Option<Duration> {
 fn signature_creation_time<B: BufRead>(mut i: B) -> Result<SubpacketData> {
     // 4-octet time field
     let date = i.read_be_u32()?;
-    let created = dt_from_timestamp(date).ok_or_else(|| format_err!("invalid creation time"))?;
+    let created = dt_from_timestamp(date);
 
     Ok(SubpacketData::SignatureCreationTime(created))
 }
@@ -391,8 +394,7 @@ fn issuer<B: BufRead>(mut i: B) -> Result<SubpacketData> {
 fn key_expiration<B: BufRead>(mut i: B) -> Result<SubpacketData> {
     // 4-octet time field
     let duration = i.read_be_u32()?;
-    let duration =
-        duration_from_timestamp(duration).ok_or_else(|| format_err!("invalid expiration time"))?;
+    let duration = duration_from_timestamp(duration);
 
     Ok(SubpacketData::KeyExpirationTime(duration))
 }
@@ -452,8 +454,7 @@ fn pref_com_alg<B: BufRead>(mut i: B) -> Result<SubpacketData> {
 fn signature_expiration_time<B: BufRead>(mut i: B) -> Result<SubpacketData> {
     // 4-octet time field
     let duration = i.read_be_u32()?;
-    let duration =
-        duration_from_timestamp(duration).ok_or_else(|| format_err!("invalid expiration time"))?;
+    let duration = duration_from_timestamp(duration);
 
     Ok(SubpacketData::SignatureExpirationTime(duration))
 }

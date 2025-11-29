@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, time::SystemTime};
 
 use log::warn;
 use rand::{CryptoRng, Rng};
@@ -177,7 +177,7 @@ impl KeyDetails for SignedPublicKey {
         self.primary_key.algorithm()
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+    fn created_at(&self) -> &SystemTime {
         self.primary_key.created_at()
     }
 
@@ -307,7 +307,7 @@ impl KeyDetails for SignedPublicSubKey {
         self.key.algorithm()
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+    fn created_at(&self) -> &SystemTime {
         self.key.created_at()
     }
 

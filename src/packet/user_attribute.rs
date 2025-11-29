@@ -2,7 +2,6 @@ use std::io::{self, BufRead};
 
 use byteorder::{LittleEndian, WriteBytesExt};
 use bytes::Bytes;
-use chrono::{SubsecRound, Utc};
 use num_enum::{FromPrimitive, IntoPrimitive};
 use rand::{CryptoRng, Rng};
 
@@ -262,9 +261,7 @@ impl UserAttribute {
         );
 
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                Utc::now().trunc_subsecs(0),
-            ))?,
+            Subpacket::regular(SubpacketData::signature_creation_time_now())?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(signer.fingerprint()))?,
         ];
 

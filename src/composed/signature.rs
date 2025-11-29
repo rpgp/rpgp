@@ -229,7 +229,6 @@ fn next<I: Iterator<Item = Result<Packet>>>(
 
 #[cfg(test)]
 mod tests {
-    use chrono::SubsecRound;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
@@ -321,10 +320,7 @@ mod tests {
 
         let hashed = vec![
             Subpacket::regular(SubpacketData::IssuerFingerprint(alice.fingerprint())).unwrap(),
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))
-            .unwrap(),
+            Subpacket::regular(SubpacketData::signature_creation_time_now()).unwrap(),
             Subpacket::regular(SubpacketData::PolicyURI("foo".into())).unwrap(),
         ];
 
@@ -365,10 +361,7 @@ mod tests {
 
         let hashed = vec![
             Subpacket::regular(SubpacketData::IssuerFingerprint(alice.fingerprint())).unwrap(),
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))
-            .unwrap(),
+            Subpacket::regular(SubpacketData::signature_creation_time_now()).unwrap(),
             Subpacket::regular(SubpacketData::PolicyURI("foo".into())).unwrap(),
         ];
 

@@ -1,6 +1,5 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, time::SystemTime};
 
-use chrono::{DateTime, Utc};
 use digest::{typenum::Unsigned, OutputSizeUser};
 use ecdsa::{
     elliptic_curve::{generic_array::ArrayLength, CurveArithmetic},
@@ -64,7 +63,7 @@ where
     T::VerifyingKey: HPublicKey,
 {
     /// Create a new signer with a given public key
-    pub fn new(inner: T, version: KeyVersion, created_at: DateTime<Utc>) -> Result<Self> {
+    pub fn new(inner: T, version: KeyVersion, created_at: SystemTime) -> Result<Self> {
         let public_key = PubKeyInner::new(
             version,
             <T as Keypair>::VerifyingKey::PGP_ALGORITHM,
@@ -169,7 +168,7 @@ impl<C, T> KeyDetails for EcdsaSigner<T, C> {
         self.public_key.algorithm()
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+    fn created_at(&self) -> &SystemTime {
         self.public_key.created_at()
     }
 

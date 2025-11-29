@@ -1,7 +1,6 @@
-use std::io::Read;
+use std::{io::Read, time::SystemTime};
 
 use byteorder::{BigEndian, ByteOrder};
-use chrono::{DateTime, Utc};
 use digest::DynDigest;
 use log::debug;
 use rand::{CryptoRng, Rng};
@@ -11,12 +10,12 @@ use crate::{
         hash::{HashAlgorithm, WriteHasher},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{bail, ensure, unimplemented_err, unsupported_err, Result},
+    errors::{Result, bail, ensure, unimplemented_err, unsupported_err},
     packet::{
-        types::serialize_for_hashing, Signature, SignatureType, SignatureVersion, Subpacket,
-        SubpacketData, SubpacketType,
+        Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData, SubpacketType,
+        types::serialize_for_hashing,
     },
-    ser::Serialize,
+    ser::{Serialize, time_to_u32},
     types::{Fingerprint, KeyId, KeyVersion, Password, SigningKey, Tag, VerifyingKey},
     util::NormalizingHasher,
 };
@@ -36,11 +35,11 @@ pub struct SignatureConfig {
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum SignatureVersionSpecific {
     V2 {
-        created: DateTime<Utc>,
+        created: SystemTime,
         issuer_key_id: KeyId,
     },
     V3 {
-        created: DateTime<Utc>,
+        created: SystemTime,
         issuer_key_id: KeyId,
     },
     V4,
@@ -81,7 +80,7 @@ impl SignatureConfig {
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
-        created: DateTime<Utc>,
+        created: SystemTime,
         issuer_key_id: KeyId,
     ) -> Self {
         Self {
@@ -104,7 +103,7 @@ impl SignatureConfig {
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
-        created: DateTime<Utc>,
+        created: SystemTime,
         issuer_key_id: KeyId,
     ) -> Self {
         Self {
@@ -459,7 +458,7 @@ impl SignatureConfig {
 
                 let mut buf = [0u8; 5];
                 buf[0] = self.typ.into();
-                BigEndian::write_u32(&mut buf[1..], created.timestamp().try_into()?);
+                BigEndian::write_u32(&mut buf[1..], time_to_u32(&created));
 
                 hasher.update(&buf);
 
@@ -642,7 +641,7 @@ impl SignatureConfig {
     /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-creation-time>
     ///
     /// Returns the first Signature Creation Time subpacket, only from the hashed area.
-    pub fn created(&self) -> Option<&DateTime<Utc>> {
+    pub fn created(&self) -> Option<&SystemTime> {
         if let SignatureVersionSpecific::V2 { created, .. }
         | SignatureVersionSpecific::V3 { created, .. } = &self.version_specific
         {
@@ -769,7 +768,6 @@ impl std::io::Write for SignatureHasher {
 
 #[cfg(test)]
 mod tests {
-    use chrono::SubsecRound;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
@@ -815,10 +813,7 @@ mod tests {
                 .expect("config");
 
         config.hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))
-            .unwrap(),
+            Subpacket::regular(SubpacketData::signature_creation_time_now()).unwrap(),
             Subpacket::regular(SubpacketData::IssuerFingerprint(
                 alice.primary_key.fingerprint(),
             ))

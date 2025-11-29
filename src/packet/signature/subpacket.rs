@@ -1,8 +1,10 @@
-use std::io::BufRead;
+use std::{
+    io::BufRead,
+    time::{Duration, SystemTime},
+};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::Bytes;
-use chrono::{DateTime, Duration, Utc};
 use smallvec::SmallVec;
 
 use crate::{
@@ -15,6 +17,7 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{CompressionAlgorithm, Fingerprint, KeyId, RevocationKey},
+    util::system_time_now,
 };
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -268,7 +271,7 @@ impl Subpacket {
 #[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 pub enum SubpacketData {
     /// The time the signature was made.
-    SignatureCreationTime(DateTime<Utc>),
+    SignatureCreationTime(SystemTime),
     /// The time the signature will expire.
     SignatureExpirationTime(Duration),
     /// When the key is going to expire
@@ -309,6 +312,13 @@ pub enum SubpacketData {
         HashAlgorithm,
         #[debug("{}", hex::encode(_2))] Bytes,
     ),
+}
+
+impl SubpacketData {
+    pub fn signature_creation_time_now() -> Self {
+        let now = system_time_now();
+        Self::SignatureCreationTime(now)
+    }
 }
 
 #[cfg(test)]

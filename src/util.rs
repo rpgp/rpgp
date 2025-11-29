@@ -1,6 +1,9 @@
 //! # Utilities
 
-use std::{hash, io};
+use std::{
+    hash, io,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use bytes::{Buf, BufMut, BytesMut};
 use digest::DynDigest;
@@ -112,6 +115,15 @@ impl<A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'_, A, B> {
     }
 }
 
+/// Returns the current time with seconds precision.
+pub fn system_time_now() -> SystemTime {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("invalid date");
+    // clear out anything < 1s
+    UNIX_EPOCH + Duration::from_secs(now.as_secs())
+}
+
 #[cfg(test)]
 pub(crate) mod test {
     use bytes::{Buf, Bytes};
@@ -131,7 +143,7 @@ pub(crate) mod test {
     }
 
     pub(crate) fn random_utf8_string(rng: &mut impl Rng, size: usize) -> String {
-        (0..size).map(|_| rng.gen::<char>()).collect()
+        (0..size).map(|_| rng.r#gen::<char>()).collect()
     }
 
     #[derive(Debug)]

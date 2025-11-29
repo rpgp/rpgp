@@ -6,7 +6,6 @@ use std::{
 };
 
 use buffer_redux::BufReader;
-use chrono::SubsecRound;
 use log::debug;
 
 use crate::{
@@ -69,9 +68,7 @@ where {
         R: rand::Rng + rand::CryptoRng,
     {
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))?,
+            Subpacket::regular(SubpacketData::signature_creation_time_now())?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
         ];
 

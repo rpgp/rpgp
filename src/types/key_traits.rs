@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use rand::{CryptoRng, Rng};
 
 use crate::{
@@ -25,7 +27,7 @@ pub trait KeyDetails: std::fmt::Debug {
 
     /// Returns the algorithm for this key.
     fn algorithm(&self) -> PublicKeyAlgorithm;
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc>;
+    fn created_at(&self) -> &SystemTime;
     fn expiration(&self) -> Option<u16>;
 
     /// Returns the parameters for the public portion of this key.
@@ -77,7 +79,7 @@ impl<T: KeyDetails> KeyDetails for &T {
         (*self).expiration()
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+    fn created_at(&self) -> &SystemTime {
         (*self).created_at()
     }
 
@@ -113,7 +115,7 @@ impl KeyDetails for Box<&dyn SigningKey> {
         (**self).expiration()
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+    fn created_at(&self) -> &SystemTime {
         (**self).created_at()
     }
 

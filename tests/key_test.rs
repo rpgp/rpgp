@@ -5,10 +5,14 @@ extern crate pretty_assertions;
 #[macro_use]
 extern crate smallvec;
 
-use std::{fs::File, io::Read, path::Path};
+use std::{
+    fs::File,
+    io::Read,
+    path::Path,
+    time::{Duration, UNIX_EPOCH},
+};
 
 use buffer_redux::BufReader;
-use chrono::{DateTime, Utc};
 use num_traits::ToPrimitive;
 use pgp::{
     armor,
@@ -349,7 +353,10 @@ fn test_parse_details() {
         _ => panic!("wrong public params: {:?}", pk.public_params()),
     }
 
-    assert_eq!(pk.created_at().timestamp(), 14_0207_0261);
+    assert_eq!(
+        *pk.created_at(),
+        UNIX_EPOCH + Duration::from_secs(14_0207_0261)
+    );
     assert_eq!(pk.expiration(), None);
 
     // TODO: examine subkey details
@@ -437,9 +444,7 @@ fn test_parse_details() {
         .into(),
         vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
-                DateTime::parse_from_rfc3339("2014-06-06T15:57:41Z")
-                    .expect("failed to parse static time")
-                    .with_timezone(&Utc),
+                UNIX_EPOCH + Duration::from_secs(1402070261), // "2014-06-06T15:57:41Z"
             ))
             .unwrap(),
             Subpacket::regular(SubpacketData::KeyFlags(key_flags.clone())).unwrap(),
@@ -522,9 +527,7 @@ fn test_parse_details() {
         .into(),
         vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
-                DateTime::parse_from_rfc3339("2014-06-06T16:21:46Z")
-                    .expect("failed to parse static time")
-                    .with_timezone(&Utc),
+                UNIX_EPOCH + Duration::from_secs(1402071706), // 2014-06-06T16:21:46Z
             ))
             .unwrap(),
             Subpacket::regular(SubpacketData::KeyFlags(key_flags.clone())).unwrap(),
@@ -619,9 +622,7 @@ fn test_parse_details() {
         .into(),
         vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
-                DateTime::parse_from_rfc3339("2014-06-06T16:05:43Z")
-                    .expect("failed to parse static time")
-                    .with_timezone(&Utc),
+                UNIX_EPOCH + Duration::from_secs(1402070743), // 2014-06-06T16:05:43Z
             ))
             .unwrap(),
             Subpacket::regular(SubpacketData::KeyFlags(key_flags)).unwrap(),

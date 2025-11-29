@@ -1,7 +1,6 @@
 use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
-use chrono::Duration;
 use log::debug;
 
 use crate::{
@@ -10,7 +9,7 @@ use crate::{
         signature::{types::*, SignatureConfig},
         SignatureVersionSpecific, Subpacket, SubpacketData, SubpacketType,
     },
-    ser::Serialize,
+    ser::{duration_to_u32, time_to_u32, Serialize},
 };
 
 impl Serialize for Signature {
@@ -94,12 +93,6 @@ impl Serialize for Signature {
     }
 }
 
-/// Convert expiration time "Duration" data to OpenPGP u32 format.
-/// Use u32:MAX on overflow.
-fn duration_to_u32(d: &Duration) -> u32 {
-    u32::try_from(d.num_seconds()).unwrap_or(u32::MAX)
-}
-
 impl Subpacket {
     pub fn typ(&self) -> SubpacketType {
         match &self.data {
@@ -147,7 +140,7 @@ impl Serialize for SubpacketData {
         debug!("writing subpacket: {self:?}");
         match &self {
             SubpacketData::SignatureCreationTime(t) => {
-                writer.write_u32::<BigEndian>(t.timestamp().try_into()?)?;
+                writer.write_u32::<BigEndian>(time_to_u32(t))?;
             }
             SubpacketData::SignatureExpirationTime(d) => {
                 writer.write_u32::<BigEndian>(duration_to_u32(d))?;
@@ -345,7 +338,7 @@ impl SignatureConfig {
             issuer_key_id: issuer,
         } = &self.version_specific
         {
-            writer.write_u32::<BigEndian>(created.timestamp().try_into()?)?;
+            writer.write_u32::<BigEndian>(time_to_u32(&created))?;
             writer.write_all(issuer.as_ref())?;
         } else {
             bail!("expecting SignatureVersionSpecific::V3 for a v2/v3 signature")

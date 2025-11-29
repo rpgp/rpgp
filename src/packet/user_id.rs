@@ -1,7 +1,9 @@
-use std::{io, io::BufRead, str};
+use std::{
+    io::{self, BufRead},
+    str,
+};
 
 use bytes::Bytes;
-use chrono::{SubsecRound, Utc};
 use rand::{CryptoRng, Rng};
 
 use crate::{
@@ -140,9 +142,7 @@ impl UserId {
         );
 
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                Utc::now().trunc_subsecs(0),
-            ))?,
+            Subpacket::regular(SubpacketData::signature_creation_time_now())?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(signer.fingerprint()))?,
         ];
 
@@ -195,6 +195,7 @@ mod tests {
         composed::KeyType,
         packet,
         types::{KeyVersion, PacketHeaderVersion},
+        util::system_time_now,
     };
 
     prop_compose! {
@@ -213,7 +214,7 @@ mod tests {
         let pub_key = packet::PubKeyInner::new(
             KeyVersion::V4,
             key_type.to_alg(),
-            Utc::now().trunc_subsecs(0),
+            system_time_now(),
             None,
             public_params,
         )
@@ -239,7 +240,7 @@ mod tests {
         let pub_key = packet::PubKeyInner::new(
             KeyVersion::V4,
             key_type.to_alg(),
-            Utc::now().trunc_subsecs(0),
+            system_time_now(),
             None,
             public_params,
         )
