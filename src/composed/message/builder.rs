@@ -165,7 +165,7 @@ impl SubpacketConfig {
 
                 let mut unhashed = vec![];
                 if signer.version() <= KeyVersion::V4 {
-                    unhashed.push(Subpacket::regular(SubpacketData::Issuer(signer.key_id()))?);
+                    unhashed.push(Subpacket::regular(SubpacketData::Issuer(signer.id()))?);
                 }
 
                 Ok((hashed, unhashed))
@@ -277,7 +277,7 @@ where
             config.subpackets.to_subpackets(config.key)?;
 
         let mut ops = match config.key.version() {
-            KeyVersion::V4 => OnePassSignature::v3(typ, hash_alg, algorithm, config.key.key_id()),
+            KeyVersion::V4 => OnePassSignature::v3(typ, hash_alg, algorithm, config.key.id()),
             KeyVersion::V6 => {
                 let SignatureVersionSpecific::V6 { ref salt } = sig_config.version_specific else {
                     // This should never happen

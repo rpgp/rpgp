@@ -161,8 +161,8 @@ impl<C, T> KeyDetails for EcdsaSigner<T, C> {
         self.public_key.fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        self.public_key.key_id()
+    fn id(&self) -> KeyId {
+        self.public_key.id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {

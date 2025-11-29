@@ -90,7 +90,7 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
                         "verification failed: {}:{}: public key {}: {:?}",
                         i,
                         j,
-                        hex::encode(key.key_id()),
+                        hex::encode(key.id()),
                         err
                     );
                     actual.err_count += 1;
@@ -114,7 +114,7 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
                     "roundtrip not possible: {}:{}: {}",
                     i,
                     j,
-                    hex::encode(key.key_id())
+                    hex::encode(key.id())
                 );
                 actual.err_count += 1;
                 continue;
@@ -314,7 +314,7 @@ fn test_parse_openpgp_sample_rsa_private() {
     .unwrap();
 
     let pub_key = pkey.public_key();
-    assert_eq!(pub_key.key_id(), pkey.key_id());
+    assert_eq!(pub_key.id(), pkey.id());
 }
 
 #[test]
@@ -331,7 +331,7 @@ fn test_parse_details() {
     );
 
     assert_eq!(
-        key.primary_key.key_id().as_ref(),
+        key.primary_key.id().as_ref(),
         &hex::decode("4c073ae0c8445c0c").unwrap()[..]
     );
 
@@ -650,7 +650,7 @@ fn encrypted_private_key() {
     key.verify().expect("invalid key");
 
     let pub_key = key.public_key();
-    assert_eq!(pub_key.key_id(), key.key_id());
+    assert_eq!(pub_key.id(), key.id());
 
     let pp = key.primary_key.secret_params().clone();
 
@@ -1089,7 +1089,7 @@ fn private_ecc1_verify() {
     let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
-    assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "0BA52DF0BAA59D9C",);
+    assert_eq!(hex::encode(sk.id()).to_uppercase(), "0BA52DF0BAA59D9C",);
     sk.unlock(&"ecc".into(), |_pub_params, k| {
         match k {
             PlainSecretParams::ECDSA(ref inner_key) => {
@@ -1103,7 +1103,7 @@ fn private_ecc1_verify() {
     .unwrap();
 
     let pub_key = sk.public_key();
-    assert_eq!(pub_key.key_id(), sk.key_id());
+    assert_eq!(pub_key.id(), sk.id());
 }
 
 #[test]
@@ -1112,7 +1112,7 @@ fn private_ecc2_verify() {
     let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 0);
-    assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "098033880F54719F",);
+    assert_eq!(hex::encode(sk.id()).to_uppercase(), "098033880F54719F",);
     sk.unlock(&"ecc".into(), |_pub_params, k| {
         match k {
             PlainSecretParams::ECDSA(ref inner_key) => {
@@ -1138,7 +1138,7 @@ fn private_ecc3_verify() {
     let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
-    assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "E15A9BB15A23A43F",);
+    assert_eq!(hex::encode(sk.id()).to_uppercase(), "E15A9BB15A23A43F",);
     sk.unlock(&"ecc".into(), |_pub_params, k| {
         match k {
             PlainSecretParams::ECDSA(ref inner_key) => {
@@ -1152,7 +1152,7 @@ fn private_ecc3_verify() {
     .unwrap();
 
     let pub_key = sk.public_key();
-    assert_eq!(pub_key.key_id(), sk.key_id());
+    assert_eq!(pub_key.id(), sk.id());
 }
 
 #[test]
@@ -1161,7 +1161,7 @@ fn private_x25519_verify() {
     let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
-    assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "F25E5F24BB372CFA",);
+    assert_eq!(hex::encode(sk.id()).to_uppercase(), "F25E5F24BB372CFA",);
     sk.unlock(&"moon".into(), |_pub_params, k| {
         match k {
             PlainSecretParams::Ed25519Legacy(..) => {}
@@ -1173,7 +1173,7 @@ fn private_x25519_verify() {
     .unwrap();
 
     let pub_key = sk.public_key();
-    assert_eq!(pub_key.key_id(), sk.key_id());
+    assert_eq!(pub_key.id(), sk.id());
 }
 
 #[test]
@@ -1182,10 +1182,10 @@ fn pub_x25519_little_verify() {
     let (pk, _headers) = SignedPublicKey::from_armor_single(f).expect("failed to parse key");
     pk.verify().expect("invalid key");
     assert_eq!(pk.public_subkeys.len(), 1);
-    assert_eq!(hex::encode(pk.key_id()).to_uppercase(), "C062C165CA61C215",);
+    assert_eq!(hex::encode(pk.id()).to_uppercase(), "C062C165CA61C215",);
 
     assert_eq!(
-        hex::encode(pk.public_subkeys[0].key_id()).to_uppercase(),
+        hex::encode(pk.public_subkeys[0].id()).to_uppercase(),
         "A586D1DD06BD97BC",
     );
     assert_eq!(pk.details.users.len(), 1);
@@ -1217,7 +1217,7 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
                 .unwrap();
 
             let pub_key = sk.public_key();
-            assert_eq!(pub_key.key_id(), sk.key_id());
+            assert_eq!(pub_key.id(), sk.id());
         }
 
         // serialize and check we get the same thing

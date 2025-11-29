@@ -438,7 +438,7 @@ mod tests {
             SignatureType::Text, // Type deviates from the actual Signature!
             HashAlgorithm::Sha256,
             bob.primary_key.algorithm(),
-            bob.primary_key.key_id(),
+            bob.primary_key.id(),
         );
 
         // Payload uses different line ending!

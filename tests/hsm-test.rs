@@ -75,8 +75,8 @@ impl KeyDetails for FakeHsm {
         self.public_key.fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        self.public_key.key_id()
+    fn id(&self) -> KeyId {
+        self.public_key.id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
@@ -475,7 +475,7 @@ fn card_sign() {
                 DateTime::<Utc>::from_timestamp(sig_creation, 0).unwrap(),
             ))
             .unwrap(),
-            packet::Subpacket::regular(packet::SubpacketData::Issuer(hsm.key_id())).unwrap(),
+            packet::Subpacket::regular(packet::SubpacketData::Issuer(hsm.id())).unwrap(),
         ];
 
         let signature = config.sign(&hsm, &"".into(), DATA).unwrap();
@@ -504,7 +504,7 @@ fn ecdsa_signer() {
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
         ))
         .unwrap(),
-        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.key_id())).unwrap(),
+        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.id())).unwrap(),
     ];
 
     let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();
@@ -533,7 +533,7 @@ fn rsa_signer() {
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
         ))
         .unwrap(),
-        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.key_id())).unwrap(),
+        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.id())).unwrap(),
     ];
 
     let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();

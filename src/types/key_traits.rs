@@ -11,13 +11,24 @@ use crate::{
     },
 };
 
-pub trait KeyDetails {
+pub trait KeyDetails: std::fmt::Debug {
+    /// Returns the [`KeyVersion`] of this key.
     fn version(&self) -> KeyVersion;
+
+    /// Returns the [`KeyId`] for this key.
+    ///
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.5.4>
+    fn id(&self) -> KeyId;
+
+    /// Returns the [`Fingerprint`] for this key.
     fn fingerprint(&self) -> Fingerprint;
-    fn key_id(&self) -> KeyId;
+
+    /// Returns the algorithm for this key.
     fn algorithm(&self) -> PublicKeyAlgorithm;
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc>;
     fn expiration(&self) -> Option<u16>;
+
+    /// Returns the parameters for the public portion of this key.
     fn public_params(&self) -> &PublicParams;
 }
 
@@ -39,7 +50,7 @@ pub trait Imprint {
 }
 
 /// Keys that can verify signatures.
-pub trait VerifyingKey: KeyDetails + std::fmt::Debug {
+pub trait VerifyingKey: KeyDetails {
     /// Verify a signed message.
     /// Data will be hashed using `hash`, before verifying.
     fn verify(&self, hash: HashAlgorithm, data: &[u8], sig: &SignatureBytes) -> Result<()>;
@@ -54,8 +65,8 @@ impl<T: KeyDetails> KeyDetails for &T {
         (*self).fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        (*self).key_id()
+    fn id(&self) -> KeyId {
+        (*self).id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
@@ -90,8 +101,8 @@ impl KeyDetails for Box<&dyn SigningKey> {
         (**self).fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        (**self).key_id()
+    fn id(&self) -> KeyId {
+        (**self).id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
@@ -114,7 +125,7 @@ impl KeyDetails for Box<&dyn SigningKey> {
 /// Keys that can sign data.
 ///
 /// Contains private data.
-pub trait SigningKey: KeyDetails + std::fmt::Debug {
+pub trait SigningKey: KeyDetails {
     fn sign(
         &self,
         key_pw: &Password,

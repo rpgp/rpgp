@@ -169,8 +169,8 @@ impl KeyDetails for SignedPublicKey {
         self.primary_key.fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        self.primary_key.key_id()
+    fn id(&self) -> KeyId {
+        self.primary_key.id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
@@ -299,8 +299,8 @@ impl KeyDetails for SignedPublicSubKey {
         self.key.fingerprint()
     }
     /// Returns the Key ID of the key.
-    fn key_id(&self) -> KeyId {
-        self.key.key_id()
+    fn id(&self) -> KeyId {
+        self.key.id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
