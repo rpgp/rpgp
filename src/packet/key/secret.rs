@@ -19,8 +19,8 @@ use crate::{
     ser::Serialize,
     types::{
         EddsaLegacyPublicParams, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Password,
-        PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
-        SignatureBytes, Tag,
+        PlainSecretParams, PublicParams, SecretParams, SignatureBytes, SigningKey, Tag,
+        VerifyingKey,
     },
 };
 
@@ -165,7 +165,7 @@ impl SecretSubkey {
         key_pw: &Password,
     ) -> Result<Signature>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         let mut config = SignatureConfig::from_key(rng, self, SignatureType::KeyBinding)?;
 
@@ -179,8 +179,9 @@ impl SecretSubkey {
         // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
         // the signature.
         if self.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets =
-                vec![Subpacket::regular(SubpacketData::Issuer(self.key_id()))?];
+            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+                self.legacy_key_id(),
+            ))?];
         }
 
         config.sign_primary_key_binding(self, &self.public_key(), key_pw, &pub_key)
@@ -205,13 +206,8 @@ impl SecretSubkey {
     }
 }
 
-impl SecretKeyTrait for SecretKey {
-    fn create_signature(
-        &self,
-        key_pw: &Password,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<SignatureBytes> {
+impl SigningKey for SecretKey {
+    fn sign(&self, key_pw: &Password, hash: HashAlgorithm, data: &[u8]) -> Result<SignatureBytes> {
         let mut signature: Option<SignatureBytes> = None;
         self.unlock(key_pw, |pub_params, priv_key| {
             let sig = create_signature(pub_params, priv_key, hash, data)?;
@@ -235,11 +231,23 @@ impl KeyDetails for SecretKey {
         self.details.fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        self.details.key_id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.details.legacy_key_id()
     }
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.details.algorithm()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.details.expiration()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.details.created_at()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.details.public_params()
     }
 }
 
@@ -257,11 +265,22 @@ impl KeyDetails for SecretSubkey {
         self.details.fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        self.details.key_id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.details.legacy_key_id()
     }
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.details.algorithm()
+    }
+    fn expiration(&self) -> Option<u16> {
+        self.details.expiration()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.details.created_at()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.details.public_params()
     }
 }
 
@@ -271,13 +290,8 @@ impl Imprint for SecretSubkey {
     }
 }
 
-impl SecretKeyTrait for SecretSubkey {
-    fn create_signature(
-        &self,
-        key_pw: &Password,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<SignatureBytes> {
+impl SigningKey for SecretSubkey {
+    fn sign(&self, key_pw: &Password, hash: HashAlgorithm, data: &[u8]) -> Result<SignatureBytes> {
         let mut signature: Option<SignatureBytes> = None;
         self.unlock(key_pw, |pub_params, priv_key| {
             let sig = create_signature(pub_params, priv_key, hash, data)?;
@@ -466,8 +480,8 @@ impl SecretSubkey {
         embedded: Option<Signature>,
     ) -> Result<Signature>
     where
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
+        K: SigningKey,
+        P: VerifyingKey + Serialize,
     {
         self.details.sign(
             &mut rng,
@@ -606,8 +620,8 @@ fn sign<R: CryptoRng + Rng, K, P>(
     pub_key: &P,
 ) -> Result<Signature>
 where
-    K: SecretKeyTrait,
-    P: PublicKeyTrait + Serialize,
+    K: SigningKey,
+    P: VerifyingKey + Serialize,
 {
     use chrono::SubsecRound;
 
@@ -619,7 +633,9 @@ where
         Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
     ];
     if key.version() <= KeyVersion::V4 {
-        config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+        config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+            key.legacy_key_id(),
+        ))?];
     }
 
     config.sign_key(key, key_pw, pub_key)
@@ -634,7 +650,7 @@ mod tests {
     use crate::{
         crypto::hash::HashAlgorithm,
         packet::{PubKeyInner, SecretKey},
-        types::{KeyVersion, S2kParams, SecretKeyTrait},
+        types::{KeyVersion, S2kParams, SigningKey},
     };
 
     #[test]
@@ -669,35 +685,25 @@ mod tests {
             .unwrap();
 
         // signing with a wrong password should fail
-        assert!(alice_sec
-            .create_signature(&"wrong".into(), hash_algo, DATA)
-            .is_err());
+        assert!(alice_sec.sign(&"wrong".into(), hash_algo, DATA).is_err());
 
         // signing with the right password should succeed
-        assert!(alice_sec
-            .create_signature(&"password".into(), hash_algo, DATA)
-            .is_ok());
+        assert!(alice_sec.sign(&"password".into(), hash_algo, DATA).is_ok());
 
         // remove the password protection
         alice_sec.remove_password(&"password".into()).unwrap();
 
         // signing without a password should succeed now
-        assert!(alice_sec
-            .create_signature(&"".into(), hash_algo, DATA)
-            .is_ok());
+        assert!(alice_sec.sign(&"".into(), hash_algo, DATA).is_ok());
 
         // set different password protection
         alice_sec.set_password(&mut rng, &"foo".into()).unwrap();
 
         // signing without a password should fail now
-        assert!(alice_sec
-            .create_signature(&"".into(), hash_algo, DATA)
-            .is_err());
+        assert!(alice_sec.sign(&"".into(), hash_algo, DATA).is_err());
 
         // signing with the right password should succeed
-        assert!(alice_sec
-            .create_signature(&"foo".into(), hash_algo, DATA)
-            .is_ok());
+        assert!(alice_sec.sign(&"foo".into(), hash_algo, DATA).is_ok());
 
         // remove the password protection again
         alice_sec.remove_password(&"foo".into()).unwrap();
@@ -712,7 +718,7 @@ mod tests {
 
         // signing with the right password should succeed
         alice_sec
-            .create_signature(&"bar".into(), hash_algo, DATA)
+            .sign(&"bar".into(), hash_algo, DATA)
             .expect("failed to sign");
     }
 }

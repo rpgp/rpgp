@@ -30,7 +30,7 @@ use crate::{
     ser::Serialize,
     types::{
         self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength,
-        PublicKeyTrait, SignatureBytes, Tag,
+        SignatureBytes, Tag, VerifyingKey,
     },
 };
 
@@ -356,7 +356,7 @@ impl Signature {
     ///
     /// We also consider `key` a match for `sig` by default, if `sig` contains no issuer-related
     /// subpackets.
-    fn match_identity(sig: &Signature, key: &impl PublicKeyTrait) -> bool {
+    fn match_identity(sig: &Signature, key: &impl VerifyingKey) -> bool {
         let issuers = sig.issuer();
         let issuer_fps = sig.issuer_fingerprint();
 
@@ -367,7 +367,7 @@ impl Signature {
         }
 
         // Does any issuer or issuer fingerprint subpacket matche the identity of `sig`?
-        issuers.iter().any(|&key_id| key_id == &key.key_id())
+        issuers.iter().any(|&key_id| key_id == &key.legacy_key_id())
             || issuer_fps.iter().any(|&fp| fp == &key.fingerprint())
     }
 
@@ -377,7 +377,7 @@ impl Signature {
     /// - only a v6 key may produce a v6 signature
     /// - a v6 key may only produce v6 signatures
     fn check_signature_key_version_alignment(
-        key: &impl PublicKeyTrait,
+        key: &impl VerifyingKey,
         config: &SignatureConfig,
     ) -> Result<()> {
         // Every signature made by a version 6 key MUST be a version 6 signature.
@@ -425,7 +425,7 @@ impl Signature {
     }
 
     /// Verify this signature.
-    pub fn verify<R>(&self, key: &impl PublicKeyTrait, data: R) -> Result<()>
+    pub fn verify<R>(&self, key: &impl VerifyingKey, data: R) -> Result<()>
     where
         R: Read,
     {
@@ -444,7 +444,7 @@ impl Signature {
         ensure!(
             Self::match_identity(self, key),
             "verify: No matching issuer or issuer_fingerprint for Key ID: {:?}",
-            &key.key_id(),
+            &key.legacy_key_id(),
         );
 
         let mut hasher = config.hash_alg.new_hasher()?;
@@ -492,13 +492,13 @@ impl Signature {
             "signature: invalid signed hash value"
         );
 
-        key.verify_signature(config.hash_alg, hash, signature)
+        key.verify(config.hash_alg, hash, signature)
     }
 
     /// Verifies a certification signature type (for self-signatures).
     pub fn verify_certification<P>(&self, key: &P, tag: Tag, id: &impl Serialize) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         self.verify_third_party_certification(&key, &key, tag, id)
     }
@@ -512,8 +512,8 @@ impl Signature {
         id: &impl Serialize,
     ) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
-        K: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
+        K: VerifyingKey + Serialize,
     {
         let InnerSignature::Known {
             ref config,
@@ -523,7 +523,7 @@ impl Signature {
         else {
             unsupported_err!("signature version {:?}", self.version());
         };
-        let key_id = signee.key_id();
+        let key_id = signee.legacy_key_id();
         debug!("verifying certification {key_id:?} {self:#?}");
 
         Self::check_signature_key_version_alignment(&signer, config)?;
@@ -589,7 +589,7 @@ impl Signature {
             "certification: invalid signed hash value"
         );
 
-        signer.verify_signature(config.hash_alg, hash, signature)
+        signer.verify(config.hash_alg, hash, signature)
     }
 
     /// Verifies a subkey binding (which binds a subkey to the primary key).
@@ -599,8 +599,8 @@ impl Signature {
     /// "Subkey Binding Signature (type ID 0x18)"
     pub fn verify_subkey_binding<P, K>(&self, signer: &P, signee: &K) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
-        K: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
+        K: VerifyingKey + Serialize,
     {
         debug!("verifying subkey binding: {self:#?} - {signer:#?} - {signee:#?}",);
 
@@ -635,7 +635,7 @@ impl Signature {
             "subkey binding: invalid signed hash value"
         );
 
-        signer.verify_signature(config.hash_alg, hash, signature)
+        signer.verify(config.hash_alg, hash, signature)
     }
 
     /// Verifies a primary key binding signature, or "back signature" (which links the primary to a signing subkey).
@@ -645,8 +645,8 @@ impl Signature {
     /// "Primary Key Binding Signature (type ID 0x19)"
     pub fn verify_primary_key_binding<P, K>(&self, signer: &P, signee: &K) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
-        K: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
+        K: VerifyingKey + Serialize,
     {
         debug!("verifying primary key binding: {self:#?} - {signer:#?} - {signee:#?}");
 
@@ -681,13 +681,13 @@ impl Signature {
             "key binding: invalid signed hash value"
         );
 
-        signer.verify_signature(config.hash_alg, hash, signature)
+        signer.verify(config.hash_alg, hash, signature)
     }
 
     /// Verifies a direct key signature or a revocation.
     pub fn verify_key<P>(&self, key: &P) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         self.verify_key_third_party(key, key)
     }
@@ -695,7 +695,7 @@ impl Signature {
     /// Verifies a third-party direct key signature or a revocation.
     pub fn verify_key_third_party<P>(&self, signee: &P, signer: &P) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         debug!("verifying direct signature: {self:#?} - signer {signer:#?}, signee {signee:#?}");
 
@@ -713,7 +713,7 @@ impl Signature {
         ensure!(
             Self::match_identity(self, signer),
             "verify_key: No matching issuer or issuer_fingerprint for Key ID: {:?}",
-            &signer.key_id(),
+            &signer.legacy_key_id(),
         );
 
         let mut hasher = config.hash_alg.new_hasher()?;
@@ -734,7 +734,7 @@ impl Signature {
             "key: invalid signed hash value"
         );
 
-        signer.verify_signature(config.hash_alg, hash, signature)
+        signer.verify(config.hash_alg, hash, signature)
     }
 
     /// Returns if the signature is a certification or not.

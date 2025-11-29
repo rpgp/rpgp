@@ -31,7 +31,7 @@ use crate::{
     ser::Serialize,
     types::{
         CompressionAlgorithm, EncryptionKey, Fingerprint, KeyId, KeyVersion, PacketHeaderVersion,
-        PacketLength, Password, SecretKeyTrait, StringToKey, Tag,
+        PacketLength, Password, SigningKey, StringToKey, Tag,
     },
     util::{fill_buffer, TeeWriter},
 };
@@ -152,7 +152,7 @@ impl SubpacketConfig {
     /// and the signing key (which is only actually needed for the `Default` case)
     pub(crate) fn to_subpackets(
         &self,
-        signer: &dyn SecretKeyTrait,
+        signer: &dyn SigningKey,
     ) -> Result<(Vec<Subpacket>, Vec<Subpacket>)> {
         match self {
             SubpacketConfig::Default => {
@@ -165,7 +165,9 @@ impl SubpacketConfig {
 
                 let mut unhashed = vec![];
                 if signer.version() <= KeyVersion::V4 {
-                    unhashed.push(Subpacket::regular(SubpacketData::Issuer(signer.key_id()))?);
+                    unhashed.push(Subpacket::regular(SubpacketData::Issuer(
+                        signer.legacy_key_id(),
+                    ))?);
                 }
 
                 Ok((hashed, unhashed))
@@ -181,7 +183,7 @@ impl SubpacketConfig {
 #[derive(Debug)]
 struct SigningConfig<'a> {
     /// The key to sign with
-    key: &'a dyn SecretKeyTrait,
+    key: &'a dyn SigningKey,
     /// A password to unlock it
     key_pw: Password,
     /// The hash algorithm to be used when signing.
@@ -193,12 +195,12 @@ struct SigningConfig<'a> {
 
 impl<'a> SigningConfig<'a> {
     /// Create a new signing configuration.
-    fn new(key: &'a dyn SecretKeyTrait, key_pw: Password, hash: HashAlgorithm) -> Self {
+    fn new(key: &'a dyn SigningKey, key_pw: Password, hash: HashAlgorithm) -> Self {
         Self::with_subpackets(key, key_pw, hash, SubpacketConfig::Default)
     }
 
     fn with_subpackets(
-        key: &'a dyn SecretKeyTrait,
+        key: &'a dyn SigningKey,
         key_pw: Password,
         hash: HashAlgorithm,
         subpackets: SubpacketConfig,
@@ -277,7 +279,9 @@ where
             config.subpackets.to_subpackets(config.key)?;
 
         let mut ops = match config.key.version() {
-            KeyVersion::V4 => OnePassSignature::v3(typ, hash_alg, algorithm, config.key.key_id()),
+            KeyVersion::V4 => {
+                OnePassSignature::v3(typ, hash_alg, algorithm, config.key.legacy_key_id())
+            }
             KeyVersion::V6 => {
                 let SignatureVersionSpecific::V6 { ref salt } = sig_config.version_specific else {
                     // This should never happen
@@ -404,7 +408,6 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     /// # Example
     /// ```rust,no_run
     /// use pgp::composed::MessageBuilder;
-    /// use pgp::types::PublicKeyTrait;
     /// use pgp::crypto::sym::SymmetricKeyAlgorithm;
     ///
     /// # use pgp::types::{KeyDetails, SignatureBytes, PublicParams, KeyId, Fingerprint, KeyVersion};
@@ -565,7 +568,6 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// # Example
     /// ```rust,no_run
     /// use pgp::composed::MessageBuilder;
-    /// use pgp::types::PublicKeyTrait;
     /// use pgp::crypto::sym::SymmetricKeyAlgorithm;
     ///
     /// # use pgp::types::{KeyDetails, SignatureBytes, PublicParams, KeyId, Fingerprint, KeyVersion};
@@ -780,7 +782,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     /// Produce a data signature with the signing key `key`.
     pub fn sign(
         &mut self,
-        key: &'a dyn SecretKeyTrait,
+        key: &'a dyn SigningKey,
         key_pw: Password,
         hash_algorithm: HashAlgorithm,
     ) -> &mut Self {
@@ -794,7 +796,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     /// This gives callers full control of the hashed and unhashed subpacket areas.
     pub fn sign_with_subpackets(
         &mut self,
-        key: &'a dyn SecretKeyTrait,
+        key: &'a dyn SigningKey,
         key_pw: Password,
         hash_algorithm: HashAlgorithm,
         subpackets: SubpacketConfig,

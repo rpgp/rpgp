@@ -12,7 +12,7 @@
 //!     crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
 //!     errors::Result,
 //!     packet::{KeyFlags, UserAttribute, UserId},
-//!     types::{CompressionAlgorithm, Password, PublicKeyTrait, SecretKeyTrait},
+//!     types::{CompressionAlgorithm, Password},
 //! };
 //! use rand::thread_rng;
 //! use smallvec::*;

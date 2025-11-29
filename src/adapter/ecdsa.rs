@@ -18,8 +18,8 @@ use crate::{
     errors::{ensure_eq, Result},
     packet::{PubKeyInner, PublicKey},
     types::{
-        EcdsaPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password,
-        PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes,
+        EcdsaPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicParams,
+        SignatureBytes, SigningKey, VerifyingKey,
     },
 };
 
@@ -125,14 +125,14 @@ where
     }
 }
 
-impl<C, T> SecretKeyTrait for EcdsaSigner<T, C>
+impl<C, T> SigningKey for EcdsaSigner<T, C>
 where
     C: PrimeCurve + DigestPrimitive,
     SignatureSize<C>: ArrayLength<u8>,
     T: PrehashSigner<ecdsa::Signature<C>>,
     C::Digest: KnownDigest,
 {
-    fn create_signature(
+    fn sign(
         &self,
         _key_pw: &Password,
         hash: HashAlgorithm,
@@ -161,23 +161,12 @@ impl<C, T> KeyDetails for EcdsaSigner<T, C> {
         self.public_key.fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        self.public_key.key_id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.public_key.legacy_key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.public_key.algorithm()
-    }
-}
-
-impl<C, T> PublicKeyTrait for EcdsaSigner<T, C> {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.public_key.verify_signature(hash, data, sig)
     }
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
@@ -191,8 +180,10 @@ impl<C, T> PublicKeyTrait for EcdsaSigner<T, C> {
     fn public_params(&self) -> &PublicParams {
         self.public_key.public_params()
     }
+}
 
-    fn is_encryption_key(&self) -> bool {
-        false
+impl<C, T> VerifyingKey for EcdsaSigner<T, C> {
+    fn verify(&self, hash: HashAlgorithm, data: &[u8], sig: &SignatureBytes) -> Result<()> {
+        self.public_key.verify(hash, data, sig)
     }
 }

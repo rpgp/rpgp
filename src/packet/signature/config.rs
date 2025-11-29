@@ -17,7 +17,7 @@ use crate::{
         SubpacketData, SubpacketType,
     },
     ser::Serialize,
-    types::{Fingerprint, KeyId, KeyVersion, Password, PublicKeyTrait, SecretKeyTrait, Tag},
+    types::{Fingerprint, KeyId, KeyVersion, Password, SigningKey, Tag, VerifyingKey},
     util::NormalizingHasher,
 };
 
@@ -62,7 +62,7 @@ impl From<&SignatureVersionSpecific> for SignatureVersion {
 }
 
 impl SignatureConfig {
-    pub fn from_key<R: CryptoRng + Rng, K: SecretKeyTrait>(
+    pub fn from_key<R: CryptoRng + Rng, K: SigningKey>(
         mut rng: R,
         key: &K,
         typ: SignatureType,
@@ -184,12 +184,7 @@ impl SignatureConfig {
     }
 
     /// Sign the given data.
-    pub fn sign<R>(
-        self,
-        key: &impl SecretKeyTrait,
-        key_pw: &Password,
-        mut data: R,
-    ) -> Result<Signature>
+    pub fn sign<R>(self, key: &impl SigningKey, key_pw: &Password, mut data: R) -> Result<Signature>
     where
         R: Read,
     {
@@ -225,8 +220,8 @@ impl SignatureConfig {
         id: &impl Serialize,
     ) -> Result<Signature>
     where
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
+        K: SigningKey,
+        P: VerifyingKey + Serialize,
     {
         self.sign_certification_third_party(key, key_pw, pub_key, tag, id)
     }
@@ -234,14 +229,14 @@ impl SignatureConfig {
     /// Create a certification third-party signature.
     pub fn sign_certification_third_party<P>(
         self,
-        signer: &impl SecretKeyTrait,
+        signer: &impl SigningKey,
         signer_pw: &Password,
         signee: &P,
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<Signature>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signer.version() == KeyVersion::V4)
@@ -302,7 +297,7 @@ impl SignatureConfig {
         let hash = &hasher.finalize()[..];
 
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signer.create_signature(signer_pw, self.hash_alg, hash)?;
+        let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -320,9 +315,9 @@ impl SignatureConfig {
         signee: &L,
     ) -> Result<Signature>
     where
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
-        L: PublicKeyTrait + Serialize,
+        K: SigningKey,
+        P: VerifyingKey + Serialize,
+        L: VerifyingKey + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signer.version() == KeyVersion::V4)
@@ -347,7 +342,7 @@ impl SignatureConfig {
 
         let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signer.create_signature(signer_pw, self.hash_alg, hash)?;
+        let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -366,9 +361,9 @@ impl SignatureConfig {
         signee: &L,
     ) -> Result<Signature>
     where
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
-        L: PublicKeyTrait + Serialize,
+        K: SigningKey,
+        P: VerifyingKey + Serialize,
+        L: VerifyingKey + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signer.version() == KeyVersion::V4)
@@ -393,7 +388,7 @@ impl SignatureConfig {
 
         let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signer.create_signature(signer_pw, self.hash_alg, hash)?;
+        let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -401,8 +396,8 @@ impl SignatureConfig {
     /// Signs a direct key signature or a revocation.
     pub fn sign_key<K, P>(self, signing_key: &K, key_pw: &Password, key: &P) -> Result<Signature>
     where
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
+        K: SigningKey,
+        P: VerifyingKey + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signing_key.version() == KeyVersion::V4)
@@ -432,7 +427,7 @@ impl SignatureConfig {
 
         let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signing_key.create_signature(key_pw, self.hash_alg, hash)?;
+        let signature = signing_key.sign(key_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -711,7 +706,7 @@ impl SignatureHasher {
     /// Finalizes the signature.
     pub fn sign<K>(self, key: &K, key_pw: &Password) -> Result<Signature>
     where
-        K: SecretKeyTrait + ?Sized,
+        K: SigningKey + ?Sized,
     {
         let Self {
             config,
@@ -742,7 +737,7 @@ impl SignatureHasher {
         let hash = &hasher.finalize()[..];
 
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = key.create_signature(key_pw, config.hash_alg, hash)?;
+        let signature = key.sign(key_pw, config.hash_alg, hash)?;
 
         Signature::from_config(config, signed_hash_value, signature)
     }

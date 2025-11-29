@@ -19,7 +19,7 @@
 //! # use pgp::errors::Result;
 //! # use pgp::packet::{self, KeyFlags, UserAttribute, SignatureVersionSpecific, UserId};
 //! # use pgp::crypto::{self, sym::SymmetricKeyAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm};
-//! # use pgp::types::{self, PublicKeyTrait, SecretKeyTrait, CompressionAlgorithm, Password};
+//! # use pgp::types::{self, VerifyingKey, SigningKey, CompressionAlgorithm, Password};
 //! # use rand::thread_rng;
 //! # use smallvec::*;
 //! #
@@ -64,12 +64,12 @@
 //!
 //! // creates the cryptographic core of the signature without any metadata
 //! let signature = signing_key
-//!     .create_signature(&passwd, HashAlgorithm::Sha256, digest)
+//!     .sign(&passwd, HashAlgorithm::Sha256, digest)
 //!     .expect("Failed to crate signature");
 //!
 //! // the signature can already be verified
 //! verification_key
-//!     .verify_signature(HashAlgorithm::Sha256, digest, &signature)
+//!     .verify(HashAlgorithm::Sha256, digest, &signature)
 //!     .expect("Failed to validate signature");
 //!
 //! // wraps the signature in the appropriate package fmt ready to be serialized
@@ -97,7 +97,7 @@
 //!
 //! let raw_signature = signature.signature().unwrap();
 //! verification_key
-//!     .verify_signature(HashAlgorithm::Sha256, digest, &raw_signature)
+//!     .verify(HashAlgorithm::Sha256, digest, &raw_signature)
 //!     .expect("Verify must succeed");
 //! ```
 

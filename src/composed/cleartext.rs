@@ -21,7 +21,7 @@ use crate::{
         SubpacketData,
     },
     ser::Serialize,
-    types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
+    types::{KeyVersion, Password, SigningKey, VerifyingKey},
 };
 
 /// Implementation of a Cleartext Signed Message.
@@ -47,7 +47,7 @@ impl CleartextSignedMessage {
     pub fn new(
         text: &str,
         config: SignatureConfig,
-        key: &impl SecretKeyTrait,
+        key: &impl SigningKey,
         key_pw: &Password,
     ) -> Result<Self>
 where {
@@ -64,7 +64,7 @@ where {
     }
 
     /// Sign the given text.
-    pub fn sign<R>(rng: R, text: &str, key: &impl SecretKeyTrait, key_pw: &Password) -> Result<Self>
+    pub fn sign<R>(rng: R, text: &str, key: &impl SigningKey, key_pw: &Password) -> Result<Self>
     where
         R: rand::Rng + rand::CryptoRng,
     {
@@ -81,8 +81,9 @@ where {
         // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
         // the signature.
         if key.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets =
-                vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+                key.legacy_key_id(),
+            ))?];
         }
 
         Self::new(text, config, key, key_pw)
@@ -125,7 +126,7 @@ where {
     /// Verify the signature against the normalized cleartext.
     ///
     /// On success returns the first signature that verified against this key.
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<&Signature> {
+    pub fn verify(&self, key: &impl VerifyingKey) -> Result<&Signature> {
         let nt = self.signed_text();
         for signature in &self.signatures {
             if signature.verify(key, nt.as_bytes()).is_ok() {
@@ -428,7 +429,12 @@ mod tests {
 
         let (msg, headers) = CleartextSignedMessage::from_string(&data).unwrap();
 
-        assert_eq!(normalize(msg.text()), normalize("You are scrupulously honest, frank, and straightforward.  Therefore you\nhave few friends."));
+        assert_eq!(
+            normalize(msg.text()),
+            normalize(
+                "You are scrupulously honest, frank, and straightforward.  Therefore you\nhave few friends."
+            )
+        );
         assert_eq!(headers.len(), 1);
         assert_eq!(
             headers.get("Version").unwrap(),
@@ -475,7 +481,9 @@ mod tests {
 
         assert_eq!(
             normalize(msg.text()),
-            normalize("The very remembrance of my former misfortune proves a new one to me.\n		-- Miguel de Cervantes")
+            normalize(
+                "The very remembrance of my former misfortune proves a new one to me.\n		-- Miguel de Cervantes"
+            )
         );
         assert_eq!(headers.len(), 1);
         assert_eq!(

@@ -13,7 +13,7 @@ use pgp::{
     packet::{self, PubKeyInner, PublicKey, SignatureConfig},
     types::{
         EcdhPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes,
-        PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes,
+        PublicParams, SignatureBytes, SigningKey, VerifyingKey,
     },
 };
 
@@ -55,26 +55,14 @@ impl FakeHsm {
     }
 }
 
-impl PublicKeyTrait for FakeHsm {
-    fn verify_signature(
+impl VerifyingKey for FakeHsm {
+    fn verify(
         &self,
         hash: HashAlgorithm,
         data: &[u8],
         sig: &SignatureBytes,
     ) -> pgp::errors::Result<()> {
-        self.public_key.verify_signature(hash, data, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.public_key.public_params()
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.public_key.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.public_key.expiration()
+        self.public_key.verify(hash, data, sig)
     }
 }
 
@@ -87,17 +75,29 @@ impl KeyDetails for FakeHsm {
         self.public_key.fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        self.public_key.key_id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.public_key.legacy_key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.public_key.algorithm()
     }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.public_key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.public_key.expiration()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.public_key.public_params()
+    }
 }
 
-impl SecretKeyTrait for FakeHsm {
-    fn create_signature(
+impl SigningKey for FakeHsm {
+    fn sign(
         &self,
         _key_pw: &Password,
         _hash: HashAlgorithm,
@@ -475,7 +475,7 @@ fn card_sign() {
                 DateTime::<Utc>::from_timestamp(sig_creation, 0).unwrap(),
             ))
             .unwrap(),
-            packet::Subpacket::regular(packet::SubpacketData::Issuer(hsm.key_id())).unwrap(),
+            packet::Subpacket::regular(packet::SubpacketData::Issuer(hsm.legacy_key_id())).unwrap(),
         ];
 
         let signature = config.sign(&hsm, &"".into(), DATA).unwrap();
@@ -504,7 +504,7 @@ fn ecdsa_signer() {
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
         ))
         .unwrap(),
-        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.key_id())).unwrap(),
+        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.legacy_key_id())).unwrap(),
     ];
 
     let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();
@@ -533,7 +533,7 @@ fn rsa_signer() {
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
         ))
         .unwrap(),
-        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.key_id())).unwrap(),
+        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.legacy_key_id())).unwrap(),
     ];
 
     let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();

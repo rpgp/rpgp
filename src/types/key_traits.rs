@@ -11,11 +11,25 @@ use crate::{
     },
 };
 
-pub trait KeyDetails {
+pub trait KeyDetails: std::fmt::Debug {
+    /// Returns the [`KeyVersion`] of this key.
     fn version(&self) -> KeyVersion;
+
+    /// Returns the [`KeyId`] for this key.
+    ///
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.5.4>
+    fn legacy_key_id(&self) -> KeyId;
+
+    /// Returns the [`Fingerprint`] for this key.
     fn fingerprint(&self) -> Fingerprint;
-    fn key_id(&self) -> KeyId;
+
+    /// Returns the algorithm for this key.
     fn algorithm(&self) -> PublicKeyAlgorithm;
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc>;
+    fn expiration(&self) -> Option<u16>;
+
+    /// Returns the parameters for the public portion of this key.
+    fn public_params(&self) -> &PublicParams;
 }
 
 pub trait Imprint {
@@ -35,51 +49,11 @@ pub trait Imprint {
     fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>>;
 }
 
-pub trait PublicKeyTrait: KeyDetails + std::fmt::Debug {
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc>;
-    fn expiration(&self) -> Option<u16>;
-
+/// Keys that can verify signatures.
+pub trait VerifyingKey: KeyDetails {
     /// Verify a signed message.
     /// Data will be hashed using `hash`, before verifying.
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()>;
-
-    fn public_params(&self) -> &PublicParams;
-
-    fn is_signing_key(&self) -> bool {
-        use crate::crypto::public_key::PublicKeyAlgorithm::*;
-
-        #[cfg(feature = "draft-pqc")]
-        if matches!(
-            self.algorithm(),
-            MlDsa65Ed25519 | MlDsa87Ed448 | SlhDsaShake128s | SlhDsaShake128f | SlhDsaShake256s
-        ) {
-            return true;
-        }
-
-        matches!(
-            self.algorithm(),
-            RSA | RSASign | Elgamal | DSA | ECDSA | EdDSALegacy | Ed25519 | Ed448
-        )
-    }
-
-    fn is_encryption_key(&self) -> bool {
-        use crate::crypto::public_key::PublicKeyAlgorithm::*;
-
-        #[cfg(feature = "draft-pqc")]
-        if matches!(self.algorithm(), MlKem768X25519 | MlKem1024X448) {
-            return true;
-        }
-
-        matches!(
-            self.algorithm(),
-            RSA | RSAEncrypt | ECDH | DiffieHellman | Elgamal | ElgamalEncrypt | X25519 | X448
-        )
-    }
+    fn verify(&self, hash: HashAlgorithm, data: &[u8], sig: &SignatureBytes) -> Result<()>;
 }
 
 impl<T: KeyDetails> KeyDetails for &T {
@@ -91,28 +65,12 @@ impl<T: KeyDetails> KeyDetails for &T {
         (*self).fingerprint()
     }
 
-    /// Returns the Key ID of the associated primary key.
-    fn key_id(&self) -> KeyId {
-        (*self).key_id()
+    fn legacy_key_id(&self) -> KeyId {
+        (*self).legacy_key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         (*self).algorithm()
-    }
-}
-
-impl<T: PublicKeyTrait> PublicKeyTrait for &T {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        (*self).verify_signature(hash, data, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        (*self).public_params()
     }
 
     fn expiration(&self) -> Option<u16> {
@@ -122,9 +80,19 @@ impl<T: PublicKeyTrait> PublicKeyTrait for &T {
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
         (*self).created_at()
     }
+
+    fn public_params(&self) -> &PublicParams {
+        (*self).public_params()
+    }
 }
 
-impl KeyDetails for Box<&dyn SecretKeyTrait> {
+impl<T: VerifyingKey> VerifyingKey for &T {
+    fn verify(&self, hash: HashAlgorithm, data: &[u8], sig: &SignatureBytes) -> Result<()> {
+        (*self).verify(hash, data, sig)
+    }
+}
+
+impl KeyDetails for Box<&dyn SigningKey> {
     fn version(&self) -> KeyVersion {
         (**self).version()
     }
@@ -133,32 +101,32 @@ impl KeyDetails for Box<&dyn SecretKeyTrait> {
         (**self).fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        (**self).key_id()
+    fn legacy_key_id(&self) -> KeyId {
+        (**self).legacy_key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         (**self).algorithm()
     }
-}
 
-impl SecretKeyTrait for Box<&dyn SecretKeyTrait> {
-    fn create_signature(
-        &self,
-        key_pw: &Password,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<crate::types::SignatureBytes> {
-        (**self).create_signature(key_pw, hash, data)
+    fn expiration(&self) -> Option<u16> {
+        (**self).expiration()
     }
 
-    fn hash_alg(&self) -> HashAlgorithm {
-        (**self).hash_alg()
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        (**self).created_at()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        (**self).public_params()
     }
 }
 
-pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
-    fn create_signature(
+/// Keys that can sign data.
+///
+/// Contains private data.
+pub trait SigningKey: KeyDetails {
+    fn sign(
         &self,
         key_pw: &Password,
         hash: HashAlgorithm,
@@ -170,9 +138,24 @@ pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
     fn hash_alg(&self) -> HashAlgorithm;
 }
 
+impl SigningKey for Box<&dyn SigningKey> {
+    fn sign(
+        &self,
+        key_pw: &Password,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<crate::types::SignatureBytes> {
+        (**self).sign(key_pw, hash, data)
+    }
+
+    fn hash_alg(&self) -> HashAlgorithm {
+        (**self).hash_alg()
+    }
+}
+
 /// Describes keys that can encrypt plain data (i.e. a session key) into data for a
 /// [PKESK](https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio).
-pub trait EncryptionKey: PublicKeyTrait {
+pub trait EncryptionKey: VerifyingKey {
     fn encrypt<R: rand::CryptoRng + rand::Rng>(
         &self,
         rng: R,

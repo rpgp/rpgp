@@ -22,8 +22,8 @@ use crate::{
     ser::Serialize,
     types::{
         EcdhPublicParams, EddsaLegacyPublicParams, EncryptionKey, EskType, Fingerprint, Imprint,
-        KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes, PublicKeyTrait, PublicParams,
-        SecretKeyTrait, SignatureBytes, Tag,
+        KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes, PublicParams, SignatureBytes,
+        SigningKey, Tag, VerifyingKey,
     },
 };
 
@@ -171,8 +171,8 @@ impl PublicSubkey {
         embedded: Option<Signature>,
     ) -> Result<Signature>
     where
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
+        K: SigningKey,
+        P: VerifyingKey + Serialize,
     {
         let mut config =
             SignatureConfig::from_key(rng, primary_sec_key, SignatureType::SubkeyBinding)?;
@@ -199,7 +199,7 @@ impl PublicSubkey {
         // the signature.
         if primary_sec_key.version() <= KeyVersion::V4 {
             config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
-                primary_sec_key.key_id(),
+                primary_sec_key.legacy_key_id(),
             ))?];
         }
 
@@ -403,7 +403,7 @@ impl PubKeyInner {
         sig_type: SignatureType,
     ) -> Result<Signature>
     where
-        K: SecretKeyTrait + Serialize,
+        K: SigningKey + Serialize,
     {
         use chrono::SubsecRound;
 
@@ -415,15 +415,16 @@ impl PubKeyInner {
             Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
         ];
         if key.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets =
-                vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+                key.legacy_key_id(),
+            ))?];
         }
 
         config.sign_key(key, key_pw, &self)
     }
 }
 
-pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
+pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: VerifyingKey>(
     key: &K,
     mut rng: R,
     plain: &[u8],
@@ -452,7 +453,12 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
                         | EcdhPublicParams::P521 { hash, alg_sym, .. }
                         | EcdhPublicParams::P384 { hash, alg_sym, .. } => {
                             if curve.hash_algo()? != *hash || curve.sym_algo()? != *alg_sym {
-                                bail!("Unsupported KDF/KEK parameters for {:?} and KeyVersion::V6: {:?}, {:?}", curve, hash, alg_sym);
+                                bail!(
+                                    "Unsupported KDF/KEK parameters for {:?} and KeyVersion::V6: {:?}, {:?}",
+                                    curve,
+                                    hash,
+                                    alg_sym
+                                );
                             }
                         }
                         _ => unsupported_err!("{:?} for ECDH", params),
@@ -750,7 +756,7 @@ impl KeyDetails for PubKeyInner {
         }
     }
 
-    fn key_id(&self) -> KeyId {
+    fn legacy_key_id(&self) -> KeyId {
         match self.version {
             KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
                 PublicParams::RSA(params) => {
@@ -782,15 +788,22 @@ impl KeyDetails for PubKeyInner {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.algorithm
     }
+
+    fn expiration(&self) -> Option<u16> {
+        self.expiration
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        &self.created_at
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        &self.public_params
+    }
 }
 
-impl PublicKeyTrait for PubKeyInner {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        hashed: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
+impl VerifyingKey for PubKeyInner {
+    fn verify(&self, hash: HashAlgorithm, hashed: &[u8], sig: &SignatureBytes) -> Result<()> {
         match self.public_params {
             PublicParams::RSA(ref params) => {
                 let sig: &[Mpi] = sig.try_into()?;
@@ -911,18 +924,6 @@ impl PublicKeyTrait for PubKeyInner {
             }
         }
     }
-
-    fn public_params(&self) -> &PublicParams {
-        &self.public_params
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        &self.created_at
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.expiration
-    }
 }
 
 impl KeyDetails for PublicKey {
@@ -934,12 +935,24 @@ impl KeyDetails for PublicKey {
         self.inner.fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        self.inner.key_id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.inner.legacy_key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.inner.algorithm()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        &self.inner.created_at
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.inner.expiration
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.inner.public_params()
     }
 }
 
@@ -949,26 +962,9 @@ impl Imprint for PublicKey {
     }
 }
 
-impl PublicKeyTrait for PublicKey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        hashed: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        PublicKeyTrait::verify_signature(&self.inner, hash, hashed, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        PublicKeyTrait::public_params(&self.inner)
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        PublicKeyTrait::created_at(&self.inner)
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        PublicKeyTrait::expiration(&self.inner)
+impl VerifyingKey for PublicKey {
+    fn verify(&self, hash: HashAlgorithm, hashed: &[u8], sig: &SignatureBytes) -> Result<()> {
+        self.inner.verify(hash, hashed, sig)
     }
 }
 
@@ -981,12 +977,24 @@ impl KeyDetails for PublicSubkey {
         self.inner.fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        self.inner.key_id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.inner.legacy_key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.inner.algorithm()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.inner.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.inner.expiration()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.inner.public_params()
     }
 }
 
@@ -996,26 +1004,9 @@ impl Imprint for PublicSubkey {
     }
 }
 
-impl PublicKeyTrait for PublicSubkey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        hashed: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        PublicKeyTrait::verify_signature(&self.inner, hash, hashed, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        PublicKeyTrait::public_params(&self.inner)
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        PublicKeyTrait::created_at(&self.inner)
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        PublicKeyTrait::expiration(&self.inner)
+impl VerifyingKey for PublicSubkey {
+    fn verify(&self, hash: HashAlgorithm, hashed: &[u8], sig: &SignatureBytes) -> Result<()> {
+        VerifyingKey::verify(&self.inner, hash, hashed, sig)
     }
 }
 
@@ -1134,7 +1125,7 @@ mod tests {
         #[ignore]
         fn public_key_packet_roundtrip(packet: PublicKey) {
             // dyn compat
-            let _: Box<&dyn PublicKeyTrait> = Box::new(&packet);
+            let _: Box<&dyn VerifyingKey> = Box::new(&packet);
 
             let mut buf = Vec::new();
             packet.to_writer(&mut buf)?;

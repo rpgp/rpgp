@@ -15,7 +15,7 @@ use crate::{
     ser::Serialize,
     types::{
         EncryptionKey, EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength,
-        PkeskBytes, PublicKeyTrait, PublicParams, SignatureBytes, Tag,
+        PkeskBytes, PublicParams, SignatureBytes, Tag, VerifyingKey,
     },
 };
 
@@ -169,12 +169,24 @@ impl KeyDetails for SignedPublicKey {
         self.primary_key.fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        self.primary_key.key_id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.primary_key.legacy_key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.primary_key.algorithm()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.primary_key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.primary_key.expiration()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.primary_key.public_params()
     }
 }
 
@@ -184,26 +196,9 @@ impl Imprint for SignedPublicKey {
     }
 }
 
-impl PublicKeyTrait for SignedPublicKey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.primary_key.verify_signature(hash, data, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.primary_key.public_params()
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.primary_key.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.primary_key.expiration()
+impl VerifyingKey for SignedPublicKey {
+    fn verify(&self, hash: HashAlgorithm, data: &[u8], sig: &SignatureBytes) -> Result<()> {
+        self.primary_key.verify(hash, data, sig)
     }
 }
 
@@ -256,7 +251,7 @@ impl SignedPublicSubKey {
 
     pub fn verify<P>(&self, key: &P) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         ensure!(!self.signatures.is_empty(), "missing subkey bindings");
 
@@ -304,26 +299,12 @@ impl KeyDetails for SignedPublicSubKey {
         self.key.fingerprint()
     }
     /// Returns the Key ID of the key.
-    fn key_id(&self) -> KeyId {
-        self.key.key_id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.key.legacy_key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
-    }
-}
-impl PublicKeyTrait for SignedPublicSubKey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.key.verify_signature(hash, data, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.key.public_params()
     }
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
@@ -332,6 +313,16 @@ impl PublicKeyTrait for SignedPublicSubKey {
 
     fn expiration(&self) -> Option<u16> {
         self.key.expiration()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.key.public_params()
+    }
+}
+
+impl VerifyingKey for SignedPublicSubKey {
+    fn verify(&self, hash: HashAlgorithm, data: &[u8], sig: &SignatureBytes) -> Result<()> {
+        self.key.verify(hash, data, sig)
     }
 }
 

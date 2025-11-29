@@ -3,7 +3,7 @@ use std::fs;
 use pgp::{
     composed::{Deserializable, Message, MessageBuilder, SignedPublicKey, SignedSecretKey},
     crypto::sym::SymmetricKeyAlgorithm,
-    types::PublicKeyTrait,
+    types::KeyDetails,
 };
 use rand::thread_rng;
 
@@ -46,7 +46,7 @@ fn encrypt(cert: &SignedPublicKey, msg: &[u8]) -> Vec<u8> {
     let encryption_subkey = &cert.public_subkeys[1];
 
     assert!(
-        encryption_subkey.is_encryption_key(),
+        encryption_subkey.algorithm().can_encrypt(),
         "Unexpected subkey layout"
     );
 

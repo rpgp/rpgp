@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use chrono::{DateTime, Utc};
 use digest::{typenum::Unsigned, OutputSizeUser};
 use rsa::{
-    pkcs1v15::{Signature, VerifyingKey},
+    pkcs1v15::{self, Signature},
     RsaPublicKey,
 };
 use sha2::Digest;
@@ -18,8 +18,8 @@ use crate::{
     errors::{bail, Result},
     packet::{PubKeyInner, PublicKey},
     types::{
-        Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicKeyTrait, PublicParams,
-        RsaPublicParams, SecretKeyTrait, SignatureBytes,
+        Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicParams, RsaPublicParams,
+        SignatureBytes, SigningKey, VerifyingKey,
     },
 };
 
@@ -44,7 +44,7 @@ pub struct RsaSigner<T, D> {
 impl<T, D> RsaSigner<T, D>
 where
     D: Digest,
-    T: Keypair<VerifyingKey = VerifyingKey<D>>,
+    T: Keypair<VerifyingKey = pkcs1v15::VerifyingKey<D>>,
 {
     /// Create a new signer with a given public key
     pub fn new(inner: T, version: KeyVersion, created_at: DateTime<Utc>) -> Result<Self> {
@@ -109,12 +109,12 @@ where
     }
 }
 
-impl<D, T> SecretKeyTrait for RsaSigner<T, D>
+impl<D, T> SigningKey for RsaSigner<T, D>
 where
     T: PrehashSigner<Signature>,
     D: Digest + KnownDigest,
 {
-    fn create_signature(
+    fn sign(
         &self,
         _key_pw: &Password,
         hash: HashAlgorithm,
@@ -146,23 +146,12 @@ impl<D, T> KeyDetails for RsaSigner<T, D> {
         self.public_key.fingerprint()
     }
 
-    fn key_id(&self) -> KeyId {
-        self.public_key.key_id()
+    fn legacy_key_id(&self) -> KeyId {
+        self.public_key.legacy_key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.public_key.algorithm()
-    }
-}
-
-impl<D, T> PublicKeyTrait for RsaSigner<T, D> {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.public_key.verify_signature(hash, data, sig)
     }
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
@@ -176,8 +165,10 @@ impl<D, T> PublicKeyTrait for RsaSigner<T, D> {
     fn public_params(&self) -> &PublicParams {
         self.public_key.public_params()
     }
+}
 
-    fn is_encryption_key(&self) -> bool {
-        false
+impl<D, T> VerifyingKey for RsaSigner<T, D> {
+    fn verify(&self, hash: HashAlgorithm, data: &[u8], sig: &SignatureBytes) -> Result<()> {
+        self.public_key.verify(hash, data, sig)
     }
 }

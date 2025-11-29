@@ -6,7 +6,7 @@ use crate::{
     errors::{ensure, Result},
     packet::{PacketTrait, Signature, UserAttribute, UserId},
     ser::Serialize,
-    types::{PublicKeyTrait, Tag},
+    types::{Tag, VerifyingKey},
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -38,7 +38,7 @@ impl SignedUser {
     /// Verify all signatures (for self-signatures). If signatures is empty, this fails.
     pub fn verify<P>(&self, key: &P) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         debug!("verify signed user {self:#?}");
         ensure!(!self.signatures.is_empty(), "no signatures found");
@@ -53,8 +53,8 @@ impl SignedUser {
     /// Verify all signatures (for third-party signatures). If signatures is empty, this fails.
     pub fn verify_third_party<P, K>(&self, signee: &P, signer: &K) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
-        K: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
+        K: VerifyingKey + Serialize,
     {
         debug!("verify signed user {self:#?} with signer {signer:#?}");
         ensure!(!self.signatures.is_empty(), "no signatures found");
@@ -118,7 +118,7 @@ impl SignedUserAttribute {
     /// Verify all signatures (for self-signatures). If signatures is empty, this fails.
     pub fn verify<P>(&self, key: &P) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
     {
         debug!("verify signed attribute {self:?}");
         ensure!(!self.signatures.is_empty(), "no signatures found");
@@ -133,8 +133,8 @@ impl SignedUserAttribute {
     /// Verify all signatures (for third-party signatures). If signatures is empty, this fails.
     pub fn verify_third_party<P, K>(&self, signee: &P, signer: &K) -> Result<()>
     where
-        P: PublicKeyTrait + Serialize,
-        K: PublicKeyTrait + Serialize,
+        P: VerifyingKey + Serialize,
+        K: VerifyingKey + Serialize,
     {
         debug!("verify signed attribute {self:#?} with signer {signer:#?}");
         ensure!(!self.signatures.is_empty(), "no signatures found");

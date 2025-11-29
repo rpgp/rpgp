@@ -14,7 +14,7 @@ use crate::{
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag},
+    types::{KeyVersion, Password, SignedUserAttribute, SigningKey, Tag, VerifyingKey},
 };
 
 /// The type of a user attribute. Only `Image` is a known type currently
@@ -228,8 +228,8 @@ impl UserAttribute {
     ) -> Result<SignedUserAttribute>
     where
         R: CryptoRng + Rng,
-        P: SecretKeyTrait,
-        K: PublicKeyTrait + Serialize,
+        P: SigningKey,
+        K: VerifyingKey + Serialize,
     {
         // Self-signatures use CertPositive, see
         // <https://www.ietf.org/archive/id/draft-gallagher-openpgp-signatures-01.html#name-certification-signature-typ>
@@ -253,8 +253,8 @@ impl UserAttribute {
     ) -> Result<SignedUserAttribute>
     where
         R: CryptoRng + Rng,
-        P: SecretKeyTrait,
-        K: PublicKeyTrait + Serialize,
+        P: SigningKey,
+        K: VerifyingKey + Serialize,
     {
         ensure!(
             CERTIFICATION_SIGNATURE_TYPES.contains(&typ),
@@ -272,8 +272,9 @@ impl UserAttribute {
 
         config.hashed_subpackets = hashed_subpackets;
         if signer.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets =
-                vec![Subpacket::regular(SubpacketData::Issuer(signer.key_id()))?];
+            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+                signer.legacy_key_id(),
+            ))?];
         }
 
         let sig =

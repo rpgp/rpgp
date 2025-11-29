@@ -12,7 +12,7 @@ use crate::{
         UserAttribute, UserId,
     },
     ser::Serialize,
-    types::{CompressionAlgorithm, KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
+    types::{CompressionAlgorithm, KeyVersion, Password, SigningKey, VerifyingKey},
 };
 
 /// This specifies associated user id and attribute components, plus some metadata for producing
@@ -65,8 +65,8 @@ impl KeyDetails {
     ) -> Result<SignedKeyDetails>
     where
         R: CryptoRng + Rng,
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
+        K: SigningKey,
+        P: VerifyingKey + Serialize,
     {
         let subpackets_with_metadata = || -> Result<Vec<Subpacket>> {
             Ok(vec![
@@ -134,8 +134,9 @@ impl KeyDetails {
                 .push(Subpacket::regular(SubpacketData::IsPrimary(true))?);
 
             if key.version() <= KeyVersion::V4 {
-                config.unhashed_subpackets =
-                    vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+                config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+                    key.legacy_key_id(),
+                ))?];
             }
 
             let sig = config.sign_certification(
@@ -165,8 +166,9 @@ impl KeyDetails {
                     };
 
                     if key.version() <= KeyVersion::V4 {
-                        config.unhashed_subpackets =
-                            vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+                        config.unhashed_subpackets = vec![Subpacket::regular(
+                            SubpacketData::Issuer(key.legacy_key_id()),
+                        )?];
                     }
 
                     let sig = config.sign_certification(key, pub_key, key_pw, id.tag(), &id)?;

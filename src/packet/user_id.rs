@@ -13,8 +13,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        KeyVersion, PacketHeaderVersion, PacketLength, Password, PublicKeyTrait, SecretKeyTrait,
-        SignedUser, Tag,
+        KeyVersion, PacketHeaderVersion, PacketLength, Password, SignedUser, SigningKey, Tag,
+        VerifyingKey,
     },
 };
 
@@ -106,8 +106,8 @@ impl UserId {
     ) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
-        K: SecretKeyTrait,
-        P: PublicKeyTrait + Serialize,
+        K: SigningKey,
+        P: VerifyingKey + Serialize,
     {
         // Self-signatures use CertPositive, see
         // <https://www.ietf.org/archive/id/draft-gallagher-openpgp-signatures-01.html#name-certification-signature-typ>
@@ -131,8 +131,8 @@ impl UserId {
     ) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
-        P: SecretKeyTrait,
-        K: PublicKeyTrait + Serialize,
+        P: SigningKey,
+        K: VerifyingKey + Serialize,
     {
         ensure!(
             CERTIFICATION_SIGNATURE_TYPES.contains(&typ),
@@ -150,8 +150,9 @@ impl UserId {
 
         config.hashed_subpackets = hashed_subpackets;
         if signer.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets =
-                vec![Subpacket::regular(SubpacketData::Issuer(signer.key_id()))?];
+            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+                signer.legacy_key_id(),
+            ))?];
         }
 
         let sig =

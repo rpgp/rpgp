@@ -3,7 +3,7 @@
 //! Tests from https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-end-to-end-tests
 use pgp::{
     composed::{Deserializable, Message, SignedSecretKey},
-    types::{EcdhKdfType, EcdhPublicParams, Password, PublicKeyTrait, PublicParams},
+    types::{EcdhKdfType, EcdhPublicParams, KeyDetails, Password, PublicParams},
 };
 
 const RECIPIENT_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
