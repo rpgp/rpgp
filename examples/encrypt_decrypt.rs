@@ -89,7 +89,7 @@ pub fn read_secret_key(input: &[u8]) -> SignedSecretKey {
     let (key, _headers) = SignedSecretKey::from_reader_single(input).unwrap();
 
     // Check that the binding self-signatures for each component are valid
-    key.verify().expect("Verify key");
+    key.verify_bindings().expect("Verify key");
 
     key
 }
@@ -99,7 +99,7 @@ pub fn read_public_key(input: &[u8]) -> SignedPublicKey {
     let (cert, _headers) = SignedPublicKey::from_reader_single(input).unwrap();
 
     // Check that the binding self-signatures for each component are valid
-    cert.verify().expect("Verify cert");
+    cert.verify_bindings().expect("Verify cert");
 
     cert
 }

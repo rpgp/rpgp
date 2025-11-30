@@ -106,17 +106,12 @@ impl SignedPublicKey {
         }
     }
 
-    fn verify_public_subkeys(&self) -> Result<()> {
+    /// Verifies all stored bindings.
+    pub fn verify_bindings(&self) -> Result<()> {
+        self.details.verify_bindings(&self.primary_key)?;
         for subkey in &self.public_subkeys {
-            subkey.verify(&self.primary_key)?;
+            subkey.verify_bindings(&self.primary_key)?;
         }
-
-        Ok(())
-    }
-
-    pub fn verify(&self) -> Result<()> {
-        self.details.verify(&self.primary_key)?;
-        self.verify_public_subkeys()?;
 
         Ok(())
     }
@@ -249,7 +244,7 @@ impl SignedPublicSubKey {
         SignedPublicSubKey { key, signatures }
     }
 
-    pub fn verify<P>(&self, key: &P) -> Result<()>
+    pub fn verify_bindings<P>(&self, key: &P) -> Result<()>
     where
         P: VerifyingKey + Serialize,
     {
@@ -379,7 +374,7 @@ I8kWVkXU6vFOi+HWvv/ira7ofJu16NnoUkhclkUrk0mXubZvyl4GBg==
 
         eprintln!("spk: {spk:#02x?}");
 
-        spk.verify()?;
+        spk.verify_bindings()?;
 
         Ok(())
     }

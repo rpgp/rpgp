@@ -64,7 +64,7 @@ impl SignedKeyDetails {
         P: VerifyingKey + Serialize,
     {
         for user in &self.users {
-            user.verify(key)?;
+            user.verify_bindings(key)?;
         }
 
         Ok(())
@@ -75,7 +75,7 @@ impl SignedKeyDetails {
         P: VerifyingKey + Serialize,
     {
         for attr in &self.user_attributes {
-            attr.verify(key)?;
+            attr.verify_bindings(key)?;
         }
 
         Ok(())
@@ -103,7 +103,7 @@ impl SignedKeyDetails {
         Ok(())
     }
 
-    pub fn verify<P>(&self, key: &P) -> Result<()>
+    pub fn verify_bindings<P>(&self, key: &P) -> Result<()>
     where
         P: VerifyingKey + Serialize,
     {
@@ -305,10 +305,10 @@ pub enum PublicOrSecret {
 }
 
 impl PublicOrSecret {
-    pub fn verify(&self) -> Result<()> {
+    pub fn verify_bindings(&self) -> Result<()> {
         match self {
-            PublicOrSecret::Public(k) => k.verify(),
-            PublicOrSecret::Secret(k) => k.verify(),
+            PublicOrSecret::Public(k) => k.verify_bindings(),
+            PublicOrSecret::Secret(k) => k.verify_bindings(),
         }
     }
 
