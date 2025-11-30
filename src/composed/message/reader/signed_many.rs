@@ -341,65 +341,63 @@ impl<'a> SignatureManyReader<'a> {
                         // reverse the order of the signatures as we collected them in the opposite order.
                         let signatures: Vec<_> = signatures.into_iter().rev().collect();
 
-                        // TODO: adjust for indexing into signatures (it only has num_ops elements)
+                        // calculate final hashes
+                        let mut hashes = Vec::with_capacity(packets.len());
 
-                        // calculate final hash
-                        let hashes = hashers
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, hasher)| {
-                                if let Some(mut hasher) = hasher {
-                                    match &packets[i] {
-                                        SignaturePacket::Ops { signature: packet } => {
-                                            if !packet.matches(&signatures[i]) {
-                                                debug!(
-                                                    "Ops and Signature don't match, rejecting this signature"
-                                                );
-
-                                                // If Ops and Signature don't match, we consider the signature invalid.
-                                                // Return an empty hash to model this.
-                                                Ok(None)
-                                            } else if let Some(config) = signatures[i].config() {
-                                                debug!("calculating final hash");
-
-                                                let len =
-                                                    config.hash_signature_data(&mut hasher).map_err(|e| {
-                                                        io::Error::new(io::ErrorKind::InvalidData, e)
-                                                    })?;
-                                                hasher.update(&config.trailer(len).map_err(|e| {
-                                                    io::Error::new(io::ErrorKind::InvalidData, e)
-                                                })?);
-                                                Ok(Some(hasher.finalize()))
-                                            } else {
-                                                Ok(None)
-                                            }
-                                        }
-                                        SignaturePacket::Signature { signature: packet } => {
-                                            // regular signature
-                                            let config = packet.config().ok_or_else(|| {
-                                                io::Error::new(
-                                                    io::ErrorKind::InvalidData,
-                                                    "inconsistent signature state",
-                                                )
-                                            })?;
-                                            // calculate final hash
-                                            let len = config
-                                                .hash_signature_data(&mut hasher)
-                                                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-                                            hasher.update(
-                                                &config
-                                                    .trailer(len)
-                                                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
+                        let mut j = 0; // index into signatures
+                        for (hasher, packet) in hashers.into_iter().zip(packets.iter()) {
+                            if let Some(mut hasher) = hasher {
+                                match packet {
+                                    SignaturePacket::Ops { signature: packet } => {
+                                        if !packet.matches(&signatures[j]) {
+                                            debug!(
+                                                "Ops and Signature don't match, rejecting this signature"
                                             );
 
-                                            Ok(Some(hasher.finalize()))
+                                            // If Ops and Signature don't match, we consider the signature invalid.
+                                            // Return an empty hash to model this.
+                                            hashes.push(None);
+                                        } else if let Some(config) = signatures[j].config() {
+                                            debug!("calculating final hash");
+
+                                            let len = config
+                                                .hash_signature_data(&mut hasher)
+                                                .map_err(|e| {
+                                                    io::Error::new(io::ErrorKind::InvalidData, e)
+                                                })?;
+                                            hasher.update(&config.trailer(len).map_err(|e| {
+                                                io::Error::new(io::ErrorKind::InvalidData, e)
+                                            })?);
+                                            hashes.push(Some(hasher.finalize()));
+                                        } else {
+                                            hashes.push(None);
                                         }
+
+                                        j += 1;
                                     }
-                                } else {
-                                    Ok(None)
+                                    SignaturePacket::Signature { signature: packet } => {
+                                        // regular signature
+                                        let config = packet.config().ok_or_else(|| {
+                                            io::Error::new(
+                                                io::ErrorKind::InvalidData,
+                                                "inconsistent signature state",
+                                            )
+                                        })?;
+                                        // calculate final hash
+                                        let len = config.hash_signature_data(&mut hasher).map_err(
+                                            |e| io::Error::new(io::ErrorKind::InvalidData, e),
+                                        )?;
+                                        hasher.update(&config.trailer(len).map_err(|e| {
+                                            io::Error::new(io::ErrorKind::InvalidData, e)
+                                        })?);
+
+                                        hashes.push(Some(hasher.finalize()));
+                                    }
                                 }
-                            })
-                            .collect::<io::Result<Vec<_>>>()?;
+                            } else {
+                                hashes.push(None);
+                            }
+                        }
 
                         // reconstruct message source
                         let reader = packet_parser.into_inner();
