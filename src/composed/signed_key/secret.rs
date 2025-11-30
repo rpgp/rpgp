@@ -151,7 +151,7 @@ impl SignedSecretKey {
 
     /// Drops the secret key material in both the primary key and all secret subkeys.
     /// All other components of the key remain as they are.
-    pub fn as_public_key(&self) -> SignedPublicKey {
+    pub fn to_public_key(&self) -> SignedPublicKey {
         let mut public_subkeys: Vec<SignedPublicSubKey> = self.public_subkeys.to_vec();
         let sec_subkeys: Vec<SignedPublicSubKey> = self
             .secret_subkeys

@@ -260,7 +260,7 @@ fn test_ml_kem_1024_x448() -> TestResult {
     builder
         .sign(&*key_a, Password::empty(), HashAlgorithm::Sha3_512)
         // encrypting to the PQ subkey
-        .encrypt_to_key(&mut rng, &key_b.as_public_key().public_subkeys[0])?;
+        .encrypt_to_key(&mut rng, &key_b.to_public_key().public_subkeys[0])?;
 
     let out = builder.to_armored_string(&mut rng, Default::default())?;
 

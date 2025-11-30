@@ -738,7 +738,7 @@ mod tests {
 
         assert_eq!(signed_key_plain, signed_key2_plain);
 
-        let public_signed_key = signed_key_plain.as_public_key();
+        let public_signed_key = signed_key_plain.to_public_key();
         public_signed_key
             .verify_bindings()
             .expect("invalid public key");
@@ -825,7 +825,7 @@ mod tests {
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.as_public_key();
+        let public_signed_key = signed_key.to_public_key();
         public_signed_key
             .verify_bindings()
             .expect("invalid public key");
@@ -924,7 +924,7 @@ mod tests {
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.as_public_key();
+        let public_signed_key = signed_key.to_public_key();
         public_signed_key
             .verify_bindings()
             .expect("invalid public key");
@@ -1002,7 +1002,7 @@ mod tests {
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.as_public_key();
+        let public_signed_key = signed_key.to_public_key();
 
         public_signed_key
             .verify_bindings()
@@ -1142,7 +1142,7 @@ mod tests {
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.as_public_key();
+        let public_signed_key = signed_key.to_public_key();
 
         public_signed_key
             .verify_bindings()
@@ -1267,7 +1267,7 @@ mod tests {
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.as_public_key();
+        let public_signed_key = signed_key.to_public_key();
 
         public_signed_key
             .verify_bindings()
@@ -1329,7 +1329,7 @@ mod tests {
             )
             .expect("verify ok");
 
-        let signed_public_key = signed_secret_key.as_public_key();
+        let signed_public_key = signed_secret_key.to_public_key();
 
         // The signing capable subkey should have an embedded signature
         assert!(signed_public_key
@@ -1395,7 +1395,7 @@ mod tests {
 
         // try making (signed) public key representations
         let _ = signed_key.public_key();
-        let _ = signed_key.as_public_key();
+        let _ = signed_key.to_public_key();
     }
 
     #[test]
@@ -1528,7 +1528,7 @@ mod tests {
 
         // try making (signed) public key representations
         let _ = signed_key.public_key();
-        let _ = signed_key.as_public_key();
+        let _ = signed_key.to_public_key();
     }
 
     #[test]
@@ -1580,7 +1580,7 @@ mod tests {
 
         // try making (signed) public key representations
         let _ = signed_key.public_key();
-        let _ = signed_key.as_public_key();
+        let _ = signed_key.to_public_key();
     }
 
     #[test]
@@ -1645,7 +1645,7 @@ mod tests {
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.as_public_key();
+        let public_signed_key = signed_key.to_public_key();
 
         public_signed_key
             .verify_bindings()
@@ -1724,7 +1724,7 @@ mod tests {
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.as_public_key();
+        let public_signed_key = signed_key.to_public_key();
 
         public_signed_key
             .verify_bindings()
@@ -1865,7 +1865,7 @@ mod tests {
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.as_public_key();
+        let public_signed_key = signed_key.to_public_key();
 
         public_signed_key
             .verify_bindings()
