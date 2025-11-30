@@ -4,15 +4,15 @@ use std::{
 };
 
 use super::{
-    DebugBufRead, MessageReader, PacketBodyReader,
     reader::{
         CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassReader,
     },
+    DebugBufRead, MessageReader, PacketBodyReader,
 };
 use crate::{
     armor::{BlockType, DearmorOptions},
-    composed::{Edata, Esk, message::Message, shared::is_binary},
-    errors::{Result, bail, format_err, unimplemented_err},
+    composed::{message::Message, shared::is_binary, Edata, Esk},
+    errors::{bail, format_err, unimplemented_err, Result},
     packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
     parsing_reader::BufReadParsing,
     types::{PkeskVersion, SkeskVersion, Tag},
