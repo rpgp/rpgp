@@ -77,7 +77,7 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
             }
         };
 
-        if let Err(err) = key.verify() {
+        if let Err(err) = key.verify_bindings() {
             match err {
                 // Skip these for now
                 Error::Unimplemented { message, .. } => {
@@ -260,7 +260,7 @@ fn test_parse_gnupg_v1() {
 
         let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
         let (pk, headers) = SignedPublicKey::from_string(input).expect("failed to parse key");
-        match pk.verify() {
+        match pk.verify_bindings() {
             // Skip these for now
             Err(Error::Unimplemented { message, .. }) => {
                 warn!("verification failed: {message:?}");
@@ -291,7 +291,7 @@ fn test_parse_openpgp_sample_rsa_private() {
 
     let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
     let (key, _headers) = SignedSecretKey::from_string(input).expect("failed to parse key");
-    key.verify().expect("invalid key");
+    key.verify_bindings().expect("invalid key");
 
     let pkey = key.primary_key;
     assert_eq!(pkey.version(), KeyVersion::V4);
@@ -322,7 +322,7 @@ fn test_parse_details() {
 
     let file = File::open("./tests/openpgp-interop/testcases/keys/gnupg-v1-003.asc").unwrap();
     let (key, _headers) = SignedPublicKey::from_armor_single(file).expect("failed to parse key");
-    key.verify().expect("invalid key");
+    key.verify_bindings().expect("invalid key");
 
     assert_eq!(
         hex::encode(key.primary_key.fingerprint().as_bytes()),
@@ -640,7 +640,7 @@ fn encrypted_private_key() {
 
     let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
     let (key, _headers) = SignedSecretKey::from_string(input).expect("failed to parse key");
-    key.verify().expect("invalid key");
+    key.verify_bindings().expect("invalid key");
 
     let pub_key = key.public_key();
     assert_eq!(pub_key.legacy_key_id(), key.legacy_key_id());
@@ -724,7 +724,7 @@ fn test_fingerprint_rsa() {
         hex::encode(key.fingerprint().as_bytes())
     );
 
-    key.verify().expect("invalid key");
+    key.verify_bindings().expect("invalid key");
 }
 
 #[test]
@@ -752,7 +752,7 @@ fn test_fingerprint_ecdsa() {
 #[test]
 fn test_fingerprint_ecdh() {
     let (json, key) = get_test_fingerprint("gnupg-v1-001");
-    key.verify().expect("invalid key");
+    key.verify_bindings().expect("invalid key");
 
     assert_eq!(
         json["expected_subkeys"].as_array().unwrap()[0]
@@ -833,7 +833,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
         assert_eq!(iter2.count(), 1);
 
         if verify {
-            parsed.verify().expect("invalid key");
+            parsed.verify_bindings().expect("invalid key");
 
             match parsed {
                 PublicOrSecret::Secret(sec) => {
@@ -855,7 +855,7 @@ fn test_parse_openpgp_key_bin(key: &str, verify: bool) {
     for key in pk {
         let parsed = key.expect("failed to parse key");
         if verify {
-            parsed.verify().expect("invalid key");
+            parsed.verify_bindings().expect("invalid key");
         }
 
         // serialize and check we get the same thing
@@ -1080,7 +1080,7 @@ openpgp_key!(
 fn private_ecc1_verify() {
     let f = read_file("./tests/openpgp/samplekeys/ecc-sample-1-sec.asc");
     let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
-    sk.verify().expect("invalid key");
+    sk.verify_bindings().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
     assert_eq!(
         hex::encode(sk.legacy_key_id()).to_uppercase(),
@@ -1106,7 +1106,7 @@ fn private_ecc1_verify() {
 fn private_ecc2_verify() {
     let f = read_file("./tests/openpgp/samplekeys/ecc-sample-2-sec.asc");
     let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
-    sk.verify().expect("invalid key");
+    sk.verify_bindings().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 0);
     assert_eq!(
         hex::encode(sk.legacy_key_id()).to_uppercase(),
@@ -1135,7 +1135,7 @@ fn private_ecc2_verify() {
 fn private_ecc3_verify() {
     let f = read_file("./tests/openpgp/samplekeys/ecc-sample-4-sec.asc");
     let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
-    sk.verify().expect("invalid key");
+    sk.verify_bindings().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
     assert_eq!(
         hex::encode(sk.legacy_key_id()).to_uppercase(),
@@ -1161,7 +1161,7 @@ fn private_ecc3_verify() {
 fn private_x25519_verify() {
     let f = read_file("./tests/openpgpjs/x25519.sec.asc");
     let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
-    sk.verify().expect("invalid key");
+    sk.verify_bindings().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
     assert_eq!(
         hex::encode(sk.legacy_key_id()).to_uppercase(),
@@ -1185,7 +1185,7 @@ fn private_x25519_verify() {
 fn pub_x25519_little_verify() {
     let f = read_file("./tests/openpgpjs/x25519-little.pub.asc");
     let (pk, _headers) = SignedPublicKey::from_armor_single(f).expect("failed to parse key");
-    pk.verify().expect("invalid key");
+    pk.verify_bindings().expect("invalid key");
     assert_eq!(pk.public_subkeys.len(), 1);
     assert_eq!(
         hex::encode(pk.legacy_key_id()).to_uppercase(),
@@ -1216,7 +1216,7 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
     let (pk, _headers) = PublicOrSecret::from_armor_many(f).unwrap();
     for key in pk {
         let parsed = key.expect("failed to parse key");
-        parsed.verify().expect("invalid key");
+        parsed.verify_bindings().expect("invalid key");
 
         if unlock {
             let sk: SignedSecretKey = parsed.clone().try_into().unwrap();
@@ -1292,7 +1292,7 @@ fn test_locked_key() {
 
     let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
     let (key, _headers) = SignedSecretKey::from_string(input).expect("failed to parse key");
-    key.verify().expect("invalid key");
+    key.verify_bindings().expect("invalid key");
 
     // Incorrect password results in InvalidInput error.
     let res = DetachedSignature::sign_binary_data(

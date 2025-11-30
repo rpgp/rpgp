@@ -717,11 +717,15 @@ mod tests {
 
         let (signed_key2_enc, _headers) =
             SignedSecretKey::from_string(&armor_enc).expect("failed to parse key (enc)");
-        signed_key2_enc.verify().expect("invalid key (enc)");
+        signed_key2_enc
+            .verify_bindings()
+            .expect("invalid key (enc)");
 
         let (signed_key2_plain, _headers) =
             SignedSecretKey::from_string(&armor_plain).expect("failed to parse key (plain)");
-        signed_key2_plain.verify().expect("invalid key (plain)");
+        signed_key2_plain
+            .verify_bindings()
+            .expect("invalid key (plain)");
 
         signed_key2_enc
             .unlock(&"hello".into(), |_, _| Ok(()))
@@ -734,8 +738,10 @@ mod tests {
 
         assert_eq!(signed_key_plain, signed_key2_plain);
 
-        let public_signed_key = signed_key_plain.signed_public_key();
-        public_signed_key.verify().expect("invalid public key");
+        let public_signed_key = signed_key_plain.to_public_key();
+        public_signed_key
+            .verify_bindings()
+            .expect("invalid public key");
 
         let armor = public_signed_key
             .to_armored_string(None.into())
@@ -745,7 +751,7 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
-        signed_key2.verify().expect("invalid public key");
+        signed_key2.verify_bindings().expect("invalid public key");
     }
 
     #[ignore]
@@ -815,12 +821,14 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedSecretKey::from_string(&armor).expect("failed to parse key");
-        signed_key2.verify().expect("invalid key");
+        signed_key2.verify_bindings().expect("invalid key");
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.signed_public_key();
-        public_signed_key.verify().expect("invalid public key");
+        let public_signed_key = signed_key.to_public_key();
+        public_signed_key
+            .verify_bindings()
+            .expect("invalid public key");
 
         let armor = public_signed_key
             .to_armored_string(None.into())
@@ -830,7 +838,7 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
-        signed_key2.verify().expect("invalid public key");
+        signed_key2.verify_bindings().expect("invalid public key");
     }
 
     #[ignore]
@@ -912,12 +920,14 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedSecretKey::from_string(&armor).expect("failed to parse key");
-        signed_key2.verify().expect("invalid key");
+        signed_key2.verify_bindings().expect("invalid key");
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.signed_public_key();
-        public_signed_key.verify().expect("invalid public key");
+        let public_signed_key = signed_key.to_public_key();
+        public_signed_key
+            .verify_bindings()
+            .expect("invalid public key");
 
         let armor = public_signed_key
             .to_armored_string(None.into())
@@ -927,7 +937,7 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
-        signed_key2.verify().expect("invalid public key");
+        signed_key2.verify_bindings().expect("invalid public key");
     }
 
     fn gen_ecdsa_ecdh<R: Rng + CryptoRng>(
@@ -988,13 +998,15 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedSecretKey::from_string(&armor).expect("failed to parse key");
-        signed_key2.verify().expect("invalid key");
+        signed_key2.verify_bindings().expect("invalid key");
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.signed_public_key();
+        let public_signed_key = signed_key.to_public_key();
 
-        public_signed_key.verify().expect("invalid public key");
+        public_signed_key
+            .verify_bindings()
+            .expect("invalid public key");
 
         let armor = public_signed_key
             .to_armored_string(None.into())
@@ -1008,7 +1020,7 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
-        signed_key2.verify().expect("invalid public key");
+        signed_key2.verify_bindings().expect("invalid public key");
     }
 
     #[test]
@@ -1126,13 +1138,15 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedSecretKey::from_string(&armor).expect("failed to parse key");
-        signed_key2.verify().expect("invalid key");
+        signed_key2.verify_bindings().expect("invalid key");
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.signed_public_key();
+        let public_signed_key = signed_key.to_public_key();
 
-        public_signed_key.verify().expect("invalid public key");
+        public_signed_key
+            .verify_bindings()
+            .expect("invalid public key");
 
         let armor = public_signed_key
             .to_armored_string(None.into())
@@ -1142,7 +1156,7 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
-        signed_key2.verify().expect("invalid public key");
+        signed_key2.verify_bindings().expect("invalid public key");
     }
 
     // Test is slow in debug mode
@@ -1249,13 +1263,15 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedSecretKey::from_string(&armor).expect("failed to parse key");
-        signed_key2.verify().expect("invalid key");
+        signed_key2.verify_bindings().expect("invalid key");
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.signed_public_key();
+        let public_signed_key = signed_key.to_public_key();
 
-        public_signed_key.verify().expect("invalid public key");
+        public_signed_key
+            .verify_bindings()
+            .expect("invalid public key");
 
         let armor = public_signed_key
             .to_armored_string(None.into())
@@ -1265,7 +1281,7 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
-        signed_key2.verify().expect("invalid public key");
+        signed_key2.verify_bindings().expect("invalid public key");
     }
 
     #[test]
@@ -1313,7 +1329,7 @@ mod tests {
             )
             .expect("verify ok");
 
-        let signed_public_key = signed_secret_key.signed_public_key();
+        let signed_public_key = signed_secret_key.to_public_key();
 
         // The signing capable subkey should have an embedded signature
         assert!(signed_public_key
@@ -1326,7 +1342,9 @@ mod tests {
             .embedded_signature()
             .is_some());
 
-        signed_public_key.verify().expect("invalid public key");
+        signed_public_key
+            .verify_bindings()
+            .expect("invalid public key");
     }
 
     #[test]
@@ -1377,7 +1395,7 @@ mod tests {
 
         // try making (signed) public key representations
         let _ = signed_key.public_key();
-        let _ = signed_key.signed_public_key();
+        let _ = signed_key.to_public_key();
     }
 
     #[test]
@@ -1510,7 +1528,7 @@ mod tests {
 
         // try making (signed) public key representations
         let _ = signed_key.public_key();
-        let _ = signed_key.signed_public_key();
+        let _ = signed_key.to_public_key();
     }
 
     #[test]
@@ -1562,7 +1580,7 @@ mod tests {
 
         // try making (signed) public key representations
         let _ = signed_key.public_key();
-        let _ = signed_key.signed_public_key();
+        let _ = signed_key.to_public_key();
     }
 
     #[test]
@@ -1623,13 +1641,15 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedSecretKey::from_string(&armor).expect("failed to parse key");
-        signed_key2.verify().expect("invalid key");
+        signed_key2.verify_bindings().expect("invalid key");
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.signed_public_key();
+        let public_signed_key = signed_key.to_public_key();
 
-        public_signed_key.verify().expect("invalid public key");
+        public_signed_key
+            .verify_bindings()
+            .expect("invalid public key");
 
         let armor = public_signed_key
             .to_armored_string(None.into())
@@ -1639,7 +1659,7 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
-        signed_key2.verify().expect("invalid public key");
+        signed_key2.verify_bindings().expect("invalid public key");
     }
 
     #[test]
@@ -1700,13 +1720,15 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedSecretKey::from_string(&armor).expect("failed to parse key");
-        signed_key2.verify().expect("invalid key");
+        signed_key2.verify_bindings().expect("invalid key");
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.signed_public_key();
+        let public_signed_key = signed_key.to_public_key();
 
-        public_signed_key.verify().expect("invalid public key");
+        public_signed_key
+            .verify_bindings()
+            .expect("invalid public key");
 
         let armor = public_signed_key
             .to_armored_string(None.into())
@@ -1716,7 +1738,7 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
-        signed_key2.verify().expect("invalid public key");
+        signed_key2.verify_bindings().expect("invalid public key");
     }
 
     #[test]
@@ -1839,13 +1861,15 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedSecretKey::from_string(&armor).expect("failed to parse key");
-        signed_key2.verify().expect("invalid key");
+        signed_key2.verify_bindings().expect("invalid key");
 
         assert_eq!(signed_key, signed_key2);
 
-        let public_signed_key = signed_key.signed_public_key();
+        let public_signed_key = signed_key.to_public_key();
 
-        public_signed_key.verify().expect("invalid public key");
+        public_signed_key
+            .verify_bindings()
+            .expect("invalid public key");
 
         let armor = public_signed_key
             .to_armored_string(None.into())
@@ -1853,6 +1877,6 @@ mod tests {
 
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
-        signed_key2.verify().expect("invalid public key");
+        signed_key2.verify_bindings().expect("invalid public key");
     }
 }

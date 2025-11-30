@@ -107,26 +107,17 @@ impl SignedSecretKey {
         }
     }
 
-    fn verify_public_subkeys(&self) -> Result<()> {
+    /// Verifies all stored bindings.
+    pub fn verify_bindings(&self) -> Result<()> {
+        self.details
+            .verify_bindings(self.primary_key.public_key())?;
         for subkey in &self.public_subkeys {
-            subkey.verify(self.primary_key.public_key())?;
+            subkey.verify_bindings(self.primary_key.public_key())?;
         }
 
-        Ok(())
-    }
-
-    fn verify_secret_subkeys(&self) -> Result<()> {
         for subkey in &self.secret_subkeys {
-            subkey.verify(self.primary_key.public_key())?;
+            subkey.verify_bindings(self.primary_key.public_key())?;
         }
-
-        Ok(())
-    }
-
-    pub fn verify(&self) -> Result<()> {
-        self.details.verify(self.primary_key.public_key())?;
-        self.verify_public_subkeys()?;
-        self.verify_secret_subkeys()?;
 
         Ok(())
     }
@@ -160,7 +151,7 @@ impl SignedSecretKey {
 
     /// Drops the secret key material in both the primary key and all secret subkeys.
     /// All other components of the key remain as they are.
-    pub fn signed_public_key(&self) -> SignedPublicKey {
+    pub fn to_public_key(&self) -> SignedPublicKey {
         let mut public_subkeys: Vec<SignedPublicSubKey> = self.public_subkeys.to_vec();
         let sec_subkeys: Vec<SignedPublicSubKey> = self
             .secret_subkeys
@@ -255,7 +246,7 @@ impl SignedSecretSubKey {
         SignedSecretSubKey { key, signatures }
     }
 
-    pub fn verify<P>(&self, key: &P) -> Result<()>
+    pub fn verify_bindings<P>(&self, key: &P) -> Result<()>
     where
         P: VerifyingKey + Serialize,
     {
@@ -383,7 +374,7 @@ k0mXubZvyl4GBg==
 
         // eprintln!("ssk: {:#02x?}", ssk);
 
-        ssk.verify()?;
+        ssk.verify_bindings()?;
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
         let pri = &ssk.primary_key;
@@ -426,7 +417,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         let _ = pretty_env_logger::try_init();
 
         let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(ANNEX_A_5))?;
-        ssk.verify()?;
+        ssk.verify_bindings()?;
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
         let mut builder = MessageBuilder::from_bytes("", &b"Hello world"[..]);
@@ -451,7 +442,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(ANNEX_A_5))?;
-        ssk.verify()?;
+        ssk.verify_bindings()?;
 
         // we will test unlock/lock on the primary key
         let mut pri = ssk.primary_key;

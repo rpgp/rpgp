@@ -52,7 +52,7 @@ impl TestCase {
                 }
                 assert_eq!(key.secret_subkeys.len(), sub_keys.len());
 
-                key.verify()?;
+                key.verify_bindings()?;
 
                 Ok(())
             }
@@ -70,7 +70,7 @@ impl TestCase {
                 }
                 assert_eq!(key.public_subkeys.len(), sub_keys.len());
 
-                key.verify()?;
+                key.verify_bindings()?;
 
                 Ok(())
             }
@@ -81,9 +81,9 @@ impl TestCase {
                 hash,
             } => {
                 let (sec_key, _) = SignedSecretKey::from_armor_file(sec_key)?;
-                sec_key.verify()?;
+                sec_key.verify_bindings()?;
                 let (pub_key, _) = SignedPublicKey::from_armor_file(pub_key)?;
-                pub_key.verify()?;
+                pub_key.verify_bindings()?;
 
                 {
                     let (msg, _) = Message::from_armor_file(msg)?;
@@ -240,7 +240,7 @@ fn gen_key<R: RngCore + CryptoRng>(mut rng: R) -> TestResult<SignedSecretKey> {
         .generate(&mut rng)
         .expect("failed to generate secret key");
 
-    signed_key.verify()?;
+    signed_key.verify_bindings()?;
 
     Ok(signed_key)
 }
@@ -260,7 +260,7 @@ fn test_ml_kem_1024_x448() -> TestResult {
     builder
         .sign(&*key_a, Password::empty(), HashAlgorithm::Sha3_512)
         // encrypting to the PQ subkey
-        .encrypt_to_key(&mut rng, &key_b.signed_public_key().public_subkeys[0])?;
+        .encrypt_to_key(&mut rng, &key_b.to_public_key().public_subkeys[0])?;
 
     let out = builder.to_armored_string(&mut rng, Default::default())?;
 
@@ -322,7 +322,7 @@ fn test_a_3_4_detached_signature() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-mldsa-65-sample-pk.asc")?;
-    pub_key.verify()?;
+    pub_key.verify_bindings()?;
 
     {
         let (sig, _) =
@@ -378,7 +378,7 @@ fn test_a_4_4_detached_signature() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-mldsa-87-sample-pk.asc")?;
-    pub_key.verify()?;
+    pub_key.verify_bindings()?;
 
     {
         let (sig, _) =
@@ -436,7 +436,7 @@ fn test_a_5_4_detached_signature() -> TestResult {
 
     let (pub_key, _) =
         SignedPublicKey::from_armor_file("./tests/pqc/v6-slhdsa-128s-sample-pk.asc")?;
-    pub_key.verify()?;
+    pub_key.verify_bindings()?;
 
     {
         let (sig, _) =
@@ -482,7 +482,7 @@ fn test_a_6_3_detached_signature() -> TestResult {
 
     let (pub_key, _) =
         SignedPublicKey::from_armor_file("./tests/pqc/v6-slhdsa-128f-sample-pk.asc")?;
-    pub_key.verify()?;
+    pub_key.verify_bindings()?;
 
     {
         let (sig, _) =
@@ -528,7 +528,7 @@ fn test_a_7_3_detached_signature() -> TestResult {
 
     let (pub_key, _) =
         SignedPublicKey::from_armor_file("./tests/pqc/v6-slhdsa-256s-sample-pk.asc")?;
-    pub_key.verify()?;
+    pub_key.verify_bindings()?;
 
     {
         let (sig, _) =

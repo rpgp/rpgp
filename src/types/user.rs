@@ -36,7 +36,7 @@ impl SignedUser {
     }
 
     /// Verify all signatures (for self-signatures). If signatures is empty, this fails.
-    pub fn verify<P>(&self, key: &P) -> Result<()>
+    pub fn verify_bindings<P>(&self, key: &P) -> Result<()>
     where
         P: VerifyingKey + Serialize,
     {
@@ -116,7 +116,7 @@ impl SignedUserAttribute {
     }
 
     /// Verify all signatures (for self-signatures). If signatures is empty, this fails.
-    pub fn verify<P>(&self, key: &P) -> Result<()>
+    pub fn verify_bindings<P>(&self, key: &P) -> Result<()>
     where
         P: VerifyingKey + Serialize,
     {

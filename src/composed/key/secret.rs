@@ -104,10 +104,10 @@ mod tests {
             SignedSecretKey::from_armor_file("./tests/autocrypt/alice@autocrypt.example.sec.asc")
                 .unwrap();
 
-        secret.verify().unwrap();
-        public.verify().unwrap();
+        secret.verify_bindings().unwrap();
+        public.verify_bindings().unwrap();
 
-        let signed_pubkey = secret.signed_public_key();
+        let signed_pubkey = secret.to_public_key();
 
         assert_eq!(signed_pubkey.primary_key, public.primary_key);
     }
