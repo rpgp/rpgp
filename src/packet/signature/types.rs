@@ -69,7 +69,7 @@ impl Signature {
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
         created: DateTime<Utc>,
-        issuer: KeyId,
+        issuer_key_id: KeyId,
         signed_hash_value: [u8; 2],
         signature: SignatureBytes,
     ) -> Self {
@@ -82,7 +82,10 @@ impl Signature {
                     hash_alg,
                     hashed_subpackets: vec![],
                     unhashed_subpackets: vec![],
-                    version_specific: SignatureVersionSpecific::V2 { created, issuer },
+                    version_specific: SignatureVersionSpecific::V2 {
+                        created,
+                        issuer_key_id,
+                    },
                 },
                 signed_hash_value,
                 signature,
@@ -99,7 +102,7 @@ impl Signature {
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
         created: DateTime<Utc>,
-        issuer: KeyId,
+        issuer_key_id: KeyId,
         signed_hash_value: [u8; 2],
         signature: SignatureBytes,
     ) -> Self {
@@ -112,7 +115,10 @@ impl Signature {
                     hash_alg,
                     hashed_subpackets: vec![],
                     unhashed_subpackets: vec![],
-                    version_specific: SignatureVersionSpecific::V3 { created, issuer },
+                    version_specific: SignatureVersionSpecific::V3 {
+                        created,
+                        issuer_key_id,
+                    },
                 },
                 signed_hash_value,
                 signature,
@@ -357,17 +363,19 @@ impl Signature {
     /// We also consider `key` a match for `sig` by default, if `sig` contains no issuer-related
     /// subpackets.
     fn match_identity(sig: &Signature, key: &impl VerifyingKey) -> bool {
-        let issuers = sig.issuer();
+        let issuer_key_ids = sig.issuer_key_id();
         let issuer_fps = sig.issuer_fingerprint();
 
         // If there is no subpacket that signals the issuer, we consider `sig` and `key` a
         // potential match, and will check the cryptographic validity.
-        if issuers.is_empty() && issuer_fps.is_empty() {
+        if issuer_key_ids.is_empty() && issuer_fps.is_empty() {
             return true;
         }
 
         // Does any issuer or issuer fingerprint subpacket matche the identity of `sig`?
-        issuers.iter().any(|&key_id| key_id == &key.legacy_key_id())
+        issuer_key_ids
+            .iter()
+            .any(|&key_id| key_id == &key.legacy_key_id())
             || issuer_fps.iter().any(|&fp| fp == &key.fingerprint())
     }
 
@@ -443,7 +451,7 @@ impl Signature {
 
         ensure!(
             Self::match_identity(self, key),
-            "verify: No matching issuer or issuer_fingerprint for Key ID: {:?}",
+            "verify: No matching issuer_key_id or issuer_fingerprint for Key ID: {:?}",
             &key.legacy_key_id(),
         );
 
@@ -531,7 +539,7 @@ impl Signature {
 
         ensure!(
             Self::match_identity(self, signer),
-            "verify_certification: No matching issuer or issuer_fingerprint for Key ID: {:?}",
+            "verify_certification: No matching issuer_key_id or issuer_fingerprint for Key ID: {:?}",
             key_id,
         );
 
@@ -712,7 +720,7 @@ impl Signature {
 
         ensure!(
             Self::match_identity(self, signer),
-            "verify_key: No matching issuer or issuer_fingerprint for Key ID: {:?}",
+            "verify_key: No matching issuer_key_id or issuer_fingerprint for Key ID: {:?}",
             &signer.legacy_key_id(),
         );
 
@@ -766,8 +774,8 @@ impl Signature {
         self.config().and_then(|c| c.created())
     }
 
-    pub fn issuer(&self) -> Vec<&KeyId> {
-        self.config().map(|c| c.issuer()).unwrap_or_default()
+    pub fn issuer_key_id(&self) -> Vec<&KeyId> {
+        self.config().map(|c| c.issuer_key_id()).unwrap_or_default()
     }
 
     pub fn issuer_fingerprint(&self) -> Vec<&Fingerprint> {
@@ -1734,7 +1742,7 @@ mod tests {
             KeyExpirationTime,
             PreferredSymmetricAlgorithms,
             RevocationKey,
-            Issuer,
+            IssuerKeyId,
             Notation,
             PreferredHashAlgorithms,
             PreferredCompressionAlgorithms,
@@ -1815,7 +1823,7 @@ pwsJtT3sJB2q5NoA
         assert_eq!(sig.packet_header.packet_length(), PacketLength::Fixed(170));
         assert_eq!(
             &subpacket_type_list(&sig),
-            &[SubpacketType::Issuer, SubpacketType::Notation]
+            &[SubpacketType::IssuerKeyId, SubpacketType::Notation]
         );
 
         sig.unhashed_subpacket_insert(
@@ -1833,7 +1841,7 @@ pwsJtT3sJB2q5NoA
             &subpacket_type_list(&sig),
             &[
                 SubpacketType::Notation,
-                SubpacketType::Issuer,
+                SubpacketType::IssuerKeyId,
                 SubpacketType::Notation
             ]
         );
@@ -1847,7 +1855,7 @@ pwsJtT3sJB2q5NoA
         assert_eq!(
             &subpacket_type_list(&sig),
             &[
-                SubpacketType::Issuer,
+                SubpacketType::IssuerKeyId,
                 SubpacketType::Notation,
                 SubpacketType::Notation
             ]

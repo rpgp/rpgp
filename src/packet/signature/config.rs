@@ -37,11 +37,11 @@ pub struct SignatureConfig {
 pub enum SignatureVersionSpecific {
     V2 {
         created: DateTime<Utc>,
-        issuer: KeyId,
+        issuer_key_id: KeyId,
     },
     V3 {
         created: DateTime<Utc>,
-        issuer: KeyId,
+        issuer_key_id: KeyId,
     },
     V4,
     V6 {
@@ -82,7 +82,7 @@ impl SignatureConfig {
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
         created: DateTime<Utc>,
-        issuer: KeyId,
+        issuer_key_id: KeyId,
     ) -> Self {
         Self {
             typ,
@@ -90,7 +90,10 @@ impl SignatureConfig {
             hash_alg,
             hashed_subpackets: Vec::new(),
             unhashed_subpackets: Vec::new(),
-            version_specific: SignatureVersionSpecific::V2 { created, issuer },
+            version_specific: SignatureVersionSpecific::V2 {
+                created,
+                issuer_key_id,
+            },
         }
     }
 
@@ -102,7 +105,7 @@ impl SignatureConfig {
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
         created: DateTime<Utc>,
-        issuer: KeyId,
+        issuer_key_id: KeyId,
     ) -> Self {
         Self {
             typ,
@@ -110,7 +113,10 @@ impl SignatureConfig {
             hash_alg,
             hashed_subpackets: Vec::new(),
             unhashed_subpackets: Vec::new(),
-            version_specific: SignatureVersionSpecific::V3 { created, issuer },
+            version_specific: SignatureVersionSpecific::V3 {
+                created,
+                issuer_key_id,
+            },
         }
     }
 
@@ -656,12 +662,12 @@ impl SignatureConfig {
     /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-issuer-key-id>
     ///
     /// Returns Issuer subpacket data from both the hashed and unhashed area.
-    pub fn issuer(&self) -> Vec<&KeyId> {
+    pub fn issuer_key_id(&self) -> Vec<&KeyId> {
         // legacy v2/v3 signatures have an explicit "issuer" field
-        if let SignatureVersionSpecific::V2 { issuer, .. }
-        | SignatureVersionSpecific::V3 { issuer, .. } = &self.version_specific
+        if let SignatureVersionSpecific::V2 { issuer_key_id, .. }
+        | SignatureVersionSpecific::V3 { issuer_key_id, .. } = &self.version_specific
         {
-            return vec![issuer];
+            return vec![issuer_key_id];
         }
 
         // v4+ signatures use subpackets
@@ -673,7 +679,7 @@ impl SignatureConfig {
         self.hashed_subpackets()
             .chain(self.unhashed_subpackets())
             .filter_map(|sp| match sp.data {
-                SubpacketData::Issuer(ref id) => Some(id),
+                SubpacketData::IssuerKeyId(ref id) => Some(id),
                 _ => None,
             })
             .collect()

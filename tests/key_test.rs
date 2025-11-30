@@ -355,7 +355,7 @@ fn test_parse_details() {
     // TODO: examine subkey details
     assert_eq!(key.public_subkeys.len(), 1, "missing subkey");
 
-    let issuer = Subpacket::regular(SubpacketData::Issuer(KeyId::from([
+    let issuer = Subpacket::regular(SubpacketData::IssuerKeyId(KeyId::from([
         0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C,
     ])))
     .unwrap();

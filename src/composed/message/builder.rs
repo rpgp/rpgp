@@ -130,7 +130,7 @@ pub enum SubpacketConfig {
     ///
     /// This produces two hashed subpackets: `IssuerFingerprint` and `SignatureCreationTime`.
     ///
-    /// In addition, for v4 keys, an `Issuer` subpacket is added to the unhashed area
+    /// In addition, for v4 keys, an `IssuerKeyId` subpacket is added to the unhashed area
     /// (showing the signer's Key ID).
     #[default]
     Default,
@@ -165,7 +165,7 @@ impl SubpacketConfig {
 
                 let mut unhashed = vec![];
                 if signer.version() <= KeyVersion::V4 {
-                    unhashed.push(Subpacket::regular(SubpacketData::Issuer(
+                    unhashed.push(Subpacket::regular(SubpacketData::IssuerKeyId(
                         signer.legacy_key_id(),
                     ))?);
                 }

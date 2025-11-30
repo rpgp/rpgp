@@ -198,7 +198,7 @@ impl PublicSubkey {
         // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
         // the signature.
         if primary_sec_key.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::IssuerKeyId(
                 primary_sec_key.legacy_key_id(),
             ))?];
         }
@@ -415,7 +415,7 @@ impl PubKeyInner {
             Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
         ];
         if key.version() <= KeyVersion::V4 {
-            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+            config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::IssuerKeyId(
                 key.legacy_key_id(),
             ))?];
         }
