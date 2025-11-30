@@ -50,7 +50,9 @@ fn test_parse_msg(entry: &str, base_path: &str, _is_normalized: bool) {
         File::open(format!("{}/{}", base_path, details.decrypt_key)).unwrap();
     let (decrypt_key, _headers) = SignedSecretKey::from_armor_single(&mut decrypt_key_file)
         .expect("failed to read decryption key");
-    decrypt_key.verify().expect("invalid decryption key");
+    decrypt_key
+        .verify_bindings()
+        .expect("invalid decryption key");
 
     let decrypt_id = hex::encode(decrypt_key.legacy_key_id());
 
@@ -63,7 +65,9 @@ fn test_parse_msg(entry: &str, base_path: &str, _is_normalized: bool) {
         let mut verify_key_file = File::open(format!("{base_path}/{verify_key_str}")).unwrap();
         let (verify_key, _headers) = SignedPublicKey::from_armor_single(&mut verify_key_file)
             .expect("failed to read verification key");
-        verify_key.verify().expect("invalid verification key");
+        verify_key
+            .verify_bindings()
+            .expect("invalid verification key");
 
         let verify_id = hex::encode(verify_key.legacy_key_id());
         info!("verify key (ID={})", &verify_id);

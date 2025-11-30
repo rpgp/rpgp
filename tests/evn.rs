@@ -17,7 +17,7 @@ fn load_evn_pub() {
     let (key, headers) = pgp::composed::SignedPublicKey::from_armor_single(original_key.as_bytes())
         .expect("parsing");
 
-    key.verify().expect("failed to verify");
+    key.verify_bindings().expect("failed to verify");
 
     let serialized_key = key
         .to_armored_string(ArmorOptions {

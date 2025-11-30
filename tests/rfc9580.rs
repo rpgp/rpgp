@@ -84,7 +84,7 @@ fn rfc9580_verify_csf() {
         let ssk = load_ssk(&keyfile);
         let spk = SignedPublicKey::from(ssk.clone());
 
-        spk.verify().expect("SignedPublicKey::verify");
+        spk.verify_bindings().expect("SignedPublicKey::verify");
 
         // load+verify csf msg
         let (csf, _) =
