@@ -1,7 +1,6 @@
 use std::{io::BufRead, str};
 
 use bytes::Buf;
-use chrono::{DateTime, Duration, TimeZone, Utc};
 use log::{debug, warn};
 use smallvec::SmallVec;
 
@@ -56,10 +55,8 @@ fn v3_parser<B: BufRead>(
     // One-octet signature type.
     let typ = i.read_u8().map(SignatureType::from)?;
     // Four-octet creation time.
-    let created = i
-        .read_be_u32()
-        .map(|v| Utc.timestamp_opt(i64::from(v), 0).single())?
-        .ok_or_else(|| format_err!("invalid creation time"))?;
+    let created = i.read_timestamp()?;
+
     // Eight-octet Key ID of signer.
     let issuer = i.read_array::<8>().map(KeyId::from)?;
     // One-octet public-key algorithm.
@@ -358,22 +355,11 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
     }
 }
 
-/// Convert an epoch timestamp to a `DateTime`
-fn dt_from_timestamp(ts: u32) -> Option<DateTime<Utc>> {
-    DateTime::from_timestamp(i64::from(ts), 0)
-}
-
-/// Convert a u32 to a `Duration`
-fn duration_from_timestamp(ts: u32) -> Option<Duration> {
-    Duration::try_seconds(i64::from(ts))
-}
-
 /// Parse a Signature Creation Time subpacket
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-creation-time
 fn signature_creation_time<B: BufRead>(mut i: B) -> Result<SubpacketData> {
     // 4-octet time field
-    let date = i.read_be_u32()?;
-    let created = dt_from_timestamp(date).ok_or_else(|| format_err!("invalid creation time"))?;
+    let created = i.read_timestamp()?;
 
     Ok(SubpacketData::SignatureCreationTime(created))
 }
@@ -390,9 +376,7 @@ fn issuer<B: BufRead>(mut i: B) -> Result<SubpacketData> {
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-key-expiration-time
 fn key_expiration<B: BufRead>(mut i: B) -> Result<SubpacketData> {
     // 4-octet time field
-    let duration = i.read_be_u32()?;
-    let duration =
-        duration_from_timestamp(duration).ok_or_else(|| format_err!("invalid expiration time"))?;
+    let duration = i.read_duration()?;
 
     Ok(SubpacketData::KeyExpirationTime(duration))
 }
@@ -451,9 +435,7 @@ fn pref_com_alg<B: BufRead>(mut i: B) -> Result<SubpacketData> {
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-expiration-time
 fn signature_expiration_time<B: BufRead>(mut i: B) -> Result<SubpacketData> {
     // 4-octet time field
-    let duration = i.read_be_u32()?;
-    let duration =
-        duration_from_timestamp(duration).ok_or_else(|| format_err!("invalid expiration time"))?;
+    let duration = i.read_duration()?;
 
     Ok(SubpacketData::SignatureExpirationTime(duration))
 }

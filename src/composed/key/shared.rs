@@ -1,5 +1,4 @@
 use aes_gcm::aead::rand_core::CryptoRng;
-use chrono::SubsecRound;
 use rand::Rng;
 use smallvec::SmallVec;
 
@@ -12,7 +11,7 @@ use crate::{
         UserAttribute, UserId,
     },
     ser::Serialize,
-    types::{CompressionAlgorithm, KeyVersion, Password, SigningKey, VerifyingKey},
+    types::{CompressionAlgorithm, KeyVersion, Password, SigningKey, Timestamp, VerifyingKey},
 };
 
 /// This specifies associated user id and attribute components, plus some metadata for producing
@@ -70,9 +69,7 @@ impl KeyDetails {
     {
         let subpackets_with_metadata = || -> Result<Vec<Subpacket>> {
             Ok(vec![
-                Subpacket::regular(SubpacketData::SignatureCreationTime(
-                    chrono::Utc::now().trunc_subsecs(0),
-                ))?,
+                Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
                 Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
                 Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.clone()))?,
                 Subpacket::regular(SubpacketData::Features(self.features.clone()))?,
@@ -93,9 +90,7 @@ impl KeyDetails {
 
         let basic_subpackets = || -> Result<Vec<Subpacket>> {
             Ok(vec![
-                Subpacket::regular(SubpacketData::SignatureCreationTime(
-                    chrono::Utc::now().trunc_subsecs(0),
-                ))?,
+                Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
                 Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
             ])
         };

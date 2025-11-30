@@ -1,13 +1,12 @@
 use std::io::BufRead;
 
-use chrono::{DateTime, TimeZone, Utc};
 use log::debug;
 
 use crate::{
     crypto::public_key::PublicKeyAlgorithm,
-    errors::{ensure, format_err, unsupported_err, Result},
+    errors::{ensure, unsupported_err, Result},
     parsing_reader::BufReadParsing,
-    types::{KeyVersion, PublicParams, SecretParams},
+    types::{KeyVersion, PublicParams, SecretParams, Timestamp},
 };
 
 /// Parse the whole private key, both public and private fields.
@@ -46,15 +45,12 @@ fn private_key_parser_v4_v6<B: BufRead>(
 ) -> Result<(
     KeyVersion,
     PublicKeyAlgorithm,
-    DateTime<Utc>,
+    Timestamp,
     Option<u16>,
     PublicParams,
     SecretParams,
 )> {
-    let created_at = i
-        .read_be_u32()
-        .map(|v| Utc.timestamp_opt(i64::from(v), 0).single())?
-        .ok_or_else(|| format_err!("invalid timestamp"))?;
+    let created_at = i.read_timestamp()?;
 
     let alg = i.read_u8().map(PublicKeyAlgorithm::from)?;
 
@@ -77,16 +73,12 @@ fn private_key_parser_v2_v3<B: BufRead>(
 ) -> Result<(
     KeyVersion,
     PublicKeyAlgorithm,
-    DateTime<Utc>,
+    Timestamp,
     Option<u16>,
     PublicParams,
     SecretParams,
 )> {
-    let created_at = i
-        .read_be_u32()
-        .map(|v| Utc.timestamp_opt(i64::from(v), 0).single())?
-        .ok_or_else(|| format_err!("invalid imestamp"))?;
-
+    let created_at = i.read_timestamp()?;
     let exp = i.read_be_u16()?;
     let alg = i.read_u8().map(PublicKeyAlgorithm::from)?;
     let params = parse_pub_priv_fields(*key_ver, alg, None, i)?;
@@ -102,7 +94,7 @@ pub(crate) fn parse<B: BufRead>(
 ) -> Result<(
     KeyVersion,
     PublicKeyAlgorithm,
-    DateTime<Utc>,
+    Timestamp,
     Option<u16>,
     PublicParams,
     SecretParams,

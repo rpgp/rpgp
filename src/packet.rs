@@ -36,7 +36,7 @@
 //! # let secret_key_params = key_params.build().expect("Must be able to create secret key params");
 //! # let signed_secret_key = secret_key_params.generate(thread_rng()).expect("Failed to generate a plain key.");
 //! # let public_key = signed_secret_key.public_key();
-//! use pgp::packet::{Signature, SignatureConfig, PacketTrait};
+//! use pgp::{packet::{Signature, SignatureConfig, PacketTrait}, types::Timestamp};
 //!
 //! let signing_key = &signed_secret_key.primary_key;
 //! let verification_key = public_key;
@@ -44,7 +44,7 @@
 //!
 //! let passwd_fn = Password::empty();
 //!
-//! let now = chrono::Utc::now();
+//! let now = Timestamp::now();
 //!
 //! let mut sig_cfg = SignatureConfig::v4(packet::SignatureType::Binary, PublicKeyAlgorithm::RSA, HashAlgorithm::Sha256);
 //! sig_cfg.hashed_subpackets = vec![

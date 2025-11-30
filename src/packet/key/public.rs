@@ -1,7 +1,6 @@
 use std::io::BufRead;
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
-use chrono::SubsecRound;
 use digest::generic_array::GenericArray;
 use md5::Md5;
 use rand::{CryptoRng, Rng};
@@ -23,7 +22,7 @@ use crate::{
     types::{
         EcdhPublicParams, EddsaLegacyPublicParams, EncryptionKey, EskType, Fingerprint, Imprint,
         KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes, PublicParams, SignatureBytes,
-        SigningKey, Tag, VerifyingKey,
+        SigningKey, Tag, Timestamp, VerifyingKey,
     },
 };
 
@@ -61,7 +60,7 @@ impl PublicKey {
         packet_header: PacketHeader,
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
-        created_at: chrono::DateTime<chrono::Utc>,
+        created_at: Timestamp,
         expiration: Option<u16>,
         public_params: PublicParams,
     ) -> Result<Self> {
@@ -129,7 +128,7 @@ impl PublicSubkey {
         packet_header: PacketHeader,
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
-        created_at: chrono::DateTime<chrono::Utc>,
+        created_at: Timestamp,
         expiration: Option<u16>,
         public_params: PublicParams,
     ) -> Result<Self> {
@@ -178,9 +177,7 @@ impl PublicSubkey {
             SignatureConfig::from_key(rng, primary_sec_key, SignatureType::SubkeyBinding)?;
 
         config.hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))?,
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
             Subpacket::regular(SubpacketData::KeyFlags(keyflags))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(
                 primary_sec_key.fingerprint(),
@@ -223,7 +220,7 @@ impl EncryptionKey for PublicSubkey {
 pub struct PubKeyInner {
     version: KeyVersion,
     algorithm: PublicKeyAlgorithm,
-    created_at: chrono::DateTime<chrono::Utc>,
+    created_at: Timestamp,
     expiration: Option<u16>,
     public_params: PublicParams,
 }
@@ -239,7 +236,7 @@ impl PubKeyInner {
     pub fn new(
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
-        created_at: chrono::DateTime<chrono::Utc>,
+        created_at: Timestamp,
         expiration: Option<u16>,
         public_params: PublicParams,
     ) -> Result<Self> {
@@ -349,7 +346,7 @@ impl PubKeyInner {
     fn to_writer_v2_v3<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         use crate::ser::Serialize;
 
-        writer.write_u32::<BigEndian>(self.created_at.timestamp().try_into()?)?;
+        self.created_at.to_writer(writer)?;
         writer.write_u16::<BigEndian>(
             self.expiration
                 .expect("old key versions have an expiration"),
@@ -369,7 +366,7 @@ impl PubKeyInner {
     fn to_writer_v4_v6<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         use crate::ser::Serialize;
 
-        writer.write_u32::<BigEndian>(self.created_at.timestamp().try_into()?)?;
+        self.created_at.to_writer(writer)?;
         writer.write_u8(self.algorithm.into())?;
 
         if self.version == KeyVersion::V6 {
@@ -405,13 +402,9 @@ impl PubKeyInner {
     where
         K: SigningKey + Serialize,
     {
-        use chrono::SubsecRound;
-
         let mut config = SignatureConfig::from_key(&mut rng, key, sig_type)?;
         config.hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))?,
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
         ];
         if key.version() <= KeyVersion::V4 {
@@ -676,7 +669,7 @@ impl PubKeyInner {
                 let mut packet = vec![4, 0, 0, 0, 0];
 
                 // A four-octet number denoting the time that the key was created.
-                BigEndian::write_u32(&mut packet[1..5], self.created_at.timestamp() as u32);
+                BigEndian::write_u32(&mut packet[1..5], self.created_at.as_secs());
 
                 // A one-octet number denoting the public-key algorithm of this key.
                 packet.push(self.algorithm.into());
@@ -704,7 +697,7 @@ impl PubKeyInner {
                 hasher.update([0x06]);
 
                 // c) timestamp of key creation (4 octets);
-                hasher.update((self.created_at.timestamp() as u32).to_be_bytes());
+                hasher.update(self.created_at.as_secs().to_be_bytes());
 
                 // d) algorithm (1 octet);
                 hasher.update([self.algorithm.into()]);
@@ -793,8 +786,8 @@ impl KeyDetails for PubKeyInner {
         self.expiration
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        &self.created_at
+    fn created_at(&self) -> Timestamp {
+        self.created_at
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -943,8 +936,8 @@ impl KeyDetails for PublicKey {
         self.inner.algorithm()
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        &self.inner.created_at
+    fn created_at(&self) -> Timestamp {
+        self.inner.created_at
     }
 
     fn expiration(&self) -> Option<u16> {
@@ -985,7 +978,7 @@ impl KeyDetails for PublicSubkey {
         self.inner.algorithm()
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+    fn created_at(&self) -> Timestamp {
         self.inner.created_at()
     }
 
@@ -1012,7 +1005,6 @@ impl VerifyingKey for PublicSubkey {
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
     use proptest::prelude::*;
 
     use super::*;
@@ -1053,25 +1045,19 @@ mod tests {
         type Strategy = BoxedStrategy<Self>;
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
-            any::<(KeyVersion, u32, u16)>()
-                .prop_flat_map(|(version, created_at, expiration)| {
-                    let created_at = chrono::Utc
-                        .timestamp_opt(created_at as i64, 0)
-                        .single()
-                        .expect("invalid time");
-                    match version {
-                        KeyVersion::V2 | KeyVersion::V3 => (
-                            Just(version),
-                            Just(created_at),
-                            Just(Some(expiration)),
-                            v3_alg(),
-                        ),
-                        KeyVersion::V4 => (Just(version), Just(created_at), Just(None), v4_alg()),
-                        KeyVersion::V5 | KeyVersion::V6 => {
-                            (Just(version), Just(created_at), Just(None), v6_alg())
-                        }
-                        KeyVersion::Other(_) => unimplemented!(),
+            any::<(KeyVersion, Timestamp, u16)>()
+                .prop_flat_map(|(version, created_at, expiration)| match version {
+                    KeyVersion::V2 | KeyVersion::V3 => (
+                        Just(version),
+                        Just(created_at),
+                        Just(Some(expiration)),
+                        v3_alg(),
+                    ),
+                    KeyVersion::V4 => (Just(version), Just(created_at), Just(None), v4_alg()),
+                    KeyVersion::V5 | KeyVersion::V6 => {
+                        (Just(version), Just(created_at), Just(None), v6_alg())
                     }
+                    KeyVersion::Other(_) => unimplemented!(),
                 })
                 .prop_flat_map(|(version, created_at, expiration, algorithm)| {
                     (
