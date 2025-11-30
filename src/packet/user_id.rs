@@ -230,7 +230,7 @@ mod tests {
             .sign(&mut rng, &alice_sec, &alice_pub, &"".into())
             .unwrap();
         self_signed
-            .verify(&alice_pub)
+            .verify_bindings(&alice_pub)
             .expect("self signature verification failed");
 
         // test third-party signature
