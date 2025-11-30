@@ -7,27 +7,97 @@ use super::PacketBodyReader;
 use crate::{
     composed::{Message, MessageReader, RingResult, TheRing},
     errors::{bail, ensure_eq, Error, Result},
-    packet::{OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType},
+    packet::{
+        OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType,
+        SignatureVersionSpecific,
+    },
     util::{fill_buffer_bytes, NormalizingHasher},
 };
 
 const BUFFER_SIZE: usize = 8 * 1024;
 
+#[derive(Debug)]
+pub enum SignaturePacket {
+    Ops {
+        signature: crate::packet::OnePassSignature,
+    },
+    Signature {
+        signature: crate::packet::Signature,
+    },
+}
+
+impl SignaturePacket {
+    fn new_hasher(&self) -> Result<Option<NormalizingHasher>> {
+        let hasher = match self {
+            Self::Ops { signature } => {
+                let mut hasher = signature.hash_algorithm().new_hasher().ok();
+
+                if let Some(ref mut hasher) = hasher {
+                    if let OpsVersionSpecific::V6 { salt, .. } = signature.version_specific() {
+                        // Salt size must match the expected length for the hash algorithm that is used
+                        //
+                        // See: https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3-2.10.2.1.1
+                        ensure_eq!(
+                            signature.hash_algorithm().salt_len(),
+                            Some(salt.len()),
+                            "Illegal salt length {} for a V6 Signature using {:?}",
+                            salt.len(),
+                            signature.hash_algorithm(),
+                        );
+
+                        hasher.update(salt.as_ref());
+                    }
+                }
+                hasher
+            }
+            Self::Signature { signature } => {
+                if let Some(config) = signature.config() {
+                    let mut hasher = config.hash_alg.new_hasher()?;
+                    if let SignatureVersionSpecific::V6 { ref salt, .. } = config.version_specific {
+                        // Salt size must match the expected length for the hash algorithm that is used
+                        //
+                        // See: https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3-2.10.2.1.1
+                        ensure_eq!(
+                            config.hash_alg.salt_len(),
+                            Some(salt.len()),
+                            "Illegal salt length {} for a V6 Signature using {:?}",
+                            salt.len(),
+                            config.hash_alg,
+                        );
+
+                        hasher.update(salt.as_ref());
+                    }
+                    Some(hasher)
+                } else {
+                    None
+                }
+            }
+        };
+
+        let text_mode = match self {
+            Self::Ops { signature } => signature.typ() == SignatureType::Text,
+            Self::Signature { signature } => signature.typ() == Some(SignatureType::Text),
+        };
+        let hasher = hasher.map(|hasher| NormalizingHasher::new(hasher, text_mode));
+        Ok(hasher)
+    }
+}
+
 #[derive(derive_more::Debug)]
 pub enum SignatureOnePassManyReader<'a> {
     Init {
-        /// One Pass Signature packet
-        ops: Vec<OnePassSignature>,
+        /// (One Pass) Signature packet
+        packets: Vec<SignaturePacket>,
         /// Running hasher
-        hashers: Vec<NormalizingHasher>,
+        hashers: Vec<Option<NormalizingHasher>>,
         /// Data source
         source: Box<Message<'a>>,
     },
     Body {
         /// One Pass Signature packet
-        ops: Vec<OnePassSignature>,
+        packets: Vec<SignaturePacket>,
         /// Running hasher
-        hashers: Vec<NormalizingHasher>,
+        hashers: Vec<Option<NormalizingHasher>>,
         /// Data source
         source: Box<Message<'a>>,
         #[debug("{}", hex::encode(buffer))]
@@ -44,40 +114,15 @@ pub enum SignatureOnePassManyReader<'a> {
     Error,
 }
 
-fn create_hasher(ops: &OnePassSignature) -> Result<NormalizingHasher> {
-    let mut hasher = ops.hash_algorithm().new_hasher().ok();
-
-    if let Some(ref mut hasher) = hasher {
-        if let OpsVersionSpecific::V6 { salt, .. } = ops.version_specific() {
-            // Salt size must match the expected length for the hash algorithm that is used
-            //
-            // See: https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3-2.10.2.1.1
-            ensure_eq!(
-                ops.hash_algorithm().salt_len(),
-                Some(salt.len()),
-                "Illegal salt length {} for a V6 Signature using {:?}",
-                salt.len(),
-                ops.hash_algorithm(),
-            );
-
-            hasher.update(salt.as_ref());
-        }
-    }
-    let text_mode = ops.typ() == SignatureType::Text;
-    let hasher = hasher.map(|hasher| NormalizingHasher::new(hasher, text_mode));
-    let hasher = hasher.expect("no hasher??");
-    Ok(hasher)
-}
-
 impl<'a> SignatureOnePassManyReader<'a> {
-    pub(crate) fn new(ops: Vec<OnePassSignature>, source: Box<Message<'a>>) -> Result<Self> {
-        let hashers = ops
+    pub(crate) fn new(packets: Vec<SignaturePacket>, source: Box<Message<'a>>) -> Result<Self> {
+        let hashers = packets
             .iter()
-            .map(|ops| create_hasher(ops))
+            .map(|p| p.new_hasher())
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Self::Init {
-            ops,
+            packets,
             hashers,
             source,
         })
@@ -85,8 +130,8 @@ impl<'a> SignatureOnePassManyReader<'a> {
 
     pub fn num_signatures(&self) -> usize {
         match self {
-            Self::Init { ops, .. } => ops.len(),
-            Self::Body { ops, .. } => ops.len(),
+            Self::Init { packets, .. } => packets.len(),
+            Self::Body { packets, .. } => packets.len(),
             Self::Done { hashes, .. } => hashes.len(),
             Self::Error => panic!("SignatureOnePassManyReader errored"),
         }
@@ -145,7 +190,7 @@ impl<'a> SignatureOnePassManyReader<'a> {
         loop {
             match std::mem::replace(self, Self::Error) {
                 Self::Init {
-                    ops,
+                    packets,
                     mut hashers,
                     mut source,
                 } => {
@@ -160,19 +205,19 @@ impl<'a> SignatureOnePassManyReader<'a> {
                         ));
                     }
 
-                    for hasher in &mut hashers {
+                    for hasher in hashers.iter_mut().filter_map(|h| h.as_mut()) {
                         hasher.hash_buf(&buffer[..read]);
                     }
 
                     *self = Self::Body {
-                        ops,
+                        packets,
                         hashers,
                         source,
                         buffer,
                     };
                 }
                 Self::Body {
-                    ops,
+                    packets,
                     mut hashers,
                     mut source,
                     mut buffer,
@@ -181,7 +226,7 @@ impl<'a> SignatureOnePassManyReader<'a> {
 
                     if buffer.has_remaining() {
                         *self = Self::Body {
-                            ops,
+                            packets,
                             hashers,
                             source,
                             buffer,
@@ -191,25 +236,30 @@ impl<'a> SignatureOnePassManyReader<'a> {
 
                     let read = fill_buffer_bytes(&mut source, &mut buffer, BUFFER_SIZE)?;
 
-                    for hasher in &mut hashers {
+                    for hasher in hashers.iter_mut().filter_map(|h| h.as_mut()) {
                         hasher.hash_buf(&buffer[..read]);
                     }
 
                     if read == 0 {
                         debug!("SignatureOnePassManyReader finish");
 
-                        let hashers: Vec<_> = hashers.into_iter().map(|h| h.done()).collect();
+                        let hashers: Vec<_> =
+                            hashers.into_iter().map(|h| h.map(|h| h.done())).collect();
 
                         let (reader, parts) = source.into_parts();
 
-                        let mut packets = crate::packet::PacketParser::new(reader);
+                        let mut packet_parser = crate::packet::PacketParser::new(reader);
 
                         // Find the signatures (skip padding and non-critical packets along the way)
-                        let mut signatures = Vec::with_capacity(ops.len());
 
-                        while signatures.len() < ops.len() {
+                        let num_ops = packets
+                            .iter()
+                            .filter(|p| matches!(p, SignaturePacket::Ops { .. }))
+                            .count();
+                        let mut signatures = Vec::with_capacity(num_ops);
+                        while signatures.len() < num_ops {
                             // read next packet from stream, if any
-                            let Some(res) = packets.next() else {
+                            let Some(res) = packet_parser.next() else {
                                 // no more packets
                                 return Err(io::Error::new(
                                     io::ErrorKind::UnexpectedEof,
@@ -257,30 +307,60 @@ impl<'a> SignatureOnePassManyReader<'a> {
                         // reverse the order of the signatures as we collected them in the opposite order.
                         let signatures: Vec<_> = signatures.into_iter().rev().collect();
 
+                        // TODO: adjust for indexing into signatures (it only has num_ops elements)
+
                         // calculate final hash
                         let hashes = hashers
                             .into_iter()
                             .enumerate()
-                            .map(|(i, mut hasher)| {
-                                if !ops[i].matches(&signatures[i]) {
-                                    debug!(
-                                        "Ops and Signature don't match, rejecting this signature"
-                                    );
+                            .map(|(i, hasher)| {
+                                if let Some(mut hasher) = hasher {
+                                    match &packets[i] {
+                                        SignaturePacket::Ops { signature: packet } => {
+                                            if !packet.matches(&signatures[i]) {
+                                                debug!(
+                                                    "Ops and Signature don't match, rejecting this signature"
+                                                );
 
-                                    // If Ops and Signature don't match, we consider the signature invalid.
-                                    // Return an empty hash to model this.
-                                    Ok(None)
-                                } else if let Some(config) = signatures[i].config() {
-                                    debug!("calculating final hash");
+                                                // If Ops and Signature don't match, we consider the signature invalid.
+                                                // Return an empty hash to model this.
+                                                Ok(None)
+                                            } else if let Some(config) = signatures[i].config() {
+                                                debug!("calculating final hash");
 
-                                    let len =
-                                        config.hash_signature_data(&mut hasher).map_err(|e| {
-                                            io::Error::new(io::ErrorKind::InvalidData, e)
-                                        })?;
-                                    hasher.update(&config.trailer(len).map_err(|e| {
-                                        io::Error::new(io::ErrorKind::InvalidData, e)
-                                    })?);
-                                    Ok(Some(hasher.finalize()))
+                                                let len =
+                                                    config.hash_signature_data(&mut hasher).map_err(|e| {
+                                                        io::Error::new(io::ErrorKind::InvalidData, e)
+                                                    })?;
+                                                hasher.update(&config.trailer(len).map_err(|e| {
+                                                    io::Error::new(io::ErrorKind::InvalidData, e)
+                                                })?);
+                                                Ok(Some(hasher.finalize()))
+                                            } else {
+                                                Ok(None)
+                                            }
+                                        }
+                                        SignaturePacket::Signature { signature: packet } => {
+                                            // regular signature
+                                            let config = packet.config().ok_or_else(|| {
+                                                io::Error::new(
+                                                    io::ErrorKind::InvalidData,
+                                                    "inconsistent signature state",
+                                                )
+                                            })?;
+                                            // calculate final hash
+                                            let len = config
+                                                .hash_signature_data(&mut hasher)
+                                                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                                            hasher.update(
+                                                &config
+                                                    .trailer(len)
+                                                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
+                                            );
+
+                                            Ok(Some(hasher.finalize()))
+                                        }
+                                    }
                                 } else {
                                     Ok(None)
                                 }
@@ -288,7 +368,7 @@ impl<'a> SignatureOnePassManyReader<'a> {
                             .collect::<io::Result<Vec<_>>>()?;
 
                         // reconstruct message source
-                        let reader = packets.into_inner();
+                        let reader = packet_parser.into_inner();
                         let source = parts.into_message(reader);
 
                         *self = Self::Done {
@@ -298,7 +378,7 @@ impl<'a> SignatureOnePassManyReader<'a> {
                         };
                     } else {
                         *self = Self::Body {
-                            ops,
+                            packets,
                             hashers,
                             source,
                             buffer,
@@ -331,13 +411,13 @@ impl<'a> SignatureOnePassManyReader<'a> {
     pub(crate) fn decompress(self) -> Result<Self> {
         match self {
             Self::Init {
-                ops,
+                packets,
                 hashers,
                 source,
             } => {
                 let source = source.decompress()?;
                 Ok(Self::Init {
-                    ops,
+                    packets,
                     hashers,
                     source: Box::new(source),
                 })
@@ -355,14 +435,14 @@ impl<'a> SignatureOnePassManyReader<'a> {
     ) -> Result<(Self, RingResult)> {
         match self {
             Self::Init {
-                ops,
+                packets,
                 hashers,
                 source,
             } => {
                 let (source, fps) = source.decrypt_the_ring(ring, abort_early)?;
                 Ok((
                     Self::Init {
-                        ops,
+                        packets,
                         hashers,
                         source: Box::new(source),
                     },
