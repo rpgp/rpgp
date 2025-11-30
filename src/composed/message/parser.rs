@@ -12,7 +12,7 @@ use super::{
 };
 use crate::{
     armor::{BlockType, DearmorOptions},
-    composed::{message::Message, shared::is_binary, Edata, Esk},
+    composed::{message::Message, shared::is_binary, Edata, Esk, SignaturePacket},
     errors::{bail, format_err, unimplemented_err, Result},
     packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
     parsing_reader::BufReadParsing,
@@ -20,16 +20,8 @@ use crate::{
 };
 
 struct MessageParser<'a> {
-    messages: Vec<OpenMessage>,
+    messages: Vec<SignaturePacket>,
     current: MessageParserState<'a>,
-}
-enum OpenMessage {
-    Ops {
-        signature: crate::packet::OnePassSignature,
-    },
-    Signature {
-        signature: crate::packet::Signature,
-    },
 }
 
 enum MessageParserState<'a> {
@@ -82,7 +74,7 @@ impl<'a> MessageParser<'a> {
                                 packet.packet_header(),
                                 &mut packet,
                             )?;
-                            self.messages.push(OpenMessage::Signature { signature });
+                            self.messages.push(SignaturePacket::Signature { signature });
                             self.current = MessageParserState::Start {
                                 packets: crate::packet::PacketParser::new(packet.into_inner()),
                                 is_nested: is_nested + 1,
@@ -97,7 +89,7 @@ impl<'a> MessageParser<'a> {
                                 packet.packet_header(),
                                 &mut packet,
                             )?;
-                            self.messages.push(OpenMessage::Ops { signature });
+                            self.messages.push(SignaturePacket::Ops { signature });
                             self.current = MessageParserState::Start {
                                 packets: crate::packet::PacketParser::new(packet.into_inner()),
                                 is_nested: is_nested + 1,
@@ -164,25 +156,11 @@ impl<'a> MessageParser<'a> {
             return Ok(Some(message));
         }
 
-        let mut ops = Vec::new();
-        let mut sigs = Vec::new();
-
-        for message in self.messages {
-            match message {
-                OpenMessage::Ops { signature } => ops.push(signature),
-                OpenMessage::Signature { signature } => sigs.push(signature),
-            }
-        }
-
-        if !ops.is_empty() && sigs.is_empty() {
-            let reader = SignatureOnePassManyReader::new(ops, Box::new(message))?;
-            return Ok(Some(Message::SignedOnePass {
-                reader,
-                is_nested: is_nested > 0, // TODO
-            }));
-        }
-
-        todo!();
+        let reader = SignatureOnePassManyReader::new(self.messages, Box::new(message))?;
+        Ok(Some(Message::SignedOnePass {
+            reader,
+            is_nested: is_nested > 0, // TODO
+        }))
     }
 
     fn visit_esk(

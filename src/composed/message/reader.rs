@@ -9,9 +9,13 @@ mod sym_encrypted;
 mod sym_encrypted_protected;
 
 pub use self::{
-    compressed::CompressedDataReader, limited::LimitedReader, literal::LiteralDataReader,
-    packet_body::PacketBodyReader, signed::SignatureBodyReader,
-    signed_one_pass::SignatureOnePassReader, signed_one_pass_many::SignatureOnePassManyReader,
+    compressed::CompressedDataReader,
+    limited::LimitedReader,
+    literal::LiteralDataReader,
+    packet_body::PacketBodyReader,
+    signed::SignatureBodyReader,
+    signed_one_pass::SignatureOnePassReader,
+    signed_one_pass_many::{SignatureOnePassManyReader, SignaturePacket},
     sym_encrypted::SymEncryptedDataReader,
     sym_encrypted_protected::SymEncryptedProtectedDataReader,
 };
