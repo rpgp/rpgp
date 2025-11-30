@@ -28,7 +28,7 @@ mod tests {
         composed::{Message, MessageBuilder},
         packet::DataMode,
         types::CompressionAlgorithm,
-        util::test::{ChaosReader, check_strings, random_string},
+        util::test::{check_strings, random_string, ChaosReader},
     };
 
     #[test]
