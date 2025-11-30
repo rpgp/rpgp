@@ -2,7 +2,7 @@ mod compressed;
 mod limited;
 mod literal;
 mod packet_body;
-mod signed_one_pass_many;
+mod signed_many;
 mod sym_encrypted;
 mod sym_encrypted_protected;
 
@@ -11,7 +11,7 @@ pub use self::{
     limited::LimitedReader,
     literal::LiteralDataReader,
     packet_body::PacketBodyReader,
-    signed_one_pass_many::{SignatureManyReader, SignaturePacket},
+    signed_many::{SignatureManyReader, SignaturePacket},
     sym_encrypted::SymEncryptedDataReader,
     sym_encrypted_protected::SymEncryptedProtectedDataReader,
 };
@@ -28,7 +28,7 @@ mod tests {
         composed::{Message, MessageBuilder},
         packet::DataMode,
         types::CompressionAlgorithm,
-        util::test::{check_strings, random_string, ChaosReader},
+        util::test::{ChaosReader, check_strings, random_string},
     };
 
     #[test]
