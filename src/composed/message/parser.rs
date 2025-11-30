@@ -45,7 +45,7 @@ impl<'a> MessageParser<'a> {
         loop {
             match std::mem::replace(&mut self.current, MessageParserState::Error) {
                 MessageParserState::Start { packets, is_nested } => {
-                    log::debug!("next: nesting: {is_nested}");
+                    log::trace!("next: nesting: {is_nested}");
                     let Some(packet) = packets.next_owned() else {
                         return Ok(None);
                     };
@@ -156,7 +156,7 @@ impl<'a> MessageParser<'a> {
         let reader = SignatureManyReader::new(self.messages, Box::new(message))?;
         Ok(Some(Message::Signed {
             reader,
-            is_nested: is_nested > 0, // TODO
+            is_nested: is_nested > 0,
         }))
     }
 
