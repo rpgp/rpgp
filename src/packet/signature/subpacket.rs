@@ -2,7 +2,6 @@ use std::io::BufRead;
 
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::Bytes;
-use chrono::{DateTime, Duration, Utc};
 use smallvec::SmallVec;
 
 use crate::{
@@ -14,7 +13,7 @@ use crate::{
     packet::{Features, KeyFlags, Notation, RevocationCode, Signature},
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::{CompressionAlgorithm, Fingerprint, KeyId, RevocationKey},
+    types::{CompressionAlgorithm, Duration, Fingerprint, KeyId, RevocationKey, Timestamp},
 };
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -268,10 +267,10 @@ impl Subpacket {
 #[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 pub enum SubpacketData {
     /// The time the signature was made.
-    SignatureCreationTime(DateTime<Utc>),
-    /// The time the signature will expire.
+    SignatureCreationTime(Timestamp),
+    /// The time the signature will expire, in seconds from creation time.
     SignatureExpirationTime(Duration),
-    /// When the key is going to expire
+    /// When the key is going to expire, in seconds from creation time.
     KeyExpirationTime(Duration),
     /// The OpenPGP Key ID of the key issuing the signature.
     IssuerKeyId(KeyId),

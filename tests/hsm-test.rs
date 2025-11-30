@@ -1,7 +1,6 @@
 #![allow(clippy::result_large_err)]
 use std::{fmt::Debug, fs::File};
 
-use chrono::{DateTime, Utc};
 use p256::pkcs8::DecodePrivateKey;
 use pgp::{
     adapter::{EcdsaSigner, RsaSigner},
@@ -13,7 +12,7 @@ use pgp::{
     packet::{self, PubKeyInner, PublicKey, SignatureConfig},
     types::{
         EcdhPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes,
-        PublicParams, SignatureBytes, SigningKey, VerifyingKey,
+        PublicParams, SignatureBytes, SigningKey, Timestamp, VerifyingKey,
     },
 };
 
@@ -83,7 +82,7 @@ impl KeyDetails for FakeHsm {
         self.public_key.algorithm()
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+    fn created_at(&self) -> Timestamp {
         self.public_key.created_at()
     }
 
@@ -341,7 +340,7 @@ fn card_decrypt() {
             PubKeyInner::new(
                 enc_subkey.version(),
                 enc_subkey.algorithm(),
-                *enc_subkey.created_at(),
+                enc_subkey.created_at(),
                 enc_subkey.expiration(),
                 enc_subkey.public_params().clone(),
             )
@@ -472,7 +471,7 @@ fn card_sign() {
 
         config.hashed_subpackets = vec![
             packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
-                DateTime::<Utc>::from_timestamp(sig_creation, 0).unwrap(),
+                Timestamp::from_secs(sig_creation),
             ))
             .unwrap(),
             packet::Subpacket::regular(packet::SubpacketData::IssuerKeyId(hsm.legacy_key_id()))
@@ -491,7 +490,7 @@ fn ecdsa_signer() {
         p256::ecdsa::SigningKey::read_pkcs8_pem_file("tests/unit-tests/hsm/p256.pem").unwrap();
 
     let signer =
-        EcdsaSigner::<_, p256::NistP256>::new(inner, KeyVersion::V4, Default::default()).unwrap();
+        EcdsaSigner::<_, p256::NistP256>::new(inner, KeyVersion::V4, Timestamp::now()).unwrap();
     const DATA: &[u8] = b"Hello World";
 
     let mut config = SignatureConfig::v4(
@@ -502,7 +501,7 @@ fn ecdsa_signer() {
 
     config.hashed_subpackets = vec![
         packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
-            DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
+            Timestamp::now(),
         ))
         .unwrap(),
         packet::Subpacket::regular(packet::SubpacketData::IssuerKeyId(signer.legacy_key_id()))
@@ -521,7 +520,7 @@ fn rsa_signer() {
     )
     .unwrap();
 
-    let signer = RsaSigner::new(inner, KeyVersion::V4, Default::default()).unwrap();
+    let signer = RsaSigner::new(inner, KeyVersion::V4, Timestamp::now()).unwrap();
     const DATA: &[u8] = b"Hello World";
 
     let mut config = SignatureConfig::v4(
@@ -532,7 +531,7 @@ fn rsa_signer() {
 
     config.hashed_subpackets = vec![
         packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
-            DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
+            Timestamp::default(),
         ))
         .unwrap(),
         packet::Subpacket::regular(packet::SubpacketData::IssuerKeyId(signer.legacy_key_id()))

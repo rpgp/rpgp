@@ -6,7 +6,6 @@ use std::{
 };
 
 use buffer_redux::BufReader;
-use chrono::SubsecRound;
 use log::debug;
 
 use crate::{
@@ -21,7 +20,7 @@ use crate::{
         SubpacketData,
     },
     ser::Serialize,
-    types::{KeyVersion, Password, SigningKey, VerifyingKey},
+    types::{KeyVersion, Password, SigningKey, Timestamp, VerifyingKey},
 };
 
 /// Implementation of a Cleartext Signed Message.
@@ -69,9 +68,7 @@ where {
         R: rand::Rng + rand::CryptoRng,
     {
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))?,
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
         ];
 

@@ -6,7 +6,6 @@ use std::{
 use bitfields::bitfield;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use bytes::Bytes;
-use chrono::{DateTime, Duration, Utc};
 use digest::DynDigest;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
@@ -29,8 +28,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength,
-        SignatureBytes, Tag, VerifyingKey,
+        self, CompressionAlgorithm, Duration, Fingerprint, KeyDetails, KeyId, KeyVersion,
+        PacketLength, SignatureBytes, Tag, Timestamp, VerifyingKey,
     },
 };
 
@@ -68,7 +67,7 @@ impl Signature {
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
-        created: DateTime<Utc>,
+        created: Timestamp,
         issuer_key_id: KeyId,
         signed_hash_value: [u8; 2],
         signature: SignatureBytes,
@@ -101,7 +100,7 @@ impl Signature {
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
-        created: DateTime<Utc>,
+        created: Timestamp,
         issuer_key_id: KeyId,
         signed_hash_value: [u8; 2],
         signature: SignatureBytes,
@@ -752,25 +751,25 @@ impl Signature {
             .unwrap_or_default()
     }
 
-    pub fn key_expiration_time(&self) -> Option<&Duration> {
+    pub fn key_expiration_time(&self) -> Option<Duration> {
         self.config().and_then(|h| {
             h.hashed_subpackets().find_map(|p| match &p.data {
-                SubpacketData::KeyExpirationTime(d) => Some(d),
+                SubpacketData::KeyExpirationTime(d) => Some(*d),
                 _ => None,
             })
         })
     }
 
-    pub fn signature_expiration_time(&self) -> Option<&Duration> {
+    pub fn signature_expiration_time(&self) -> Option<Duration> {
         self.config().and_then(|h| {
             h.hashed_subpackets().find_map(|p| match &p.data {
-                SubpacketData::SignatureExpirationTime(d) => Some(d),
+                SubpacketData::SignatureExpirationTime(d) => Some(*d),
                 _ => None,
             })
         })
     }
 
-    pub fn created(&self) -> Option<&DateTime<Utc>> {
+    pub fn created(&self) -> Option<Timestamp> {
         self.config().and_then(|c| c.created())
     }
 

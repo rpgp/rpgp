@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-use chrono::{DateTime, Utc};
 use digest::{typenum::Unsigned, OutputSizeUser};
 use rsa::{
     pkcs1v15::{self, Signature},
@@ -19,7 +18,7 @@ use crate::{
     packet::{PubKeyInner, PublicKey},
     types::{
         Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicParams, RsaPublicParams,
-        SignatureBytes, SigningKey, VerifyingKey,
+        SignatureBytes, SigningKey, Timestamp, VerifyingKey,
     },
 };
 
@@ -47,7 +46,7 @@ where
     T: Keypair<VerifyingKey = pkcs1v15::VerifyingKey<D>>,
 {
     /// Create a new signer with a given public key
-    pub fn new(inner: T, version: KeyVersion, created_at: DateTime<Utc>) -> Result<Self> {
+    pub fn new(inner: T, version: KeyVersion, created_at: Timestamp) -> Result<Self> {
         let public_key = PubKeyInner::new(
             version,
             RsaPublicKey::PGP_ALGORITHM,
@@ -154,7 +153,7 @@ impl<D, T> KeyDetails for RsaSigner<T, D> {
         self.public_key.algorithm()
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+    fn created_at(&self) -> Timestamp {
         self.public_key.created_at()
     }
 

@@ -1,6 +1,5 @@
 use std::io::BufRead;
 
-use chrono::SubsecRound;
 use generic_array::GenericArray;
 use log::debug;
 use rand::{CryptoRng, Rng};
@@ -19,7 +18,7 @@ use crate::{
     ser::Serialize,
     types::{
         EddsaLegacyPublicParams, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Password,
-        PlainSecretParams, PublicParams, SecretParams, SignatureBytes, SigningKey, Tag,
+        PlainSecretParams, PublicParams, SecretParams, SignatureBytes, SigningKey, Tag, Timestamp,
         VerifyingKey,
     },
 };
@@ -170,9 +169,7 @@ impl SecretSubkey {
         let mut config = SignatureConfig::from_key(rng, self, SignatureType::KeyBinding)?;
 
         config.hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))?,
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(self.fingerprint()))?,
         ];
 
@@ -242,7 +239,7 @@ impl KeyDetails for SecretKey {
         self.details.expiration()
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+    fn created_at(&self) -> Timestamp {
         self.details.created_at()
     }
 
@@ -275,7 +272,7 @@ impl KeyDetails for SecretSubkey {
         self.details.expiration()
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+    fn created_at(&self) -> Timestamp {
         self.details.created_at()
     }
 
@@ -623,13 +620,9 @@ where
     K: SigningKey,
     P: VerifyingKey + Serialize,
 {
-    use chrono::SubsecRound;
-
     let mut config = SignatureConfig::from_key(&mut rng, key, sig_typ)?;
     config.hashed_subpackets = vec![
-        Subpacket::regular(SubpacketData::SignatureCreationTime(
-            chrono::Utc::now().trunc_subsecs(0),
-        ))?,
+        Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
         Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
     ];
     if key.version() <= KeyVersion::V4 {
@@ -643,14 +636,13 @@ where
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use chrono::{SubsecRound, Utc};
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
     use crate::{
         crypto::hash::HashAlgorithm,
         packet::{PubKeyInner, SecretKey},
-        types::{KeyVersion, S2kParams, SigningKey},
+        types::{KeyVersion, S2kParams, SigningKey, Timestamp},
     };
 
     #[test]
@@ -669,7 +661,7 @@ mod tests {
         let pub_key = PubKeyInner::new(
             KeyVersion::V4,
             key_type.to_alg(),
-            Utc::now().trunc_subsecs(0),
+            Timestamp::now(),
             None,
             public_params,
         )

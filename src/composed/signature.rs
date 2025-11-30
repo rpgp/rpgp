@@ -229,7 +229,6 @@ fn next<I: Iterator<Item = Result<Packet>>>(
 
 #[cfg(test)]
 mod tests {
-    use chrono::SubsecRound;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
@@ -237,7 +236,7 @@ mod tests {
         composed::{Deserializable, DetachedSignature, SignedSecretKey, SubpacketConfig},
         crypto::hash::HashAlgorithm,
         packet::{Subpacket, SubpacketData},
-        types::{KeyDetails, Password},
+        types::{KeyDetails, Password, Timestamp},
     };
 
     const PLAIN: &str = "hello world\r\n";
@@ -321,10 +320,7 @@ mod tests {
 
         let hashed = vec![
             Subpacket::regular(SubpacketData::IssuerFingerprint(alice.fingerprint())).unwrap(),
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))
-            .unwrap(),
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now())).unwrap(),
             Subpacket::regular(SubpacketData::PolicyURI("foo".into())).unwrap(),
         ];
 
@@ -365,10 +361,7 @@ mod tests {
 
         let hashed = vec![
             Subpacket::regular(SubpacketData::IssuerFingerprint(alice.fingerprint())).unwrap(),
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                chrono::Utc::now().trunc_subsecs(0),
-            ))
-            .unwrap(),
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now())).unwrap(),
             Subpacket::regular(SubpacketData::PolicyURI("foo".into())).unwrap(),
         ];
 

@@ -1,6 +1,3 @@
-use std::time::Duration;
-
-use chrono::SubsecRound;
 use derive_builder::Builder;
 use rand::{CryptoRng, Rng};
 use smallvec::SmallVec;
@@ -19,7 +16,10 @@ use crate::{
     },
     errors::Result,
     packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
-    types::{self, CompressionAlgorithm, Password, PlainSecretParams, PublicParams, S2kParams},
+    types::{
+        self, CompressionAlgorithm, Duration, Password, PlainSecretParams, PublicParams, S2kParams,
+        Timestamp,
+    },
 };
 
 #[derive(Debug, PartialEq, Eq, Builder)]
@@ -43,8 +43,8 @@ pub struct SecretKeyParams {
     can_authenticate: bool,
 
     // -- Metadata for the primary key
-    #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
-    created_at: chrono::DateTime<chrono::Utc>,
+    #[builder(default = "Timestamp::now()")]
+    created_at: Timestamp,
     #[builder(default)]
     expiration: Option<Duration>,
     #[builder(default = "true")]
@@ -106,8 +106,8 @@ pub struct SubkeyParams {
     can_authenticate: bool,
 
     // -- Metadata for the primary key
-    #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
-    created_at: chrono::DateTime<chrono::Utc>,
+    #[builder(default = "Timestamp::now()")]
+    created_at: Timestamp,
     #[builder(default)]
     expiration: Option<Duration>,
 

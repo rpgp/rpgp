@@ -2,7 +2,6 @@ use std::io::{self, BufRead};
 
 use byteorder::{LittleEndian, WriteBytesExt};
 use bytes::Bytes;
-use chrono::{SubsecRound, Utc};
 use num_enum::{FromPrimitive, IntoPrimitive};
 use rand::{CryptoRng, Rng};
 
@@ -14,7 +13,7 @@ use crate::{
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::{KeyVersion, Password, SignedUserAttribute, SigningKey, Tag, VerifyingKey},
+    types::{KeyVersion, Password, SignedUserAttribute, SigningKey, Tag, Timestamp, VerifyingKey},
 };
 
 /// The type of a user attribute. Only `Image` is a known type currently
@@ -262,9 +261,7 @@ impl UserAttribute {
         );
 
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                Utc::now().trunc_subsecs(0),
-            ))?,
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(signer.fingerprint()))?,
         ];
 

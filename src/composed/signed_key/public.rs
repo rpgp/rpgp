@@ -15,7 +15,7 @@ use crate::{
     ser::Serialize,
     types::{
         EncryptionKey, EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength,
-        PkeskBytes, PublicParams, SignatureBytes, Tag, VerifyingKey,
+        PkeskBytes, PublicParams, SignatureBytes, Tag, Timestamp, VerifyingKey,
     },
 };
 
@@ -177,7 +177,7 @@ impl KeyDetails for SignedPublicKey {
         self.primary_key.algorithm()
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+    fn created_at(&self) -> Timestamp {
         self.primary_key.created_at()
     }
 
@@ -307,7 +307,7 @@ impl KeyDetails for SignedPublicSubKey {
         self.key.algorithm()
     }
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+    fn created_at(&self) -> Timestamp {
         self.key.created_at()
     }
 

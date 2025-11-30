@@ -28,10 +28,6 @@ buffer-redux = { version = "1.0.0", default-features = false }
 bitfields = "1.0.0"
 bytes = "1.9.0"
 byteorder = "1.4"
-chrono = { version = "0.4.39", default-features = false, features = [
-    "clock",
-    "std",
-] }
 derive_builder = "0.20.0"
 hex = "0.4"
 nom = "8.0"
@@ -138,7 +134,7 @@ default = ["bzip2"]
 # See README.md for features documentation
 bzip2 = ["dep:bzip2"]
 asm = ["dep:sha1-asm", "sha1/asm", "sha2/asm", "md-5/asm"]
-wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
+wasm = ["getrandom", "getrandom/js"]
 
 malformed-artifact-compat = []
 

@@ -1,7 +1,9 @@
-use std::{io, io::BufRead, str};
+use std::{
+    io::{self, BufRead},
+    str,
+};
 
 use bytes::Bytes;
-use chrono::{SubsecRound, Utc};
 use rand::{CryptoRng, Rng};
 
 use crate::{
@@ -14,7 +16,7 @@ use crate::{
     ser::Serialize,
     types::{
         KeyVersion, PacketHeaderVersion, PacketLength, Password, SignedUser, SigningKey, Tag,
-        VerifyingKey,
+        Timestamp, VerifyingKey,
     },
 };
 
@@ -140,9 +142,7 @@ impl UserId {
         );
 
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                Utc::now().trunc_subsecs(0),
-            ))?,
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(signer.fingerprint()))?,
         ];
 
@@ -213,7 +213,7 @@ mod tests {
         let pub_key = packet::PubKeyInner::new(
             KeyVersion::V4,
             key_type.to_alg(),
-            Utc::now().trunc_subsecs(0),
+            Timestamp::now(),
             None,
             public_params,
         )
@@ -239,7 +239,7 @@ mod tests {
         let pub_key = packet::PubKeyInner::new(
             KeyVersion::V4,
             key_type.to_alg(),
-            Utc::now().trunc_subsecs(0),
+            Timestamp::now(),
             None,
             public_params,
         )

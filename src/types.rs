@@ -1,4 +1,5 @@
 mod compression;
+mod duration;
 mod fingerprint;
 mod key_id;
 mod key_traits;
@@ -10,10 +11,12 @@ mod pkesk;
 mod revocation_key;
 mod s2k;
 mod signature;
+mod timestamp;
 mod user;
 
 pub use self::{
     compression::CompressionAlgorithm,
+    duration::{Duration, DurationError},
     fingerprint::Fingerprint,
     key_id::KeyId,
     key_traits::{EncryptionKey, Imprint, KeyDetails, SigningKey, VerifyingKey},
@@ -25,6 +28,7 @@ pub use self::{
     revocation_key::{RevocationKey, RevocationKeyClass},
     s2k::{S2kParams, S2kUsage, StringToKey},
     signature::SignatureBytes,
+    timestamp::{Timestamp, TimestampError},
     user::{SignedUser, SignedUserAttribute},
 };
 

@@ -1,8 +1,7 @@
 use std::io::{self, BufRead};
 
-use byteorder::{BigEndian, WriteBytesExt};
+use byteorder::WriteBytesExt;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use chrono::{DateTime, SubsecRound, TimeZone, Utc};
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
 #[cfg(test)]
@@ -15,7 +14,7 @@ use crate::{
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::{PacketHeaderVersion, PacketLength, Tag},
+    types::{PacketHeaderVersion, PacketLength, Tag, Timestamp},
     util::fill_buffer,
 };
 
@@ -43,7 +42,7 @@ pub struct LiteralDataHeader {
     mode: DataMode,
     /// The filename, may contain non utf-8 bytes
     file_name: Bytes,
-    created: DateTime<Utc>,
+    created: Timestamp,
 }
 
 impl LiteralDataHeader {
@@ -51,7 +50,7 @@ impl LiteralDataHeader {
         Self {
             mode,
             file_name: "".into(),
-            created: std::time::UNIX_EPOCH.into(),
+            created: Timestamp::default(),
         }
     }
 
@@ -63,7 +62,7 @@ impl LiteralDataHeader {
         &self.file_name
     }
 
-    pub fn created(&self) -> DateTime<Utc> {
+    pub fn created(&self) -> Timestamp {
         self.created
     }
 }
@@ -78,11 +77,7 @@ impl LiteralDataHeader {
         let file_name = r.take_bytes(name_len.into())?;
 
         // Created
-        let created = r.read_be_u32()?;
-        let created = Utc
-            .timestamp_opt(created.into(), 0)
-            .single()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid created field"))?;
+        let created = r.read_timestamp()?;
 
         Ok(Self {
             mode,
@@ -118,7 +113,7 @@ impl LiteralData {
         let header = LiteralDataHeader {
             mode: DataMode::Utf8,
             file_name: file_name.into(),
-            created: Utc::now().trunc_subsecs(0),
+            created: Timestamp::now(),
         };
         let len = header.write_len() + data.len();
         let packet_header = PacketHeader::new_fixed(Tag::LiteralData, len.try_into()?);
@@ -137,7 +132,7 @@ impl LiteralData {
         let header = LiteralDataHeader {
             mode: DataMode::Binary,
             file_name: file_name.into(),
-            created: Utc::now().trunc_subsecs(0),
+            created: Timestamp::now(),
         };
         let len = header.write_len() + data.len();
         let packet_header = PacketHeader::new_fixed(Tag::LiteralData, len.try_into()?);
@@ -215,14 +210,14 @@ impl Serialize for LiteralDataHeader {
         writer.write_u8(self.mode.into())?;
         writer.write_u8(name.len().try_into()?)?;
         writer.write_all(name)?;
-        writer.write_u32::<BigEndian>(self.created.timestamp().try_into()?)?;
+        self.created.to_writer(writer)?;
         Ok(())
     }
 
     fn write_len(&self) -> usize {
         let mut sum = 1 + 1;
         sum += self.file_name.len();
-        sum += 4;
+        sum += self.created.write_len();
         sum
     }
 }
@@ -468,12 +463,12 @@ impl<R: io::Read> LiteralDataGenerator<R> {
     ) -> Result<Self> {
         match source_len {
             Some(source_len) => {
-                let gen = LiteralDataFixedGenerator::new(header, source, source_len)?;
-                Ok(Self::Fixed(gen))
+                let genn = LiteralDataFixedGenerator::new(header, source, source_len)?;
+                Ok(Self::Fixed(genn))
             }
             None => {
-                let gen = LiteralDataPartialGenerator::new(header, source, chunk_size)?;
-                Ok(Self::Partial(gen))
+                let genn = LiteralDataPartialGenerator::new(header, source, chunk_size)?;
+                Ok(Self::Partial(genn))
             }
         }
     }
@@ -710,17 +705,11 @@ mod tests {
         type Strategy = BoxedStrategy<Self>;
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
-            any::<(DataMode, Vec<u8>, u32)>()
-                .prop_map(|(mode, file_name, created)| {
-                    let created = chrono::Utc
-                        .timestamp_opt(created as i64, 0)
-                        .single()
-                        .expect("invalid time");
-                    LiteralDataHeader {
-                        mode,
-                        file_name: file_name.into(),
-                        created,
-                    }
+            any::<(DataMode, Vec<u8>, Timestamp)>()
+                .prop_map(|(mode, file_name, created)| LiteralDataHeader {
+                    mode,
+                    file_name: file_name.into(),
+                    created,
                 })
                 .boxed()
         }
@@ -768,7 +757,7 @@ mod tests {
             let header = LiteralDataHeader {
                 file_name: "hello.txt".into(),
                 mode: DataMode::Binary,
-                created: Utc::now().trunc_subsecs(0),
+                created: Timestamp::now(),
             };
 
             let mut generator =
@@ -807,7 +796,7 @@ mod tests {
             let header = LiteralDataHeader {
                 file_name: "hello.txt".into(),
                 mode: DataMode::Utf8,
-                created: Utc::now().trunc_subsecs(0),
+                created: Timestamp::now(),
             };
 
             let s = random_string(&mut rng, file_size);
@@ -873,7 +862,7 @@ mod tests {
             // 10k tests on Vec<u8> of length 0-99
             let len = count % 100;
 
-            let bytes: Vec<u8> = (1..=len).map(|_| rng.gen::<u8>()).collect();
+            let bytes: Vec<u8> = (1..=len).map(|_| rng.r#gen::<u8>()).collect();
 
             let cr = ChaosReader::new(&mut rng, bytes.clone());
             let mut r = Utf8CheckReader::new(cr);

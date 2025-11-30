@@ -1,7 +1,6 @@
 use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
-use chrono::Duration;
 use log::debug;
 
 use crate::{
@@ -94,12 +93,6 @@ impl Serialize for Signature {
     }
 }
 
-/// Convert expiration time "Duration" data to OpenPGP u32 format.
-/// Use u32:MAX on overflow.
-fn duration_to_u32(d: &Duration) -> u32 {
-    u32::try_from(d.num_seconds()).unwrap_or(u32::MAX)
-}
-
 impl Subpacket {
     pub fn typ(&self) -> SubpacketType {
         match &self.data {
@@ -147,13 +140,13 @@ impl Serialize for SubpacketData {
         debug!("writing subpacket: {self:?}");
         match &self {
             SubpacketData::SignatureCreationTime(t) => {
-                writer.write_u32::<BigEndian>(t.timestamp().try_into()?)?;
+                t.to_writer(writer)?;
             }
             SubpacketData::SignatureExpirationTime(d) => {
-                writer.write_u32::<BigEndian>(duration_to_u32(d))?;
+                d.to_writer(writer)?;
             }
             SubpacketData::KeyExpirationTime(d) => {
-                writer.write_u32::<BigEndian>(duration_to_u32(d))?;
+                d.to_writer(writer)?;
             }
             SubpacketData::IssuerKeyId(id) => {
                 writer.write_all(id.as_ref())?;
@@ -269,9 +262,9 @@ impl Serialize for SubpacketData {
 
     fn write_len(&self) -> usize {
         let len = match &self {
-            SubpacketData::SignatureCreationTime(_) => 4,
-            SubpacketData::SignatureExpirationTime(_) => 4,
-            SubpacketData::KeyExpirationTime(_) => 4,
+            SubpacketData::SignatureCreationTime(d) => d.write_len(),
+            SubpacketData::SignatureExpirationTime(d) => d.write_len(),
+            SubpacketData::KeyExpirationTime(d) => d.write_len(),
             SubpacketData::IssuerKeyId(_) => 8,
             SubpacketData::PreferredSymmetricAlgorithms(algs) => algs.len(),
             SubpacketData::PreferredHashAlgorithms(algs) => algs.len(),
@@ -345,7 +338,7 @@ impl SignatureConfig {
             issuer_key_id: issuer,
         } = &self.version_specific
         {
-            writer.write_u32::<BigEndian>(created.timestamp().try_into()?)?;
+            created.to_writer(writer)?;
             writer.write_all(issuer.as_ref())?;
         } else {
             bail!("expecting SignatureVersionSpecific::V3 for a v2/v3 signature")
@@ -362,14 +355,16 @@ impl SignatureConfig {
 
         if let SignatureVersionSpecific::V2 {
             issuer_key_id: issuer,
+            created,
             ..
         }
         | SignatureVersionSpecific::V3 {
             issuer_key_id: issuer,
+            created,
             ..
         } = &self.version_specific
         {
-            sum += 4;
+            sum += created.write_len();
             sum += issuer.as_ref().len();
         } else {
             panic!("expecting SignatureVersionSpecific::V3 for a v2/v3 signature")
