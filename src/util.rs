@@ -1,9 +1,6 @@
 //! # Utilities
 
-use std::{
-    hash, io,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{hash, io};
 
 use bytes::{Buf, BufMut, BytesMut};
 use digest::DynDigest;
@@ -113,15 +110,6 @@ impl<A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'_, A, B> {
 
         Ok(())
     }
-}
-
-/// Returns the current time with seconds precision.
-pub fn system_time_now() -> SystemTime {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("invalid date");
-    // clear out anything < 1s
-    UNIX_EPOCH + Duration::from_secs(now.as_secs())
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-use std::{io::BufRead, time::SystemTime};
+use std::io::BufRead;
 
 use generic_array::GenericArray;
 use log::debug;
@@ -18,7 +18,7 @@ use crate::{
     ser::Serialize,
     types::{
         EddsaLegacyPublicParams, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Password,
-        PlainSecretParams, PublicParams, SecretParams, SignatureBytes, SigningKey, Tag,
+        PlainSecretParams, PublicParams, SecretParams, SignatureBytes, SigningKey, Tag, Timestamp,
         VerifyingKey,
     },
 };
@@ -169,7 +169,7 @@ impl SecretSubkey {
         let mut config = SignatureConfig::from_key(rng, self, SignatureType::KeyBinding)?;
 
         config.hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::signature_creation_time_now())?,
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(self.fingerprint()))?,
         ];
 
@@ -239,7 +239,7 @@ impl KeyDetails for SecretKey {
         self.details.expiration()
     }
 
-    fn created_at(&self) -> &SystemTime {
+    fn created_at(&self) -> Timestamp {
         self.details.created_at()
     }
 
@@ -272,7 +272,7 @@ impl KeyDetails for SecretSubkey {
         self.details.expiration()
     }
 
-    fn created_at(&self) -> &SystemTime {
+    fn created_at(&self) -> Timestamp {
         self.details.created_at()
     }
 
@@ -622,7 +622,7 @@ where
 {
     let mut config = SignatureConfig::from_key(&mut rng, key, sig_typ)?;
     config.hashed_subpackets = vec![
-        Subpacket::regular(SubpacketData::signature_creation_time_now())?,
+        Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
         Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
     ];
     if key.version() <= KeyVersion::V4 {
@@ -642,8 +642,7 @@ mod tests {
     use crate::{
         crypto::hash::HashAlgorithm,
         packet::{PubKeyInner, SecretKey},
-        types::{KeyVersion, S2kParams, SigningKey},
-        util::system_time_now,
+        types::{KeyVersion, S2kParams, SigningKey, Timestamp},
     };
 
     #[test]
@@ -662,7 +661,7 @@ mod tests {
         let pub_key = PubKeyInner::new(
             KeyVersion::V4,
             key_type.to_alg(),
-            system_time_now(),
+            Timestamp::now(),
             None,
             public_params,
         )

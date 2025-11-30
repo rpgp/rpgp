@@ -1,4 +1,4 @@
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use derive_builder::Builder;
 use rand::{CryptoRng, Rng};
@@ -18,7 +18,9 @@ use crate::{
     },
     errors::Result,
     packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
-    types::{self, CompressionAlgorithm, Password, PlainSecretParams, PublicParams, S2kParams},
+    types::{
+        self, CompressionAlgorithm, Password, PlainSecretParams, PublicParams, S2kParams, Timestamp,
+    },
 };
 
 #[derive(Debug, PartialEq, Eq, Builder)]
@@ -42,8 +44,8 @@ pub struct SecretKeyParams {
     can_authenticate: bool,
 
     // -- Metadata for the primary key
-    #[builder(default = "crate::util::system_time_now()")]
-    created_at: SystemTime,
+    #[builder(default = "Timestamp::now()")]
+    created_at: Timestamp,
     #[builder(default)]
     expiration: Option<Duration>,
     #[builder(default = "true")]
@@ -105,8 +107,8 @@ pub struct SubkeyParams {
     can_authenticate: bool,
 
     // -- Metadata for the primary key
-    #[builder(default = "crate::util::system_time_now()")]
-    created_at: SystemTime,
+    #[builder(default = "Timestamp::now()")]
+    created_at: Timestamp,
     #[builder(default)]
     expiration: Option<Duration>,
 

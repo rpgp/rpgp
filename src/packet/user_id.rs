@@ -16,7 +16,7 @@ use crate::{
     ser::Serialize,
     types::{
         KeyVersion, PacketHeaderVersion, PacketLength, Password, SignedUser, SigningKey, Tag,
-        VerifyingKey,
+        Timestamp, VerifyingKey,
     },
 };
 
@@ -142,7 +142,7 @@ impl UserId {
         );
 
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::signature_creation_time_now())?,
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(signer.fingerprint()))?,
         ];
 
@@ -195,7 +195,6 @@ mod tests {
         composed::KeyType,
         packet,
         types::{KeyVersion, PacketHeaderVersion},
-        util::system_time_now,
     };
 
     prop_compose! {
@@ -214,7 +213,7 @@ mod tests {
         let pub_key = packet::PubKeyInner::new(
             KeyVersion::V4,
             key_type.to_alg(),
-            system_time_now(),
+            Timestamp::now(),
             None,
             public_params,
         )
@@ -240,7 +239,7 @@ mod tests {
         let pub_key = packet::PubKeyInner::new(
             KeyVersion::V4,
             key_type.to_alg(),
-            system_time_now(),
+            Timestamp::now(),
             None,
             public_params,
         )

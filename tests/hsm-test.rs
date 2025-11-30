@@ -1,9 +1,5 @@
 #![allow(clippy::result_large_err)]
-use std::{
-    fmt::Debug,
-    fs::File,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{fmt::Debug, fs::File};
 
 use p256::pkcs8::DecodePrivateKey;
 use pgp::{
@@ -14,10 +10,9 @@ use pgp::{
         sym::SymmetricKeyAlgorithm,
     },
     packet::{self, PubKeyInner, PublicKey, SignatureConfig},
-    system_time_now,
     types::{
         EcdhPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes,
-        PublicParams, SignatureBytes, SigningKey, VerifyingKey,
+        PublicParams, SignatureBytes, SigningKey, Timestamp, VerifyingKey,
     },
 };
 
@@ -87,7 +82,7 @@ impl KeyDetails for FakeHsm {
         self.public_key.algorithm()
     }
 
-    fn created_at(&self) -> &SystemTime {
+    fn created_at(&self) -> Timestamp {
         self.public_key.created_at()
     }
 
@@ -345,7 +340,7 @@ fn card_decrypt() {
             PubKeyInner::new(
                 enc_subkey.version(),
                 enc_subkey.algorithm(),
-                *enc_subkey.created_at(),
+                enc_subkey.created_at(),
                 enc_subkey.expiration(),
                 enc_subkey.public_params().clone(),
             )
@@ -476,7 +471,7 @@ fn card_sign() {
 
         config.hashed_subpackets = vec![
             packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
-                UNIX_EPOCH + Duration::from_secs(sig_creation as u64),
+                Timestamp::from_secs(sig_creation),
             ))
             .unwrap(),
             packet::Subpacket::regular(packet::SubpacketData::IssuerKeyId(hsm.legacy_key_id()))
@@ -495,7 +490,7 @@ fn ecdsa_signer() {
         p256::ecdsa::SigningKey::read_pkcs8_pem_file("tests/unit-tests/hsm/p256.pem").unwrap();
 
     let signer =
-        EcdsaSigner::<_, p256::NistP256>::new(inner, KeyVersion::V4, system_time_now()).unwrap();
+        EcdsaSigner::<_, p256::NistP256>::new(inner, KeyVersion::V4, Timestamp::now()).unwrap();
     const DATA: &[u8] = b"Hello World";
 
     let mut config = SignatureConfig::v4(
@@ -505,7 +500,10 @@ fn ecdsa_signer() {
     );
 
     config.hashed_subpackets = vec![
-        packet::Subpacket::regular(packet::SubpacketData::signature_creation_time_now()).unwrap(),
+        packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
+            Timestamp::now(),
+        ))
+        .unwrap(),
         packet::Subpacket::regular(packet::SubpacketData::IssuerKeyId(signer.legacy_key_id()))
             .unwrap(),
     ];
@@ -522,7 +520,7 @@ fn rsa_signer() {
     )
     .unwrap();
 
-    let signer = RsaSigner::new(inner, KeyVersion::V4, system_time_now()).unwrap();
+    let signer = RsaSigner::new(inner, KeyVersion::V4, Timestamp::now()).unwrap();
     const DATA: &[u8] = b"Hello World";
 
     let mut config = SignatureConfig::v4(
@@ -532,8 +530,10 @@ fn rsa_signer() {
     );
 
     config.hashed_subpackets = vec![
-        packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(UNIX_EPOCH))
-            .unwrap(),
+        packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
+            Timestamp::default(),
+        ))
+        .unwrap(),
         packet::Subpacket::regular(packet::SubpacketData::IssuerKeyId(signer.legacy_key_id()))
             .unwrap(),
     ];

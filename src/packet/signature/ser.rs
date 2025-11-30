@@ -9,7 +9,7 @@ use crate::{
         signature::{types::*, SignatureConfig},
         SignatureVersionSpecific, Subpacket, SubpacketData, SubpacketType,
     },
-    ser::{duration_to_u32, time_to_u32, Serialize},
+    ser::{duration_to_u32, Serialize},
 };
 
 impl Serialize for Signature {
@@ -140,7 +140,7 @@ impl Serialize for SubpacketData {
         debug!("writing subpacket: {self:?}");
         match &self {
             SubpacketData::SignatureCreationTime(t) => {
-                writer.write_u32::<BigEndian>(time_to_u32(t))?;
+                t.to_writer(writer)?;
             }
             SubpacketData::SignatureExpirationTime(d) => {
                 writer.write_u32::<BigEndian>(duration_to_u32(d))?;
@@ -338,7 +338,7 @@ impl SignatureConfig {
             issuer_key_id: issuer,
         } = &self.version_specific
         {
-            writer.write_u32::<BigEndian>(time_to_u32(&created))?;
+            created.to_writer(writer)?;
             writer.write_all(issuer.as_ref())?;
         } else {
             bail!("expecting SignatureVersionSpecific::V3 for a v2/v3 signature")

@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, time::SystemTime};
+use std::marker::PhantomData;
 
 use digest::{typenum::Unsigned, OutputSizeUser};
 use ecdsa::{
@@ -18,7 +18,7 @@ use crate::{
     packet::{PubKeyInner, PublicKey},
     types::{
         EcdsaPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicParams,
-        SignatureBytes, SigningKey, VerifyingKey,
+        SignatureBytes, SigningKey, Timestamp, VerifyingKey,
     },
 };
 
@@ -63,7 +63,7 @@ where
     T::VerifyingKey: HPublicKey,
 {
     /// Create a new signer with a given public key
-    pub fn new(inner: T, version: KeyVersion, created_at: SystemTime) -> Result<Self> {
+    pub fn new(inner: T, version: KeyVersion, created_at: Timestamp) -> Result<Self> {
         let public_key = PubKeyInner::new(
             version,
             <T as Keypair>::VerifyingKey::PGP_ALGORITHM,
@@ -168,7 +168,7 @@ impl<C, T> KeyDetails for EcdsaSigner<T, C> {
         self.public_key.algorithm()
     }
 
-    fn created_at(&self) -> &SystemTime {
+    fn created_at(&self) -> Timestamp {
         self.public_key.created_at()
     }
 

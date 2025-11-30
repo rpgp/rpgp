@@ -30,7 +30,7 @@ use crate::{
     ser::Serialize,
     types::{
         CompressionAlgorithm, EncryptionKey, Fingerprint, KeyId, KeyVersion, PacketHeaderVersion,
-        PacketLength, Password, SigningKey, StringToKey, Tag,
+        PacketLength, Password, SigningKey, StringToKey, Tag, Timestamp,
     },
     util::{fill_buffer, TeeWriter},
 };
@@ -157,7 +157,7 @@ impl SubpacketConfig {
             SubpacketConfig::Default => {
                 let hashed = vec![
                     Subpacket::regular(SubpacketData::IssuerFingerprint(signer.fingerprint()))?,
-                    Subpacket::regular(SubpacketData::signature_creation_time_now())?,
+                    Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
                 ];
 
                 let mut unhashed = vec![];
@@ -1528,7 +1528,7 @@ mod tests {
         },
         crypto::sym::SymmetricKeyAlgorithm,
         packet::SubpacketType,
-        types::{EskType, KeyDetails},
+        types::{EskType, KeyDetails, Timestamp},
         util::test::{check_strings, random_string, ChaosReader},
     };
 
@@ -2473,7 +2473,7 @@ mod tests {
             Subpacket::regular(SubpacketData::IssuerFingerprint(
                 key.public_key().fingerprint(),
             ))?,
-            Subpacket::regular(SubpacketData::signature_creation_time_now())?,
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
             // Extra subpacket to assert it also goes into the signature
             Subpacket::regular(SubpacketData::PreferredKeyServer("hello world".to_string()))?,
         ];

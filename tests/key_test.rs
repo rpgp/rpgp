@@ -5,12 +5,7 @@ extern crate pretty_assertions;
 #[macro_use]
 extern crate smallvec;
 
-use std::{
-    fs::File,
-    io::Read,
-    path::Path,
-    time::{Duration, UNIX_EPOCH},
-};
+use std::{fs::File, io::Read, path::Path};
 
 use buffer_redux::BufReader;
 use num_traits::ToPrimitive;
@@ -32,7 +27,7 @@ use pgp::{
     types::{
         CompressionAlgorithm, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Mpi,
         PacketHeaderVersion, PacketLength, Password, PlainSecretParams, PublicParams, S2kParams,
-        SecretParams, SignedUser, StringToKey, Tag,
+        SecretParams, SignedUser, StringToKey, Tag, Timestamp,
     },
 };
 use rand::SeedableRng;
@@ -353,10 +348,7 @@ fn test_parse_details() {
         _ => panic!("wrong public params: {:?}", pk.public_params()),
     }
 
-    assert_eq!(
-        *pk.created_at(),
-        UNIX_EPOCH + Duration::from_secs(14_0207_0261)
-    );
+    assert_eq!(pk.created_at(), Timestamp::from_secs(14_0207_0261));
     assert_eq!(pk.expiration(), None);
 
     // TODO: examine subkey details
@@ -444,7 +436,7 @@ fn test_parse_details() {
         .into(),
         vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
-                UNIX_EPOCH + Duration::from_secs(1402070261), // "2014-06-06T15:57:41Z"
+                Timestamp::from_secs(1402070261), // "2014-06-06T15:57:41Z"
             ))
             .unwrap(),
             Subpacket::regular(SubpacketData::KeyFlags(key_flags.clone())).unwrap(),
@@ -527,7 +519,7 @@ fn test_parse_details() {
         .into(),
         vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
-                UNIX_EPOCH + Duration::from_secs(1402071706), // 2014-06-06T16:21:46Z
+                Timestamp::from_secs(1402071706), // 2014-06-06T16:21:46Z
             ))
             .unwrap(),
             Subpacket::regular(SubpacketData::KeyFlags(key_flags.clone())).unwrap(),
@@ -622,7 +614,7 @@ fn test_parse_details() {
         .into(),
         vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
-                UNIX_EPOCH + Duration::from_secs(1402070743), // 2014-06-06T16:05:43Z
+                Timestamp::from_secs(1402070743), // 2014-06-06T16:05:43Z
             ))
             .unwrap(),
             Subpacket::regular(SubpacketData::KeyFlags(key_flags)).unwrap(),

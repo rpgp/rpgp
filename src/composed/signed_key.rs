@@ -44,10 +44,9 @@
 //! let signing_key = &signed_secret_key.primary_key;
 //! let verification_key = public_key;
 //!
-//! use pgp::{packet::{PacketTrait, PacketHeader, Signature, SignatureConfig}, types::{PacketLength, Tag, KeyDetails as _}};
-//! use chrono;
+//! use pgp::{packet::{PacketTrait, PacketHeader, Signature, SignatureConfig}, types::{PacketLength, Tag, Timestamp, KeyDetails as _}};
 //!
-//! let now = chrono::Utc::now();
+//! let now = Timestamp::now();
 //!
 //! let passwd = Password::empty();
 //!

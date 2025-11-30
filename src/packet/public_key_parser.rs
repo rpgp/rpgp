@@ -1,7 +1,4 @@
-use std::{
-    io::BufRead,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::io::BufRead;
 
 use log::debug;
 
@@ -9,7 +6,7 @@ use crate::{
     crypto::public_key::PublicKeyAlgorithm,
     errors::{ensure, unsupported_err, Result},
     parsing_reader::BufReadParsing,
-    types::{KeyVersion, PublicParams},
+    types::{KeyVersion, PublicParams, Timestamp},
 };
 
 fn public_key_parser_v4_v6<B: BufRead>(
@@ -18,13 +15,11 @@ fn public_key_parser_v4_v6<B: BufRead>(
 ) -> Result<(
     KeyVersion,
     PublicKeyAlgorithm,
-    SystemTime,
+    Timestamp,
     Option<u16>,
     PublicParams,
 )> {
-    let created_at = i
-        .read_be_u32()
-        .map(|v| UNIX_EPOCH + Duration::from_secs(u64::from(v)))?;
+    let created_at = i.read_timestamp()?;
     let alg = i.read_u8().map(PublicKeyAlgorithm::from)?;
 
     let pub_len = if *key_ver == KeyVersion::V6 {
@@ -51,13 +46,11 @@ fn public_key_parser_v2_v3<B: BufRead>(
 ) -> Result<(
     KeyVersion,
     PublicKeyAlgorithm,
-    SystemTime,
+    Timestamp,
     Option<u16>,
     PublicParams,
 )> {
-    let created_at = i
-        .read_be_u32()
-        .map(|v| UNIX_EPOCH + Duration::from_secs(u64::from(v)))?;
+    let created_at = i.read_timestamp()?;
     let exp = i.read_be_u16()?;
     let alg = i.read_u8().map(PublicKeyAlgorithm::from)?;
     let params = PublicParams::try_from_reader(alg, None, &mut i)?;
@@ -73,7 +66,7 @@ pub(crate) fn parse<B: BufRead>(
 ) -> Result<(
     KeyVersion,
     PublicKeyAlgorithm,
-    SystemTime,
+    Timestamp,
     Option<u16>,
     PublicParams,
 )> {

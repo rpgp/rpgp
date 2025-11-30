@@ -19,7 +19,6 @@ extern crate pretty_assertions;
 pub use bytes;
 
 pub(crate) mod util;
-pub use util::system_time_now;
 
 pub mod adapter;
 pub mod armor;

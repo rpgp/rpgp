@@ -1,9 +1,6 @@
-use std::{
-    io::{self, BufRead},
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::io::{self, BufRead};
 
-use byteorder::{BigEndian, WriteBytesExt};
+use byteorder::WriteBytesExt;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
@@ -16,9 +13,9 @@ use crate::{
     normalize_lines::normalize_lines,
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
-    ser::{time_to_u32, Serialize},
-    types::{PacketHeaderVersion, PacketLength, Tag},
-    util::{fill_buffer, system_time_now},
+    ser::Serialize,
+    types::{PacketHeaderVersion, PacketLength, Tag, Timestamp},
+    util::fill_buffer,
 };
 
 /// Literal Data Packet
@@ -45,7 +42,7 @@ pub struct LiteralDataHeader {
     mode: DataMode,
     /// The filename, may contain non utf-8 bytes
     file_name: Bytes,
-    created: SystemTime,
+    created: Timestamp,
 }
 
 impl LiteralDataHeader {
@@ -53,7 +50,7 @@ impl LiteralDataHeader {
         Self {
             mode,
             file_name: "".into(),
-            created: std::time::UNIX_EPOCH,
+            created: Timestamp::default(),
         }
     }
 
@@ -65,7 +62,7 @@ impl LiteralDataHeader {
         &self.file_name
     }
 
-    pub fn created(&self) -> SystemTime {
+    pub fn created(&self) -> Timestamp {
         self.created
     }
 }
@@ -80,8 +77,7 @@ impl LiteralDataHeader {
         let file_name = r.take_bytes(name_len.into())?;
 
         // Created
-        let created = r.read_be_u32()?;
-        let created = UNIX_EPOCH + Duration::from_secs(u64::from(created));
+        let created = r.read_timestamp()?;
 
         Ok(Self {
             mode,
@@ -117,7 +113,7 @@ impl LiteralData {
         let header = LiteralDataHeader {
             mode: DataMode::Utf8,
             file_name: file_name.into(),
-            created: system_time_now(),
+            created: Timestamp::now(),
         };
         let len = header.write_len() + data.len();
         let packet_header = PacketHeader::new_fixed(Tag::LiteralData, len.try_into()?);
@@ -136,7 +132,7 @@ impl LiteralData {
         let header = LiteralDataHeader {
             mode: DataMode::Binary,
             file_name: file_name.into(),
-            created: system_time_now(),
+            created: Timestamp::now(),
         };
         let len = header.write_len() + data.len();
         let packet_header = PacketHeader::new_fixed(Tag::LiteralData, len.try_into()?);
@@ -214,7 +210,7 @@ impl Serialize for LiteralDataHeader {
         writer.write_u8(self.mode.into())?;
         writer.write_u8(name.len().try_into()?)?;
         writer.write_all(name)?;
-        writer.write_u32::<BigEndian>(time_to_u32(&self.created))?;
+        self.created.to_writer(writer)?;
         Ok(())
     }
 
@@ -709,15 +705,11 @@ mod tests {
         type Strategy = BoxedStrategy<Self>;
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
-            any::<(DataMode, Vec<u8>, u32)>()
-                .prop_map(|(mode, file_name, created)| {
-                    let created = UNIX_EPOCH + Duration::from_secs(u64::from(created));
-
-                    LiteralDataHeader {
-                        mode,
-                        file_name: file_name.into(),
-                        created,
-                    }
+            any::<(DataMode, Vec<u8>, Timestamp)>()
+                .prop_map(|(mode, file_name, created)| LiteralDataHeader {
+                    mode,
+                    file_name: file_name.into(),
+                    created,
                 })
                 .boxed()
         }
@@ -765,7 +757,7 @@ mod tests {
             let header = LiteralDataHeader {
                 file_name: "hello.txt".into(),
                 mode: DataMode::Binary,
-                created: system_time_now(),
+                created: Timestamp::now(),
             };
 
             let mut generator =
@@ -804,7 +796,7 @@ mod tests {
             let header = LiteralDataHeader {
                 file_name: "hello.txt".into(),
                 mode: DataMode::Utf8,
-                created: system_time_now(),
+                created: Timestamp::now(),
             };
 
             let s = random_string(&mut rng, file_size);

@@ -10,6 +10,7 @@ mod pkesk;
 mod revocation_key;
 mod s2k;
 mod signature;
+mod timestamp;
 mod user;
 
 pub use self::{
@@ -25,6 +26,7 @@ pub use self::{
     revocation_key::{RevocationKey, RevocationKeyClass},
     s2k::{S2kParams, S2kUsage, StringToKey},
     signature::SignatureBytes,
+    timestamp::{Timestamp, TimestampError},
     user::{SignedUser, SignedUserAttribute},
 };
 

@@ -13,7 +13,7 @@ use crate::{
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::{KeyVersion, Password, SignedUserAttribute, SigningKey, Tag, VerifyingKey},
+    types::{KeyVersion, Password, SignedUserAttribute, SigningKey, Tag, Timestamp, VerifyingKey},
 };
 
 /// The type of a user attribute. Only `Image` is a known type currently
@@ -261,7 +261,7 @@ impl UserAttribute {
         );
 
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::signature_creation_time_now())?,
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(signer.fingerprint()))?,
         ];
 

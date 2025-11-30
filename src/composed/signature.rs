@@ -236,7 +236,7 @@ mod tests {
         composed::{Deserializable, DetachedSignature, SignedSecretKey, SubpacketConfig},
         crypto::hash::HashAlgorithm,
         packet::{Subpacket, SubpacketData},
-        types::{KeyDetails, Password},
+        types::{KeyDetails, Password, Timestamp},
     };
 
     const PLAIN: &str = "hello world\r\n";
@@ -320,7 +320,7 @@ mod tests {
 
         let hashed = vec![
             Subpacket::regular(SubpacketData::IssuerFingerprint(alice.fingerprint())).unwrap(),
-            Subpacket::regular(SubpacketData::signature_creation_time_now()).unwrap(),
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now())).unwrap(),
             Subpacket::regular(SubpacketData::PolicyURI("foo".into())).unwrap(),
         ];
 
@@ -361,7 +361,7 @@ mod tests {
 
         let hashed = vec![
             Subpacket::regular(SubpacketData::IssuerFingerprint(alice.fingerprint())).unwrap(),
-            Subpacket::regular(SubpacketData::signature_creation_time_now()).unwrap(),
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now())).unwrap(),
             Subpacket::regular(SubpacketData::PolicyURI("foo".into())).unwrap(),
         ];
 

@@ -1,8 +1,4 @@
-use std::{
-    io::BufRead,
-    str,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{io::BufRead, str, time::Duration};
 
 use bytes::Buf;
 use log::{debug, warn};
@@ -59,9 +55,7 @@ fn v3_parser<B: BufRead>(
     // One-octet signature type.
     let typ = i.read_u8().map(SignatureType::from)?;
     // Four-octet creation time.
-    let created = i
-        .read_be_u32()
-        .map(|v| UNIX_EPOCH + Duration::from_secs(u64::from(v)))?;
+    let created = i.read_timestamp()?;
 
     // Eight-octet Key ID of signer.
     let issuer = i.read_array::<8>().map(KeyId::from)?;
@@ -361,11 +355,6 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
     }
 }
 
-/// Convert an epoch timestamp to a `SystemTime`
-fn dt_from_timestamp(ts: u32) -> SystemTime {
-    UNIX_EPOCH + Duration::from_secs(u64::from(ts))
-}
-
 /// Convert a u32 to a `Duration`
 fn duration_from_timestamp(ts: u32) -> Duration {
     Duration::from_secs(u64::from(ts))
@@ -375,8 +364,7 @@ fn duration_from_timestamp(ts: u32) -> Duration {
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-creation-time
 fn signature_creation_time<B: BufRead>(mut i: B) -> Result<SubpacketData> {
     // 4-octet time field
-    let date = i.read_be_u32()?;
-    let created = dt_from_timestamp(date);
+    let created = i.read_timestamp()?;
 
     Ok(SubpacketData::SignatureCreationTime(created))
 }

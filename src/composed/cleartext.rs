@@ -20,7 +20,7 @@ use crate::{
         SubpacketData,
     },
     ser::Serialize,
-    types::{KeyVersion, Password, SigningKey, VerifyingKey},
+    types::{KeyVersion, Password, SigningKey, Timestamp, VerifyingKey},
 };
 
 /// Implementation of a Cleartext Signed Message.
@@ -68,7 +68,7 @@ where {
         R: rand::Rng + rand::CryptoRng,
     {
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::signature_creation_time_now())?,
+            Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
         ];
 

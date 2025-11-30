@@ -1,7 +1,7 @@
 use std::{
     cmp::Ordering,
     io::{BufRead, Read},
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 use bitfields::bitfield;
@@ -18,19 +18,19 @@ use crate::{
         public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{Result, bail, ensure, ensure_eq, unimplemented_err, unsupported_err},
+    errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     line_writer::LineBreak,
     normalize_lines::NormalizedReader,
     packet::{
-        PacketHeader, PacketTrait, SignatureVersionSpecific, Subpacket, SubpacketData,
-        signature::SignatureConfig,
+        signature::SignatureConfig, PacketHeader, PacketTrait, SignatureVersionSpecific, Subpacket,
+        SubpacketData,
     },
     parsing::BufParsing,
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
         self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength,
-        SignatureBytes, Tag, VerifyingKey,
+        SignatureBytes, Tag, Timestamp, VerifyingKey,
     },
 };
 
@@ -68,7 +68,7 @@ impl Signature {
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
-        created: SystemTime,
+        created: Timestamp,
         issuer_key_id: KeyId,
         signed_hash_value: [u8; 2],
         signature: SignatureBytes,
@@ -101,7 +101,7 @@ impl Signature {
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
-        created: SystemTime,
+        created: Timestamp,
         issuer_key_id: KeyId,
         signed_hash_value: [u8; 2],
         signature: SignatureBytes,
@@ -770,7 +770,7 @@ impl Signature {
         })
     }
 
-    pub fn created(&self) -> Option<&SystemTime> {
+    pub fn created(&self) -> Option<Timestamp> {
         self.config().and_then(|c| c.created())
     }
 
