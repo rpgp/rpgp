@@ -2500,7 +2500,7 @@ mod tests {
             panic!("should be a signed message")
         };
 
-        let sig = reader.signature().unwrap();
+        let sig = reader.signature(0).unwrap();
 
         let hashed = &sig.config().unwrap().hashed_subpackets;
         let unhashed = &sig.config().unwrap().unhashed_subpackets;

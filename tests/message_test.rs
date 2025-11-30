@@ -1025,7 +1025,7 @@ fn message_many_signatures() {
 
     const PLAIN: &str = "hello";
     // number of private keys to generate and sign with
-    const NUM: usize = 1000;
+    const NUM: usize = 2000;
 
     let mut rng = ChaCha8Rng::seed_from_u64(0);
 
@@ -1040,16 +1040,15 @@ fn message_many_signatures() {
                 .build()
                 .unwrap();
 
-            let key = key_params
+            key_params
                 .generate(&mut rng)
-                .expect("failed to generate secret key");
-
-            key.sign(&mut rng, &"".into()).expect("failed to sign key")
+                .expect("failed to generate secret key")
         })
         .collect();
 
     let mut builder = MessageBuilder::from_bytes("", PLAIN.as_bytes());
 
+    warn!("signing message");
     // sign the message with all the keys
     for skey in &keys {
         builder.sign(&skey.primary_key, Password::empty(), HashAlgorithm::Sha256);
@@ -1058,14 +1057,22 @@ fn message_many_signatures() {
     let signed = builder.to_vec(&mut rng).expect("writing");
 
     // parse the message ...
+    warn!("parsing message");
     let mut message = Message::from_bytes(&signed[..]).expect("reading");
 
     let plain = message.as_data_string().unwrap();
     assert_eq!(plain, PLAIN);
 
     // ... and try to verify one of the signatures in it
+    warn!("verifying message");
     assert!(message.is_one_pass_signed());
-    message
-        .verify(keys.first().unwrap().primary_key.public_key())
-        .expect("signed");
+
+    let Message::SignedOnePass { reader, .. } = &message else {
+        panic!("invalid message type");
+    };
+    for i in 0..reader.num_signatures() {
+        message
+            .verify_nested_explicit(i, keys[i].primary_key.public_key())
+            .expect("signed");
+    }
 }
