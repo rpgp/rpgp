@@ -2,8 +2,6 @@ mod compressed;
 mod limited;
 mod literal;
 mod packet_body;
-mod signed;
-mod signed_one_pass;
 mod signed_one_pass_many;
 mod sym_encrypted;
 mod sym_encrypted_protected;
@@ -13,9 +11,7 @@ pub use self::{
     limited::LimitedReader,
     literal::LiteralDataReader,
     packet_body::PacketBodyReader,
-    signed::SignatureBodyReader,
-    signed_one_pass::SignatureOnePassReader,
-    signed_one_pass_many::{SignatureOnePassManyReader, SignaturePacket},
+    signed_one_pass_many::{SignatureManyReader, SignaturePacket},
     sym_encrypted::SymEncryptedDataReader,
     sym_encrypted_protected::SymEncryptedProtectedDataReader,
 };

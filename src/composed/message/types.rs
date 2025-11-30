@@ -3,13 +3,12 @@ use std::io::{self, BufRead, Read};
 use log::{debug, warn};
 
 use super::reader::{
-    CompressedDataReader, LiteralDataReader, PacketBodyReader, SignatureBodyReader,
-    SignatureOnePassManyReader, SignatureOnePassReader, SymEncryptedDataReader,
-    SymEncryptedProtectedDataReader,
+    CompressedDataReader, LiteralDataReader, PacketBodyReader, SignatureManyReader,
+    SymEncryptedDataReader, SymEncryptedProtectedDataReader,
 };
 use crate::{
     armor,
-    composed::{message::decrypt::*, signed_key::SignedSecretKey},
+    composed::{message::decrypt::*, signed_key::SignedSecretKey, SignaturePacket},
     crypto::sym::SymmetricKeyAlgorithm,
     errors::{bail, ensure, ensure_eq, format_err, Error, Result},
     packet::{
@@ -160,15 +159,13 @@ pub enum Message<'a> {
         /// is this a nested message?
         is_nested: bool,
     },
-    /// Signed Message: Signature Packet, OpenPGP Message
+    /// Signed message, either
+    /// - Signed:
+    ///   Signature Packet, OpenPGP Message, or
+    /// - One Pass Signed:
+    ///   One-Pass Signature Packet, OpenPGP Message, Corresponding Signature Packet.
     Signed {
-        reader: SignatureBodyReader<'a>,
-        /// is this a nested message?
-        is_nested: bool,
-    },
-    /// One-Pass Signed Message: One-Pass Signature Packet, OpenPGP Message, Corresponding Signature Packet.
-    SignedOnePass {
-        reader: SignatureOnePassManyReader<'a>,
+        reader: SignatureManyReader<'a>,
         /// is this a nested message?
         is_nested: bool,
     },
@@ -192,13 +189,8 @@ pub(crate) enum MessageParts {
         packet_header: PacketHeader,
         is_nested: bool,
     },
-    Signed {
-        signature: Signature,
-        hash: Option<Box<[u8]>>,
-        parts: Box<MessageParts>,
-        is_nested: bool,
-    },
     SignedOnePass {
+        packets: Vec<SignaturePacket>,
         hashes: Vec<Option<Box<[u8]>>>,
         signatures: Vec<Signature>,
         parts: Box<MessageParts>,
@@ -240,28 +232,8 @@ impl<'a> Message<'a> {
                 )
             }
             Message::Signed { reader, is_nested } => {
-                assert!(reader.is_done());
-                let SignatureBodyReader::Done {
-                    hash,
-                    source,
-                    signature,
-                } = reader
-                else {
-                    panic!("invalid state");
-                };
-                let (reader, parts) = source.into_parts();
-                (
-                    reader,
-                    MessageParts::Signed {
-                        signature,
-                        hash,
-                        parts: Box::new(parts),
-                        is_nested,
-                    },
-                )
-            }
-            Message::SignedOnePass { reader, is_nested } => {
-                let SignatureOnePassManyReader::Done {
+                let SignatureManyReader::Done {
+                    packets,
                     hashes,
                     source,
                     signatures,
@@ -274,6 +246,7 @@ impl<'a> Message<'a> {
                 (
                     reader,
                     MessageParts::SignedOnePass {
+                        packets,
                         hashes,
                         signatures,
                         parts: Box::new(parts),
@@ -355,31 +328,17 @@ impl MessageParts {
                 )),
                 is_nested,
             },
-            MessageParts::Signed {
-                signature,
-                parts,
-                hash,
-                is_nested,
-            } => {
-                let source = parts.into_message(reader);
-                Message::Signed {
-                    reader: SignatureBodyReader::Done {
-                        source: Box::new(source),
-                        hash,
-                        signature,
-                    },
-                    is_nested,
-                }
-            }
             MessageParts::SignedOnePass {
+                packets,
                 hashes,
                 signatures,
                 parts,
                 is_nested,
             } => {
                 let source = parts.into_message(reader);
-                Message::SignedOnePass {
-                    reader: SignatureOnePassManyReader::Done {
+                Message::Signed {
+                    reader: SignatureManyReader::Done {
+                        packets,
                         hashes,
                         source: Box::new(source),
                         signatures,
@@ -698,10 +657,6 @@ impl<'a> Message<'a> {
                 reader: reader.decompress()?,
                 is_nested,
             }),
-            Message::SignedOnePass { reader, is_nested } => Ok(Message::SignedOnePass {
-                reader: reader.decompress()?,
-                is_nested,
-            }),
             Message::Encrypted { .. } => Ok(self),
             Message::Literal { .. } => Ok(self),
         }
@@ -718,7 +673,7 @@ impl<'a> Message<'a> {
         let mut out = vec![VerificationResult::Invalid; keys.len()];
 
         match self {
-            Message::SignedOnePass { reader, .. } => {
+            Message::Signed { reader, .. } => {
                 for i in 0..reader.num_signatures() {
                     for (key, res) in keys.iter().zip(out.iter_mut()) {
                         match self.verify_nested_explicit(i, *key) {
@@ -731,21 +686,6 @@ impl<'a> Message<'a> {
                         }
                     }
                 }
-            }
-            Message::Signed { reader, .. } => {
-                todo!()
-                // for i in 0..reader.num_signatures() {
-                //     for (key, res) in keys.iter().zip(out.iter_mut()) {
-                //         match self.verify_nested_explicit(i, *key) {
-                //             Ok(sig) => {
-                //                 *res = VerificationResult::Valid(sig.clone());
-                //             }
-                //             Err(_err) => {
-                //                 // no match
-                //             }
-                //         }
-                //     }
-                // }
             }
             Message::Literal { .. } => {}
             Message::Compressed { .. } => {
@@ -782,7 +722,7 @@ impl<'a> Message<'a> {
         key: &dyn VerifyingKey,
     ) -> Result<&Signature> {
         match self {
-            Message::SignedOnePass { reader, .. } => {
+            Message::Signed { reader, .. } => {
                 let Some(calculated_hash) = reader.hash(index) else {
                     bail!("cannot verify message before reading it to the end");
                 };
@@ -815,39 +755,6 @@ impl<'a> Message<'a> {
                 );
                 key.verify(config.hash_alg, calculated_hash, signature_bytes)?;
                 Ok(signature)
-            }
-            Message::Signed { reader, .. } => {
-                let Some(calculated_hash) = reader.hash() else {
-                    bail!("cannot verify message before reading it to the end");
-                };
-
-                let InnerSignature::Known {
-                    ref config,
-                    ref signed_hash_value,
-                    signature: ref signature_bytes,
-                } = reader.signature().inner
-                else {
-                    bail!("cannot verify unknown hash");
-                };
-
-                // Check that the high 16 bits of the hash from the signature packet match with the hash we
-                // just calculated.
-                //
-                // "When verifying a version 6 signature, an implementation MUST reject the signature if
-                // these octets do not match the first two octets of the computed hash."
-                //
-                // (See https://www.rfc-editor.org/rfc/rfc9580.html#name-notes-on-signatures)
-                //
-                // (Note: we currently also reject v4 signatures if the calculated hash doesn't match the
-                // high 16 bits in the signature packet, even though RFC 9580 doesn't strictly require this)
-                ensure_eq!(
-                    signed_hash_value,
-                    &calculated_hash[0..2],
-                    "signature: invalid signed hash value"
-                );
-                key.verify(config.hash_alg, calculated_hash, signature_bytes)?;
-
-                Ok(reader.signature())
             }
             Message::Compressed { .. } => {
                 bail!("message must be decompressed before verifying");
@@ -927,10 +834,6 @@ impl<'a> Message<'a> {
                 let (reader, res) = reader.decrypt_the_ring(ring, abort_early)?;
                 Ok((Message::Signed { reader, is_nested }, res))
             }
-            Message::SignedOnePass { reader, is_nested } => {
-                let (reader, res) = reader.decrypt_the_ring(ring, abort_early)?;
-                Ok((Message::SignedOnePass { reader, is_nested }, res))
-            }
             Message::Encrypted {
                 esk,
                 mut edata,
@@ -956,7 +859,10 @@ impl<'a> Message<'a> {
 
     /// Check if this message is a signature, that was signed with a one pass signature.
     pub fn is_one_pass_signed(&self) -> bool {
-        matches!(self, Message::SignedOnePass { .. })
+        let Message::Signed { reader, .. } = self else {
+            return false;
+        };
+        reader.num_one_pass_signatures() > 0
     }
 
     pub fn is_encrypted(&self) -> bool {
@@ -964,7 +870,7 @@ impl<'a> Message<'a> {
     }
 
     pub fn is_signed(&self) -> bool {
-        matches!(self, Message::SignedOnePass { .. } | Message::Signed { .. })
+        matches!(self, Message::Signed { .. })
     }
 
     /// Is this a compressed message?
@@ -983,7 +889,6 @@ impl<'a> Message<'a> {
             Self::Literal { reader, .. } => Some(reader.data_header()),
             Self::Compressed { .. } => None,
             Self::Signed { reader, .. } => reader.get_ref().literal_data_header(),
-            Self::SignedOnePass { reader, .. } => reader.get_ref().literal_data_header(),
             Self::Encrypted { .. } => None,
         }
     }
@@ -993,7 +898,6 @@ impl<'a> Message<'a> {
             Self::Literal { reader, .. } => reader.packet_header(),
             Self::Compressed { reader, .. } => reader.packet_header(),
             Self::Signed { reader, .. } => reader.get_ref().packet_header(),
-            Self::SignedOnePass { reader, .. } => reader.get_ref().packet_header(),
             Self::Encrypted { edata, .. } => edata.packet_header(),
         }
     }
@@ -1017,7 +921,6 @@ impl<'a> Message<'a> {
             Self::Literal { reader, .. } => reader.into_inner(),
             Self::Compressed { reader, .. } => reader.into_inner(),
             Self::Signed { reader, .. } => reader.into_inner(),
-            Self::SignedOnePass { reader, .. } => reader.into_inner(),
             Self::Encrypted { edata, .. } => match edata {
                 Edata::SymEncryptedData { reader } => reader.into_inner(),
                 Edata::SymEncryptedProtectedData { reader } => reader.into_inner(),
@@ -1031,7 +934,6 @@ impl<'a> Message<'a> {
             Self::Literal { reader, .. } => reader.get_mut(),
             Self::Compressed { reader, .. } => reader.get_mut(),
             Self::Signed { reader, .. } => reader.get_mut().get_mut(),
-            Self::SignedOnePass { reader, .. } => reader.get_mut().get_mut(),
             Self::Encrypted { edata, .. } => match edata {
                 Edata::SymEncryptedData { reader } => reader.get_mut(),
                 Edata::SymEncryptedProtectedData { reader } => reader.get_mut(),
@@ -1051,7 +953,6 @@ impl<'a> Message<'a> {
             Self::Compressed { is_nested, .. } => *is_nested,
             Self::Encrypted { is_nested, .. } => *is_nested,
             Self::Signed { is_nested, .. } => *is_nested,
-            Self::SignedOnePass { is_nested, .. } => *is_nested,
         }
     }
 
@@ -1073,7 +974,6 @@ impl<'a> Message<'a> {
             Self::Literal { reader, .. } => reader.fill_buf(),
             Self::Compressed { reader, .. } => reader.fill_buf(),
             Self::Signed { reader, .. } => reader.fill_buf(),
-            Self::SignedOnePass { reader, .. } => reader.fill_buf(),
             Self::Encrypted { edata, .. } => edata.fill_buf(),
         }
     }
@@ -1085,7 +985,6 @@ impl Read for Message<'_> {
             Self::Literal { reader, .. } => reader.read(buf),
             Self::Compressed { reader, .. } => reader.read(buf),
             Self::Signed { reader, .. } => reader.read(buf),
-            Self::SignedOnePass { reader, .. } => reader.read(buf),
             Self::Encrypted { edata, .. } => edata.read(buf),
         }?;
 
@@ -1101,7 +1000,6 @@ impl Read for Message<'_> {
             Self::Literal { reader, .. } => reader.read_to_end(buf),
             Self::Compressed { reader, .. } => reader.read_to_end(buf),
             Self::Signed { reader, .. } => reader.read_to_end(buf),
-            Self::SignedOnePass { reader, .. } => reader.read_to_end(buf),
             Self::Encrypted { edata, .. } => edata.read_to_end(buf),
         }?;
 
@@ -1127,7 +1025,6 @@ impl BufRead for Message<'_> {
             Self::Literal { reader, .. } => reader.consume(amt),
             Self::Compressed { reader, .. } => reader.consume(amt),
             Self::Signed { reader, .. } => reader.consume(amt),
-            Self::SignedOnePass { reader, .. } => reader.consume(amt),
             Self::Encrypted { edata, .. } => edata.consume(amt),
         }
     }

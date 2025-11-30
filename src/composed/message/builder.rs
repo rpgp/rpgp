@@ -2496,7 +2496,7 @@ mod tests {
         let mut data = vec![];
         message.read_to_end(&mut data).expect("read msg");
 
-        let Message::SignedOnePass { reader, .. } = message else {
+        let Message::Signed { reader, .. } = message else {
             panic!("should be a signed message")
         };
 
