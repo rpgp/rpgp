@@ -1,7 +1,6 @@
 use std::{
     cmp::Ordering,
     io::{BufRead, Read},
-    time::Duration,
 };
 
 use bitfields::bitfield;
@@ -29,8 +28,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength,
-        SignatureBytes, Tag, Timestamp, VerifyingKey,
+        self, CompressionAlgorithm, Duration, Fingerprint, KeyDetails, KeyId, KeyVersion,
+        PacketLength, SignatureBytes, Tag, Timestamp, VerifyingKey,
     },
 };
 
@@ -752,19 +751,19 @@ impl Signature {
             .unwrap_or_default()
     }
 
-    pub fn key_expiration_time(&self) -> Option<&Duration> {
+    pub fn key_expiration_time(&self) -> Option<Duration> {
         self.config().and_then(|h| {
             h.hashed_subpackets().find_map(|p| match &p.data {
-                SubpacketData::KeyExpirationTime(d) => Some(d),
+                SubpacketData::KeyExpirationTime(d) => Some(*d),
                 _ => None,
             })
         })
     }
 
-    pub fn signature_expiration_time(&self) -> Option<&Duration> {
+    pub fn signature_expiration_time(&self) -> Option<Duration> {
         self.config().and_then(|h| {
             h.hashed_subpackets().find_map(|p| match &p.data {
-                SubpacketData::SignatureExpirationTime(d) => Some(d),
+                SubpacketData::SignatureExpirationTime(d) => Some(*d),
                 _ => None,
             })
         })

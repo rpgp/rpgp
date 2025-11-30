@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use derive_builder::Builder;
 use rand::{CryptoRng, Rng};
 use smallvec::SmallVec;
@@ -19,7 +17,8 @@ use crate::{
     errors::Result,
     packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
     types::{
-        self, CompressionAlgorithm, Password, PlainSecretParams, PublicParams, S2kParams, Timestamp,
+        self, CompressionAlgorithm, Duration, Password, PlainSecretParams, PublicParams, S2kParams,
+        Timestamp,
     },
 };
 

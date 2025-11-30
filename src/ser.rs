@@ -50,9 +50,3 @@ impl<T: Serialize> Serialize for Vec<T> {
         self.iter().map(|w| w.write_len()).sum()
     }
 }
-
-/// Convert expiration time "Duration" data to OpenPGP u32 format.
-/// Use u32:MAX on overflow.
-pub(crate) fn duration_to_u32(d: &std::time::Duration) -> u32 {
-    u32::try_from(d.as_secs()).unwrap_or(u32::MAX)
-}

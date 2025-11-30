@@ -1,4 +1,5 @@
 mod compression;
+mod duration;
 mod fingerprint;
 mod key_id;
 mod key_traits;
@@ -15,6 +16,7 @@ mod user;
 
 pub use self::{
     compression::CompressionAlgorithm,
+    duration::{Duration, DurationError},
     fingerprint::Fingerprint,
     key_id::KeyId,
     key_traits::{EncryptionKey, Imprint, KeyDetails, SigningKey, VerifyingKey},

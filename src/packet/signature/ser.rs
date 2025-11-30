@@ -9,7 +9,7 @@ use crate::{
         signature::{types::*, SignatureConfig},
         SignatureVersionSpecific, Subpacket, SubpacketData, SubpacketType,
     },
-    ser::{duration_to_u32, Serialize},
+    ser::Serialize,
 };
 
 impl Serialize for Signature {
@@ -143,10 +143,10 @@ impl Serialize for SubpacketData {
                 t.to_writer(writer)?;
             }
             SubpacketData::SignatureExpirationTime(d) => {
-                writer.write_u32::<BigEndian>(duration_to_u32(d))?;
+                d.to_writer(writer)?;
             }
             SubpacketData::KeyExpirationTime(d) => {
-                writer.write_u32::<BigEndian>(duration_to_u32(d))?;
+                d.to_writer(writer)?;
             }
             SubpacketData::IssuerKeyId(id) => {
                 writer.write_all(id.as_ref())?;
@@ -262,9 +262,9 @@ impl Serialize for SubpacketData {
 
     fn write_len(&self) -> usize {
         let len = match &self {
-            SubpacketData::SignatureCreationTime(_) => 4,
-            SubpacketData::SignatureExpirationTime(_) => 4,
-            SubpacketData::KeyExpirationTime(_) => 4,
+            SubpacketData::SignatureCreationTime(d) => d.write_len(),
+            SubpacketData::SignatureExpirationTime(d) => d.write_len(),
+            SubpacketData::KeyExpirationTime(d) => d.write_len(),
             SubpacketData::IssuerKeyId(_) => 8,
             SubpacketData::PreferredSymmetricAlgorithms(algs) => algs.len(),
             SubpacketData::PreferredHashAlgorithms(algs) => algs.len(),
@@ -355,14 +355,16 @@ impl SignatureConfig {
 
         if let SignatureVersionSpecific::V2 {
             issuer_key_id: issuer,
+            created,
             ..
         }
         | SignatureVersionSpecific::V3 {
             issuer_key_id: issuer,
+            created,
             ..
         } = &self.version_specific
         {
-            sum += 4;
+            sum += created.write_len();
             sum += issuer.as_ref().len();
         } else {
             panic!("expecting SignatureVersionSpecific::V3 for a v2/v3 signature")

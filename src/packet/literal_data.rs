@@ -217,7 +217,7 @@ impl Serialize for LiteralDataHeader {
     fn write_len(&self) -> usize {
         let mut sum = 1 + 1;
         sum += self.file_name.len();
-        sum += 4;
+        sum += self.created.write_len();
         sum
     }
 }

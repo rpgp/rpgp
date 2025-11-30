@@ -5,7 +5,7 @@ use std::{
 
 use bytes::{Bytes, BytesMut};
 
-use crate::types::Timestamp;
+use crate::types::{Duration, Timestamp};
 
 pub trait BufReadParsing: BufRead + Sized {
     fn read_u8(&mut self) -> Result<u8> {
@@ -156,6 +156,10 @@ pub trait BufReadParsing: BufRead + Sized {
 
     fn read_timestamp(&mut self) -> Result<Timestamp> {
         self.read_be_u32().map(Timestamp::from_secs)
+    }
+
+    fn read_duration(&mut self) -> Result<Duration> {
+        self.read_be_u32().map(Duration::from_secs)
     }
 }
 
