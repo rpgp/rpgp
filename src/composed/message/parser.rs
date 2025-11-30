@@ -5,7 +5,8 @@ use std::{
 
 use super::{
     reader::{
-        CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassReader,
+        CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassManyReader,
+        SignatureOnePassReader,
     },
     DebugBufRead, MessageReader, PacketBodyReader,
 };
@@ -159,27 +160,29 @@ impl<'a> MessageParser<'a> {
     }
 
     fn finish(mut self, mut message: Message<'a>, is_nested: usize) -> Result<Option<Message<'a>>> {
-        // collect previous opened messages
-        while let Some(open_message) = self.messages.pop() {
-            match open_message {
-                OpenMessage::Ops { signature } => {
-                    let reader = SignatureOnePassReader::new(signature, Box::new(message))?;
-                    message = Message::SignedOnePass {
-                        reader,
-                        is_nested: is_nested > 0, // TODO
-                    };
-                }
+        if self.messages.is_empty() {
+            return Ok(Some(message));
+        }
 
-                OpenMessage::Signature { signature } => {
-                    let reader = SignatureBodyReader::new(signature, Box::new(message))?;
-                    message = Message::Signed {
-                        reader,
-                        is_nested: is_nested > 0, // TODO
-                    }
-                }
+        let mut ops = Vec::new();
+        let mut sigs = Vec::new();
+
+        for message in self.messages {
+            match message {
+                OpenMessage::Ops { signature } => ops.push(signature),
+                OpenMessage::Signature { signature } => sigs.push(signature),
             }
         }
-        Ok(Some(message))
+
+        if !ops.is_empty() && sigs.is_empty() {
+            let reader = SignatureOnePassManyReader::new(ops, Box::new(message))?;
+            return Ok(Some(Message::SignedOnePass {
+                reader,
+                is_nested: is_nested > 0, // TODO
+            }));
+        }
+
+        todo!();
     }
 
     fn visit_esk(

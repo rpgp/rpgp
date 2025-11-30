@@ -4,7 +4,8 @@ use log::{debug, warn};
 
 use super::reader::{
     CompressedDataReader, LiteralDataReader, PacketBodyReader, SignatureBodyReader,
-    SignatureOnePassReader, SymEncryptedDataReader, SymEncryptedProtectedDataReader,
+    SignatureOnePassManyReader, SignatureOnePassReader, SymEncryptedDataReader,
+    SymEncryptedProtectedDataReader,
 };
 use crate::{
     armor,
@@ -174,7 +175,7 @@ pub enum Message<'a> {
     },
     /// One-Pass Signed Message: One-Pass Signature Packet, OpenPGP Message, Corresponding Signature Packet.
     SignedOnePass {
-        reader: SignatureOnePassReader<'a>,
+        reader: SignatureOnePassManyReader<'a>,
         /// is this a nested message?
         is_nested: bool,
     },
@@ -205,8 +206,8 @@ pub(crate) enum MessageParts {
         is_nested: bool,
     },
     SignedOnePass {
-        hash: Option<Box<[u8]>>,
-        signature: Signature,
+        hashes: Vec<Option<Box<[u8]>>>,
+        signatures: Vec<Signature>,
         parts: Box<MessageParts>,
         is_nested: bool,
     },
@@ -267,10 +268,10 @@ impl<'a> Message<'a> {
                 )
             }
             Message::SignedOnePass { reader, is_nested } => {
-                let SignatureOnePassReader::Done {
-                    hash,
+                let SignatureOnePassManyReader::Done {
+                    hashes,
                     source,
-                    signature,
+                    signatures,
                 } = reader
                 else {
                     panic!("invalid state");
@@ -280,8 +281,8 @@ impl<'a> Message<'a> {
                 (
                     reader,
                     MessageParts::SignedOnePass {
-                        hash,
-                        signature,
+                        hashes,
+                        signatures,
                         parts: Box::new(parts),
                         is_nested,
                     },
@@ -378,17 +379,17 @@ impl MessageParts {
                 }
             }
             MessageParts::SignedOnePass {
-                hash,
-                signature,
+                hashes,
+                signatures,
                 parts,
                 is_nested,
             } => {
                 let source = parts.into_message(reader);
                 Message::SignedOnePass {
-                    reader: SignatureOnePassReader::Done {
-                        hash,
+                    reader: SignatureOnePassManyReader::Done {
+                        hashes,
                         source: Box::new(source),
-                        signature,
+                        signatures,
                     },
                     is_nested,
                 }
@@ -723,13 +724,11 @@ impl<'a> Message<'a> {
     pub fn verify_nested(&self, keys: &[&dyn VerifyingKey]) -> Result<Vec<VerificationResult>> {
         let mut out = vec![VerificationResult::Invalid; keys.len()];
 
-        let mut current_message = self;
-        // do not recurse arbitrarily deep
-        for _ in 0..1024 {
-            match current_message {
-                Message::SignedOnePass { reader, .. } => {
+        match self {
+            Message::SignedOnePass { reader, .. } => {
+                for i in 0..reader.num_signatures() {
                     for (key, res) in keys.iter().zip(out.iter_mut()) {
-                        match current_message.verify(*key) {
+                        match self.verify_nested_explicit(i, *key) {
                             Ok(sig) => {
                                 *res = VerificationResult::Valid(sig.clone());
                             }
@@ -738,32 +737,29 @@ impl<'a> Message<'a> {
                             }
                         }
                     }
-
-                    current_message = reader.get_ref();
                 }
-                Message::Signed { reader, .. } => {
-                    for (key, res) in keys.iter().zip(out.iter_mut()) {
-                        match current_message.verify(*key) {
-                            Ok(sig) => {
-                                *res = VerificationResult::Valid(sig.clone());
-                            }
-                            Err(_err) => {
-                                // no match
-                            }
-                        }
-                    }
-
-                    current_message = reader.get_ref();
-                }
-                Message::Literal { .. } => {
-                    break;
-                }
-                Message::Compressed { .. } => {
-                    bail!("message must be decompressed before verifying");
-                }
-                Message::Encrypted { .. } => {
-                    bail!("message must be decrypted before verifying");
-                }
+            }
+            Message::Signed { reader, .. } => {
+                todo!()
+                // for i in 0..reader.num_signatures() {
+                //     for (key, res) in keys.iter().zip(out.iter_mut()) {
+                //         match self.verify_nested_explicit(i, *key) {
+                //             Ok(sig) => {
+                //                 *res = VerificationResult::Valid(sig.clone());
+                //             }
+                //             Err(_err) => {
+                //                 // no match
+                //             }
+                //         }
+                //     }
+                // }
+            }
+            Message::Literal { .. } => {}
+            Message::Compressed { .. } => {
+                bail!("message must be decompressed before verifying");
+            }
+            Message::Encrypted { .. } => {
+                bail!("message must be decrypted before verifying");
             }
         }
 
@@ -784,12 +780,20 @@ impl<'a> Message<'a> {
     ///
     /// If the signature is valid, returns the matching signature.
     pub fn verify(&self, key: &dyn VerifyingKey) -> Result<&Signature> {
+        self.verify_nested_explicit(0, key)
+    }
+
+    pub fn verify_nested_explicit(
+        &self,
+        index: usize,
+        key: &dyn VerifyingKey,
+    ) -> Result<&Signature> {
         match self {
             Message::SignedOnePass { reader, .. } => {
-                let Some(calculated_hash) = reader.hash() else {
+                let Some(calculated_hash) = reader.hash(index) else {
                     bail!("cannot verify message before reading it to the end");
                 };
-                let Some(signature) = reader.signature() else {
+                let Some(signature) = reader.signature(index) else {
                     bail!("cannot verify message before reading the final signature packet");
                 };
                 let InnerSignature::Known {
