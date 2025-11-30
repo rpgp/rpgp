@@ -112,7 +112,7 @@ fn test_parse_msg(entry: &str, base_path: &str, _is_normalized: bool) {
             }
         }
         Message::Signed { reader, .. } => {
-            println!("signature: {:?}", reader.signature());
+            println!("signature: {:?}", reader.signatures());
         }
         _ => {
             // TODO: some other checks?
@@ -1018,7 +1018,7 @@ fn message_parsing_pqc_pkesk() {
 }
 
 #[test]
-fn message_many_signatures() {
+fn message_many_one_pass_signatures() {
     // inline-sign a message with quite a lot of keys, producing a deeply nested message structure
 
     pretty_env_logger::try_init().ok();
@@ -1067,12 +1067,16 @@ fn message_many_signatures() {
     warn!("verifying message");
     assert!(message.is_one_pass_signed());
 
-    let Message::SignedOnePass { reader, .. } = &message else {
+    let Message::Signed { reader, .. } = &message else {
         panic!("invalid message type");
     };
-    for i in 0..reader.num_signatures() {
+    assert_eq!(reader.num_signatures(), keys.len());
+    assert_eq!(reader.num_one_pass_signatures(), keys.len());
+    assert_eq!(reader.num_regular_signatures(), 0);
+
+    for (i, key) in keys.iter().enumerate() {
         message
-            .verify_nested_explicit(i, keys[i].primary_key.public_key())
+            .verify_nested_explicit(i, key.primary_key.public_key())
             .expect("signed");
     }
 }

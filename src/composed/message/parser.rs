@@ -4,10 +4,7 @@ use std::{
 };
 
 use super::{
-    reader::{
-        CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassManyReader,
-        SignatureOnePassReader,
-    },
+    reader::{CompressedDataReader, LiteralDataReader, SignatureManyReader},
     DebugBufRead, MessageReader, PacketBodyReader,
 };
 use crate::{
@@ -151,13 +148,13 @@ impl<'a> MessageParser<'a> {
         }
     }
 
-    fn finish(mut self, mut message: Message<'a>, is_nested: usize) -> Result<Option<Message<'a>>> {
+    fn finish(self, message: Message<'a>, is_nested: usize) -> Result<Option<Message<'a>>> {
         if self.messages.is_empty() {
             return Ok(Some(message));
         }
 
-        let reader = SignatureOnePassManyReader::new(self.messages, Box::new(message))?;
-        Ok(Some(Message::SignedOnePass {
+        let reader = SignatureManyReader::new(self.messages, Box::new(message))?;
+        Ok(Some(Message::Signed {
             reader,
             is_nested: is_nested > 0, // TODO
         }))

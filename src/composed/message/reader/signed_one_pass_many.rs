@@ -8,8 +8,7 @@ use crate::{
     composed::{Message, MessageReader, RingResult, TheRing},
     errors::{bail, ensure_eq, Error, Result},
     packet::{
-        OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType,
-        SignatureVersionSpecific,
+        OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType, SignatureVersionSpecific,
     },
     util::{fill_buffer_bytes, NormalizingHasher},
 };
@@ -84,7 +83,7 @@ impl SignaturePacket {
 }
 
 #[derive(derive_more::Debug)]
-pub enum SignatureOnePassManyReader<'a> {
+pub enum SignatureManyReader<'a> {
     Init {
         /// (One Pass) Signature packet
         packets: Vec<SignaturePacket>,
@@ -104,6 +103,8 @@ pub enum SignatureOnePassManyReader<'a> {
         buffer: BytesMut,
     },
     Done {
+        /// One Pass Signature packet
+        packets: Vec<SignaturePacket>,
         /// Finalized hashes
         hashes: Vec<Option<Box<[u8]>>>,
         /// Data source
@@ -114,7 +115,7 @@ pub enum SignatureOnePassManyReader<'a> {
     Error,
 }
 
-impl<'a> SignatureOnePassManyReader<'a> {
+impl<'a> SignatureManyReader<'a> {
     pub(crate) fn new(packets: Vec<SignaturePacket>, source: Box<Message<'a>>) -> Result<Self> {
         let hashers = packets
             .iter()
@@ -137,6 +138,30 @@ impl<'a> SignatureOnePassManyReader<'a> {
         }
     }
 
+    pub fn num_one_pass_signatures(&self) -> usize {
+        match self {
+            Self::Init { packets, .. }
+            | Self::Body { packets, .. }
+            | Self::Done { packets, .. } => packets
+                .iter()
+                .filter(|p| matches!(p, SignaturePacket::Ops { .. }))
+                .count(),
+            Self::Error => panic!("SignatureOnePassManyReader errored"),
+        }
+    }
+
+    pub fn num_regular_signatures(&self) -> usize {
+        match self {
+            Self::Init { packets, .. }
+            | Self::Body { packets, .. }
+            | Self::Done { packets, .. } => packets
+                .iter()
+                .filter(|p| matches!(p, SignaturePacket::Signature { .. }))
+                .count(),
+            Self::Error => panic!("SignatureOnePassManyReader errored"),
+        }
+    }
+
     pub fn hash(&self, index: usize) -> Option<&[u8]> {
         match self {
             Self::Init { .. } => None,
@@ -151,6 +176,15 @@ impl<'a> SignatureOnePassManyReader<'a> {
             Self::Init { .. } => None,
             Self::Body { .. } => None,
             Self::Done { signatures, .. } => signatures.get(index),
+            Self::Error => panic!("SignatureOnePassManyReader errored"),
+        }
+    }
+
+    pub fn signatures(&self) -> Option<&[Signature]> {
+        match self {
+            Self::Init { .. } => None,
+            Self::Body { .. } => None,
+            Self::Done { signatures, .. } => Some(signatures),
             Self::Error => panic!("SignatureOnePassManyReader errored"),
         }
     }
@@ -372,6 +406,7 @@ impl<'a> SignatureOnePassManyReader<'a> {
                         let source = parts.into_message(reader);
 
                         *self = Self::Done {
+                            packets,
                             signatures,
                             hashes,
                             source: Box::new(source),
@@ -388,11 +423,13 @@ impl<'a> SignatureOnePassManyReader<'a> {
                     return Ok(());
                 }
                 Self::Done {
+                    packets,
                     hashes,
                     source,
                     signatures,
                 } => {
                     *self = Self::Done {
+                        packets,
                         hashes,
                         source,
                         signatures,
@@ -456,7 +493,7 @@ impl<'a> SignatureOnePassManyReader<'a> {
     }
 }
 
-impl BufRead for SignatureOnePassManyReader<'_> {
+impl BufRead for SignatureManyReader<'_> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
         match self {
@@ -479,7 +516,7 @@ impl BufRead for SignatureOnePassManyReader<'_> {
     }
 }
 
-impl Read for SignatureOnePassManyReader<'_> {
+impl Read for SignatureManyReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
         match self {
