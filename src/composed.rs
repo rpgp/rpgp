@@ -1,14 +1,19 @@
-//! Handle objects that are composed of multiple packets, such as *Transferable Public
-//! Keys* and *Messages*.
+//! Handle OpenPGP objects that are composed of multiple packets, such as
+//! [Transferable Public Key]s and [Message]s.
 //!
 //! See <https://www.rfc-editor.org/rfc/rfc9580#name-packet-sequence-composition>
 //!
+//! Key generation is handled with [`SecretKeyParamsBuilder`].
 //!
-//! [Key generation] is handled separately as well as
-//! [signing and verifying with external hashing] applied.
+//! Once generated, keys are used as OpenPGP [Transferable Public Key] with [`SignedSecretKey`]
+//! or [Transferable Secret Key] with [`SignedPublicKey`].
+//! Those key objects can encrypt and decrypt messages, as well as issue and verify signatures.
 //!
-//! [Key generation]: super::composed::key
-//! [signing and verifying with external hashing]: super::composed::signed_key
+//! [Transferable Public Key]: https://www.rfc-editor.org/rfc/rfc9580#name-transferable-public-keys
+//! [Transferable Secret Key]: https://www.rfc-editor.org/rfc/rfc9580#name-transferable-secret-keys
+//! [Message]: https://www.rfc-editor.org/rfc/rfc9580#name-openpgp-messages
+//!
+//! Messages can be produced with [`MessageBuilder`], existing messages are handled with [`Message`].
 //!
 //! ```rust
 //! # const DATA :&'static [u8] = b"Hello World";

@@ -1,11 +1,23 @@
 #![doc = include_str!("../README.md")]
 
-//! Usage examples are available under the respective modules:
-//! [Key generation], [signing and verifying with external hashing], [packet based signing and verifying].
+//! # Further reading
 //!
-//! [Key generation]: crate::composed::key
-//! [signing and verifying with external hashing]: crate::composed::signed_key
-//! [packet based signing and verifying]: crate::packet
+//! More usage examples are available under the respective modules:
+//!
+//! - [`composed`]: Operations on OpenPGP composite objects, such as
+//! [Transferable Public Key]s (Certificates) or [Message]s.
+//! This module covers most common OpenPGP operations, including producing and consuming messages,
+//! key generation, and dealing with detached signatures.
+//!
+//! - [`packet`]: Lower-level packet based operations.
+//!
+//! - [`armor`]: Lower-level access to [ASCII Armor] functionality is exposed in the [`armor`]
+//! module.
+//! (However, users of rPGP will usually handle armor implicitly in the [`composed`] module)
+//!
+//! [Transferable Public Key]: https://www.rfc-editor.org/rfc/rfc9580#name-transferable-public-keys
+//! [Message]: https://www.rfc-editor.org/rfc/rfc9580#name-openpgp-messages
+//! [ASCII Armor]: https://www.rfc-editor.org/rfc/rfc9580#name-forming-ascii-armor
 
 #![cfg_attr(not(test), deny(clippy::unwrap_used))]
 #![allow(clippy::missing_const_for_fn, clippy::type_complexity)]
