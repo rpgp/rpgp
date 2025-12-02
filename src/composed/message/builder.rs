@@ -565,6 +565,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// # Example
     /// ```rust,no_run
     /// use pgp::composed::MessageBuilder;
+    /// use pgp::crypto::aead::AeadAlgorithm;
     /// use pgp::crypto::sym::SymmetricKeyAlgorithm;
     ///
     /// # use pgp::types::{KeyDetails, SignatureBytes, PublicParams, KeyId, Fingerprint, KeyVersion};
@@ -582,8 +583,12 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// let message = "Hello, world!";
     ///
     /// let mut rng = rand::thread_rng();
-    /// let mut builder = MessageBuilder::from_bytes("", message.as_bytes())
-    ///    .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+    /// let mut builder = MessageBuilder::from_bytes("", message.as_bytes()).seipd_v2(
+    ///     &mut rng,
+    ///     SymmetricKeyAlgorithm::AES256,
+    ///     AeadAlgorithm::Ocb,
+    ///     Default::default(),
+    /// );
     ///
     /// builder.encrypt_to_key(&mut rng, &public_key_1);
     /// // Optionally, you can also encrypt to multiple keys
