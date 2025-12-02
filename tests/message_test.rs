@@ -13,10 +13,12 @@ use std::fs::File;
 
 use pgp::{
     composed::{
-        CleartextSignedMessage, Deserializable, KeyType, Message, MessageBuilder, PlainSessionKey,
-        SecretKeyParamsBuilder, SignedPublicKey, SignedSecretKey,
+        CleartextSignedMessage, Deserializable, DetachedSignature, KeyType, Message,
+        MessageBuilder, PlainSessionKey, SecretKeyParamsBuilder, SignedPublicKey, SignedSecretKey,
     },
     crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
+    packet::{LiteralData, Packet},
+    ser::Serialize,
     types::{KeyDetails, KeyId, Password},
 };
 use rand::SeedableRng;
@@ -1073,6 +1075,85 @@ fn message_many_one_pass_signatures() {
     assert_eq!(reader.num_signatures(), keys.len());
     assert_eq!(reader.num_one_pass_signatures(), keys.len());
     assert_eq!(reader.num_regular_signatures(), 0);
+
+    for (i, key) in keys.iter().enumerate() {
+        message
+            .verify_nested_explicit(i, key.primary_key.public_key())
+            .expect("signed");
+    }
+}
+
+#[test]
+fn message_many_prefix_signatures() {
+    // produce a message that has been prefix-signed by quite a lot of keys,
+    // then attempt to verify the signatures in the message
+
+    pretty_env_logger::try_init().ok();
+
+    const PLAIN: &str = "hello";
+    // number of private keys to generate and sign with
+    const NUM: usize = 2000;
+
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    // make NUM keys that can produce data signatures
+    let keys: Vec<_> = (0..NUM)
+        .map(|count| {
+            // legal v4 key, with user id
+            let key_params = SecretKeyParamsBuilder::default()
+                .key_type(KeyType::Ed25519)
+                .can_sign(true)
+                .primary_user_id(format!("test{}", count))
+                .build()
+                .unwrap();
+
+            key_params
+                .generate(&mut rng)
+                .expect("failed to generate secret key")
+        })
+        .collect();
+
+    let sigs: Vec<_> = keys
+        .iter()
+        .map(|k| {
+            DetachedSignature::sign_binary_data(
+                &mut rng,
+                &k.primary_key,
+                &Password::empty(),
+                HashAlgorithm::Sha256,
+                PLAIN.as_bytes(),
+            )
+            .expect("sign")
+        })
+        .collect();
+
+    // a prefix-signed is a series of signature packets followed by a literal data packet
+    let mut packets: Vec<Packet> = sigs.into_iter().map(|ds| ds.signature.into()).collect();
+
+    let lit = LiteralData::from_bytes(&[][..], PLAIN.as_bytes().into()).expect("literal");
+    packets.push(lit.into());
+
+    eprintln!("{:#?}", packets);
+
+    let signed = packets.to_bytes().expect("bytes");
+
+    // parse the message again ...
+    warn!("parsing message");
+    let mut message = Message::from_bytes(&signed[..]).expect("reading");
+
+    let plain = message.as_data_string().unwrap();
+    assert_eq!(plain, PLAIN);
+
+    // ... and try to verify one of the signatures in it
+    warn!("verifying message");
+    assert!(message.is_signed());
+
+    let Message::Signed { reader, .. } = &message else {
+        panic!("invalid message type");
+    };
+    assert_eq!(reader.num_signatures(), keys.len());
+    assert_eq!(reader.num_one_pass_signatures(), 0);
+    assert_eq!(reader.num_regular_signatures(), keys.len());
 
     for (i, key) in keys.iter().enumerate() {
         message
