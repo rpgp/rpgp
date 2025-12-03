@@ -8,7 +8,7 @@ use super::reader::{
 };
 use crate::{
     armor,
-    composed::{message::decrypt::*, signed_key::SignedSecretKey, SignaturePacket},
+    composed::{message::decrypt::*, signed_key::SignedSecretKey, FullSignaturePacket},
     crypto::sym::SymmetricKeyAlgorithm,
     errors::{bail, ensure, ensure_eq, format_err, Error, Result},
     packet::{
@@ -190,9 +190,8 @@ pub(crate) enum MessageParts {
         is_nested: bool,
     },
     SignedOnePass {
-        packets: Vec<SignaturePacket>,
         hashes: Vec<Option<Box<[u8]>>>,
-        signatures: Vec<Signature>,
+        signatures: Vec<FullSignaturePacket>,
         parts: Box<MessageParts>,
         is_nested: bool,
     },
@@ -233,7 +232,6 @@ impl<'a> Message<'a> {
             }
             Message::Signed { reader, is_nested } => {
                 let SignatureManyReader::Done {
-                    packets,
                     hashes,
                     source,
                     signatures,
@@ -246,7 +244,6 @@ impl<'a> Message<'a> {
                 (
                     reader,
                     MessageParts::SignedOnePass {
-                        packets,
                         hashes,
                         signatures,
                         parts: Box::new(parts),
@@ -329,7 +326,6 @@ impl MessageParts {
                 is_nested,
             },
             MessageParts::SignedOnePass {
-                packets,
                 hashes,
                 signatures,
                 parts,
@@ -338,7 +334,6 @@ impl MessageParts {
                 let source = parts.into_message(reader);
                 Message::Signed {
                     reader: SignatureManyReader::Done {
-                        packets,
                         hashes,
                         source: Box::new(source),
                         signatures,
@@ -724,9 +719,11 @@ impl<'a> Message<'a> {
         match self {
             Message::Signed { reader, .. } => {
                 let Some(calculated_hash) = reader.hash(index) else {
+                    dbg!(&reader);
                     bail!("cannot verify message before reading it to the end");
                 };
                 let Some(signature) = reader.signature(index) else {
+                    dbg!(&reader);
                     bail!("cannot verify message before reading the final signature packet");
                 };
                 let InnerSignature::Known {

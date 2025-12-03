@@ -11,7 +11,7 @@ pub use self::{
     limited::LimitedReader,
     literal::LiteralDataReader,
     packet_body::PacketBodyReader,
-    signed_many::{SignatureManyReader, SignaturePacket},
+    signed_many::{FullSignaturePacket, SignatureManyReader, SignaturePacket},
     sym_encrypted::SymEncryptedDataReader,
     sym_encrypted_protected::SymEncryptedProtectedDataReader,
 };
