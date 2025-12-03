@@ -1112,6 +1112,7 @@ mod tests {
         fn public_key_packet_roundtrip(packet: PublicKey) {
             // dyn compat
             let _: Box<&dyn KeyDetails> = Box::new(&packet);
+            let _: Box<&dyn VerifyingKey> = Box::new(&packet);
 
             let mut buf = Vec::new();
             packet.to_writer(&mut buf)?;
