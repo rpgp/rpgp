@@ -1,4 +1,4 @@
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 
 use crate::{
     crypto::{
@@ -47,7 +47,7 @@ pub trait Imprint {
     ///
     /// NOTE: Imprints are a special purpose tool! For most use cases, the OpenPGP fingerprint is
     /// the most appropriate identifier for a certificate or a component key.
-    fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>>;
+    fn imprint<D: KnownDigest>(&self) -> Result<hybrid_array::Array<u8, D::OutputSize>>;
 }
 
 /// Keys that can verify signatures.
@@ -157,18 +157,18 @@ impl SigningKey for Box<&dyn SigningKey> {
 /// Describes keys that can encrypt plain data (i.e. a session key) into data for a
 /// [PKESK](https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio).
 pub trait EncryptionKey: KeyDetails {
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(
+    fn encrypt<R: CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
         plain: &[u8],
         typ: EskType,
     ) -> crate::errors::Result<PkeskBytes>;
 }
 
 impl<T: EncryptionKey> EncryptionKey for &T {
-    fn encrypt<R: CryptoRng + Rng>(
+    fn encrypt<R: CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {

@@ -3,7 +3,7 @@ use std::io::{self, BufRead};
 use bytes::Bytes;
 #[cfg(test)]
 use proptest::prelude::*;
-use rand::{CryptoRng, RngCore};
+use rand::CryptoRng;
 
 use crate::{
     errors::Result,
@@ -38,8 +38,8 @@ impl Padding {
     }
 
     /// Create a new padding packet of `size` in bytes.
-    pub fn new<R: CryptoRng + RngCore>(
-        mut rng: R,
+    pub fn new<R: CryptoRng + ?Sized>(
+        rng: &mut R,
         packet_version: PacketHeaderVersion,
         size: usize,
     ) -> Result<Self> {
@@ -76,9 +76,9 @@ impl PacketTrait for Padding {
 
 #[cfg(test)]
 mod tests {
+    use chacha20::ChaCha20Rng;
     use proptest::prelude::*;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
 
     use super::*;
     use crate::{
