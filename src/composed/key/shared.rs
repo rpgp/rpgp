@@ -55,17 +55,17 @@ impl KeyDetails {
         }
     }
 
-    pub fn sign<R, K, P>(
+    pub fn sign<R, S, K>(
         self,
         mut rng: R,
-        key: &K,
-        pub_key: &P,
+        key: &S,
+        pub_key: &K,
         key_pw: &Password,
     ) -> Result<SignedKeyDetails>
     where
         R: CryptoRng + Rng,
-        K: SigningKey,
-        P: types::KeyDetails + Serialize,
+        S: SigningKey,
+        K: types::KeyDetails + Serialize,
     {
         let subpackets_with_metadata = || -> Result<Vec<Subpacket>> {
             Ok(vec![

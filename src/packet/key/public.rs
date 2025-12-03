@@ -160,18 +160,18 @@ impl PublicSubkey {
     }
 
     /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
-    pub fn sign<R: CryptoRng + Rng, K, P>(
+    pub fn sign<R: CryptoRng + Rng, S, K>(
         &self,
         rng: R,
-        primary_sec_key: &K,
-        primary_pub_key: &P,
+        primary_sec_key: &S,
+        primary_pub_key: &K,
         key_pw: &Password,
         keyflags: KeyFlags,
         embedded: Option<Signature>,
     ) -> Result<Signature>
     where
-        K: SigningKey,
-        P: KeyDetails + Serialize,
+        S: SigningKey,
+        K: KeyDetails + Serialize,
     {
         let mut config =
             SignatureConfig::from_key(rng, primary_sec_key, SignatureType::SubkeyBinding)?;
@@ -392,15 +392,15 @@ impl PubKeyInner {
     /// Signs a direct key signature or a revocation.
     #[allow(dead_code)]
     // TODO: Expose in public API
-    fn sign<R: CryptoRng + Rng, K>(
+    fn sign<R: CryptoRng + Rng, S>(
         &self,
         mut rng: R,
-        key: &K,
+        key: &S,
         key_pw: &Password,
         sig_type: SignatureType,
     ) -> Result<Signature>
     where
-        K: SigningKey + Serialize,
+        S: SigningKey + Serialize,
     {
         let mut config = SignatureConfig::from_key(&mut rng, key, sig_type)?;
         config.hashed_subpackets = vec![

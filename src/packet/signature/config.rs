@@ -61,9 +61,9 @@ impl From<&SignatureVersionSpecific> for SignatureVersion {
 }
 
 impl SignatureConfig {
-    pub fn from_key<R: CryptoRng + Rng, K: SigningKey>(
+    pub fn from_key<R: CryptoRng + Rng, S: SigningKey>(
         mut rng: R,
-        key: &K,
+        key: &S,
         typ: SignatureType,
     ) -> Result<Self> {
         match key.version() {
@@ -216,32 +216,32 @@ impl SignatureConfig {
     }
 
     /// Create a certification self-signature.
-    pub fn sign_certification<K, P>(
+    pub fn sign_certification<S, K>(
         self,
-        key: &K,
-        pub_key: &P,
+        key: &S,
+        pub_key: &K,
         key_pw: &Password,
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<Signature>
     where
-        K: SigningKey,
-        P: KeyDetails + Serialize,
+        S: SigningKey,
+        K: KeyDetails + Serialize,
     {
         self.sign_certification_third_party(key, key_pw, pub_key, tag, id)
     }
 
     /// Create a certification third-party signature.
-    pub fn sign_certification_third_party<P>(
+    pub fn sign_certification_third_party<K>(
         self,
         signer: &impl SigningKey,
         signer_pw: &Password,
-        signee: &P,
+        signee: &K,
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<Signature>
     where
-        P: KeyDetails + Serialize,
+        K: KeyDetails + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signer.version() == KeyVersion::V4)
@@ -312,17 +312,17 @@ impl SignatureConfig {
     /// The primary key is expected as `signer`, the subkey as `signee`.
     ///
     /// Produces a "Subkey Binding Signature (type ID 0x18)"
-    pub fn sign_subkey_binding<K, P, L>(
+    pub fn sign_subkey_binding<S, K1, K2>(
         self,
-        signer: &K,
-        signer_pub: &P,
+        signer: &S,
+        signer_pub: &K1,
         signer_pw: &Password,
-        signee: &L,
+        signee: &K2,
     ) -> Result<Signature>
     where
-        K: SigningKey,
-        P: KeyDetails + Serialize,
-        L: KeyDetails + Serialize,
+        S: SigningKey,
+        K1: KeyDetails + Serialize,
+        K2: KeyDetails + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signer.version() == KeyVersion::V4)
@@ -358,17 +358,17 @@ impl SignatureConfig {
     /// The subkey is expected as `signer`, the primary key as `signee`.
     ///
     /// Produces a "Primary Key Binding Signature (type ID 0x19)"
-    pub fn sign_primary_key_binding<K, P, L>(
+    pub fn sign_primary_key_binding<S, K1, K2>(
         self,
-        signer: &K,
-        signer_pub: &P,
+        signer: &S,
+        signer_pub: &K1,
         signer_pw: &Password,
-        signee: &L,
+        signee: &K2,
     ) -> Result<Signature>
     where
-        K: SigningKey,
-        P: KeyDetails + Serialize,
-        L: KeyDetails + Serialize,
+        S: SigningKey,
+        K1: KeyDetails + Serialize,
+        K2: KeyDetails + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signer.version() == KeyVersion::V4)
@@ -399,10 +399,10 @@ impl SignatureConfig {
     }
 
     /// Signs a direct key signature or a revocation.
-    pub fn sign_key<K, P>(self, signing_key: &K, key_pw: &Password, key: &P) -> Result<Signature>
+    pub fn sign_key<S, K>(self, signing_key: &S, key_pw: &Password, key: &K) -> Result<Signature>
     where
-        K: SigningKey,
-        P: KeyDetails + Serialize,
+        S: SigningKey,
+        K: KeyDetails + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signing_key.version() == KeyVersion::V4)
@@ -709,9 +709,9 @@ pub struct SignatureHasher {
 
 impl SignatureHasher {
     /// Finalizes the signature.
-    pub fn sign<K>(self, key: &K, key_pw: &Password) -> Result<Signature>
+    pub fn sign<S>(self, key: &S, key_pw: &Password) -> Result<Signature>
     where
-        K: SigningKey + ?Sized,
+        S: SigningKey + ?Sized,
     {
         let Self {
             config,

@@ -397,15 +397,15 @@ impl PlainSecretParams {
         }
     }
 
-    pub fn decrypt<P>(
+    pub fn decrypt<K>(
         &self,
         pub_params: &PublicParams,
         values: &PkeskBytes,
         typ: EskType,
-        recipient: &P,
+        recipient: &K,
     ) -> Result<PlainSessionKey>
     where
-        P: KeyDetails,
+        K: KeyDetails,
     {
         let decrypted_key = match (self, values) {
             (PlainSecretParams::RSA(ref priv_key), PkeskBytes::Rsa { mpi }) => {
