@@ -15,8 +15,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        KeyVersion, PacketHeaderVersion, PacketLength, Password, SignedUser, SigningKey, Tag,
-        Timestamp, VerifyingKey,
+        KeyDetails, KeyVersion, PacketHeaderVersion, PacketLength, Password, SignedUser,
+        SigningKey, Tag, Timestamp,
     },
 };
 
@@ -99,17 +99,17 @@ impl UserId {
     }
 
     /// Create a self-signature.
-    pub fn sign<R, K, P>(
+    pub fn sign<R, S, K>(
         &self,
         rng: R,
-        signer_sec_key: &K,
-        signer_pub_key: &P,
+        signer_sec_key: &S,
+        signer_pub_key: &K,
         key_pw: &Password,
     ) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
-        K: SigningKey,
-        P: VerifyingKey + Serialize,
+        S: SigningKey,
+        K: KeyDetails + Serialize,
     {
         // Self-signatures use CertPositive, see
         // <https://www.ietf.org/archive/id/draft-gallagher-openpgp-signatures-01.html#name-certification-signature-typ>
@@ -123,18 +123,18 @@ impl UserId {
     }
 
     /// Create a third-party signature.
-    pub fn sign_third_party<R, P, K>(
+    pub fn sign_third_party<R, S, K>(
         &self,
         mut rng: R,
-        signer: &P,
+        signer: &S,
         signer_pw: &Password,
         signee: &K,
         typ: SignatureType,
     ) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
-        P: SigningKey,
-        K: VerifyingKey + Serialize,
+        S: SigningKey,
+        K: KeyDetails + Serialize,
     {
         ensure!(
             CERTIFICATION_SIGNATURE_TYPES.contains(&typ),

@@ -11,7 +11,7 @@ use crate::{
         UserAttribute, UserId,
     },
     ser::Serialize,
-    types::{CompressionAlgorithm, KeyVersion, Password, SigningKey, Timestamp, VerifyingKey},
+    types::{self, CompressionAlgorithm, KeyVersion, Password, SigningKey, Timestamp},
 };
 
 /// This specifies associated user id and attribute components, plus some metadata for producing
@@ -55,17 +55,17 @@ impl KeyDetails {
         }
     }
 
-    pub fn sign<R, K, P>(
+    pub fn sign<R, S, K>(
         self,
         mut rng: R,
-        key: &K,
-        pub_key: &P,
+        key: &S,
+        pub_key: &K,
         key_pw: &Password,
     ) -> Result<SignedKeyDetails>
     where
         R: CryptoRng + Rng,
-        K: SigningKey,
-        P: VerifyingKey + Serialize,
+        S: SigningKey,
+        K: types::KeyDetails + Serialize,
     {
         let subpackets_with_metadata = || -> Result<Vec<Subpacket>> {
             Ok(vec![

@@ -361,7 +361,7 @@ impl Signature {
     ///
     /// We also consider `key` a match for `sig` by default, if `sig` contains no issuer-related
     /// subpackets.
-    fn match_identity(sig: &Signature, key: &impl VerifyingKey) -> bool {
+    fn match_identity(sig: &Signature, key: &impl KeyDetails) -> bool {
         let issuer_key_ids = sig.issuer_key_id();
         let issuer_fps = sig.issuer_fingerprint();
 
@@ -384,7 +384,7 @@ impl Signature {
     /// - only a v6 key may produce a v6 signature
     /// - a v6 key may only produce v6 signatures
     fn check_signature_key_version_alignment(
-        key: &impl VerifyingKey,
+        key: &impl KeyDetails,
         config: &SignatureConfig,
     ) -> Result<()> {
         // Every signature made by a version 6 key MUST be a version 6 signature.
@@ -503,24 +503,24 @@ impl Signature {
     }
 
     /// Verifies a certification signature type (for self-signatures).
-    pub fn verify_certification<P>(&self, key: &P, tag: Tag, id: &impl Serialize) -> Result<()>
+    pub fn verify_certification<V>(&self, key: &V, tag: Tag, id: &impl Serialize) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
+        V: VerifyingKey + Serialize,
     {
         self.verify_third_party_certification(&key, &key, tag, id)
     }
 
     /// Verifies a certification signature type (for third-party signatures).
-    pub fn verify_third_party_certification<P, K>(
+    pub fn verify_third_party_certification<V, K>(
         &self,
-        signee: &P,
-        signer: &K,
+        signee: &K,
+        signer: &V,
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
-        K: VerifyingKey + Serialize,
+        V: VerifyingKey + Serialize,
+        K: KeyDetails + Serialize,
     {
         let InnerSignature::Known {
             ref config,
@@ -604,10 +604,10 @@ impl Signature {
     /// The primary key is expected as `signer`, the subkey as `signee`.
     ///
     /// "Subkey Binding Signature (type ID 0x18)"
-    pub fn verify_subkey_binding<P, K>(&self, signer: &P, signee: &K) -> Result<()>
+    pub fn verify_subkey_binding<V, K>(&self, signer: &V, signee: &K) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
-        K: VerifyingKey + Serialize,
+        V: VerifyingKey + Serialize,
+        K: KeyDetails + Serialize,
     {
         debug!("verifying subkey binding: {self:#?} - {signer:#?} - {signee:#?}",);
 
@@ -650,10 +650,10 @@ impl Signature {
     /// The subkey is expected as `signer`, the primary key as `signee`.
     ///
     /// "Primary Key Binding Signature (type ID 0x19)"
-    pub fn verify_primary_key_binding<P, K>(&self, signer: &P, signee: &K) -> Result<()>
+    pub fn verify_primary_key_binding<V, K>(&self, signer: &V, signee: &K) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
-        K: VerifyingKey + Serialize,
+        V: VerifyingKey + Serialize,
+        K: KeyDetails + Serialize,
     {
         debug!("verifying primary key binding: {self:#?} - {signer:#?} - {signee:#?}");
 
@@ -692,17 +692,18 @@ impl Signature {
     }
 
     /// Verifies a direct key signature or a revocation.
-    pub fn verify_key<P>(&self, key: &P) -> Result<()>
+    pub fn verify_key<V>(&self, key: &V) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
+        V: VerifyingKey + Serialize,
     {
         self.verify_key_third_party(key, key)
     }
 
     /// Verifies a third-party direct key signature or a revocation.
-    pub fn verify_key_third_party<P>(&self, signee: &P, signer: &P) -> Result<()>
+    pub fn verify_key_third_party<V, K>(&self, signee: &K, signer: &V) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
+        V: VerifyingKey + Serialize,
+        K: KeyDetails + Serialize,
     {
         debug!("verifying direct signature: {self:#?} - signer {signer:#?}, signee {signee:#?}");
 

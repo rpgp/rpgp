@@ -61,7 +61,7 @@ impl EncryptedSecretParams {
     pub fn unlock(
         &self,
         pw: &Password,
-        pub_key: &(impl VerifyingKey + Serialize),
+        pub_key: &(impl KeyDetails + Serialize),
         secret_tag: Option<Tag>,
     ) -> Result<PlainSecretParams> {
         // Argon2 is only used with AEAD (S2K usage octet 253).

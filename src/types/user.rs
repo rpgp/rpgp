@@ -6,7 +6,7 @@ use crate::{
     errors::{ensure, Result},
     packet::{PacketTrait, Signature, UserAttribute, UserId},
     ser::Serialize,
-    types::{Tag, VerifyingKey},
+    types::{KeyDetails, Tag, VerifyingKey},
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -36,9 +36,9 @@ impl SignedUser {
     }
 
     /// Verify all signatures (for self-signatures). If signatures is empty, this fails.
-    pub fn verify_bindings<P>(&self, key: &P) -> Result<()>
+    pub fn verify_bindings<V>(&self, key: &V) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
+        V: VerifyingKey + Serialize,
     {
         debug!("verify signed user {self:#?}");
         ensure!(!self.signatures.is_empty(), "no signatures found");
@@ -51,10 +51,10 @@ impl SignedUser {
     }
 
     /// Verify all signatures (for third-party signatures). If signatures is empty, this fails.
-    pub fn verify_third_party<P, K>(&self, signee: &P, signer: &K) -> Result<()>
+    pub fn verify_third_party<K, V>(&self, signee: &K, signer: &V) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
-        K: VerifyingKey + Serialize,
+        K: KeyDetails + Serialize,
+        V: VerifyingKey + Serialize,
     {
         debug!("verify signed user {self:#?} with signer {signer:#?}");
         ensure!(!self.signatures.is_empty(), "no signatures found");
@@ -116,9 +116,9 @@ impl SignedUserAttribute {
     }
 
     /// Verify all signatures (for self-signatures). If signatures is empty, this fails.
-    pub fn verify_bindings<P>(&self, key: &P) -> Result<()>
+    pub fn verify_bindings<V>(&self, key: &V) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
+        V: VerifyingKey + Serialize,
     {
         debug!("verify signed attribute {self:?}");
         ensure!(!self.signatures.is_empty(), "no signatures found");
@@ -131,10 +131,10 @@ impl SignedUserAttribute {
     }
 
     /// Verify all signatures (for third-party signatures). If signatures is empty, this fails.
-    pub fn verify_third_party<P, K>(&self, signee: &P, signer: &K) -> Result<()>
+    pub fn verify_third_party<K, V>(&self, signee: &K, signer: &V) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
-        K: VerifyingKey + Serialize,
+        K: KeyDetails + Serialize,
+        V: VerifyingKey + Serialize,
     {
         debug!("verify signed attribute {self:#?} with signer {signer:#?}");
         ensure!(!self.signatures.is_empty(), "no signatures found");

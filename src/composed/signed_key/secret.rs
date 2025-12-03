@@ -246,9 +246,9 @@ impl SignedSecretSubKey {
         SignedSecretSubKey { key, signatures }
     }
 
-    pub fn verify_bindings<P>(&self, key: &P) -> Result<()>
+    pub fn verify_bindings<V>(&self, key: &V) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
+        V: VerifyingKey + Serialize,
     {
         ensure!(!self.signatures.is_empty(), "missing subkey bindings");
 
