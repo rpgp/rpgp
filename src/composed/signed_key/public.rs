@@ -5,7 +5,7 @@ use rand::{CryptoRng, Rng};
 
 use crate::{
     armor,
-    composed::{signed_key::SignedKeyDetails, ArmorOptions},
+    composed::{self, signed_key::SignedKeyDetails, ArmorOptions},
     crypto::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
@@ -15,7 +15,8 @@ use crate::{
     ser::Serialize,
     types::{
         EncryptionKey, EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength,
-        PkeskBytes, PublicParams, SignatureBytes, Tag, Timestamp, VerifyingKey,
+        Password, PkeskBytes, PublicParams, SignatureBytes, SigningKey, Tag, Timestamp,
+        VerifyingKey,
     },
 };
 
@@ -215,6 +216,28 @@ impl Serialize for SignedPublicKey {
         sum += self.details.write_len();
         sum += self.public_subkeys.write_len();
         sum
+    }
+}
+
+impl SignedPublicKey {
+    pub fn from_signer<R, K>(
+        mut rng: R,
+        sec_key: &K,
+        primary_key: packet::PublicKey,
+        details: composed::KeyDetails,
+        key_pw: &Password,
+        public_subkeys: Vec<SignedPublicSubKey>,
+    ) -> Result<Self>
+    where
+        R: CryptoRng + Rng,
+        K: SigningKey,
+    {
+        let details = details.sign(&mut rng, sec_key, &primary_key, key_pw)?;
+        Ok(Self {
+            primary_key,
+            details,
+            public_subkeys,
+        })
     }
 }
 
