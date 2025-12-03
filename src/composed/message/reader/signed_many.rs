@@ -15,14 +15,36 @@ use crate::{
 
 const BUFFER_SIZE: usize = 8 * 1024;
 
+/// A signature packet before reading the full message
 #[derive(Debug)]
 pub enum SignaturePacket {
     Ops {
         signature: crate::packet::OnePassSignature,
     },
     Signature {
-        signature: crate::packet::Signature,
+        signature: Signature,
     },
+}
+
+/// A signature packet after reading the full message
+#[derive(Debug)]
+pub enum FullSignaturePacket {
+    Ops {
+        ops: crate::packet::OnePassSignature,
+        signature: Signature,
+    },
+    Signature {
+        signature: Signature,
+    },
+}
+
+impl FullSignaturePacket {
+    pub fn signature(&self) -> &Signature {
+        match self {
+            Self::Ops { signature, .. } => signature,
+            Self::Signature { signature } => signature,
+        }
+    }
 }
 
 impl SignaturePacket {
@@ -85,7 +107,7 @@ impl SignaturePacket {
 #[derive(derive_more::Debug)]
 pub enum SignatureManyReader<'a> {
     Init {
-        /// (One Pass) Signature packet
+        /// Signature packets
         packets: Vec<SignaturePacket>,
         /// Running hasher
         hashers: Vec<Option<NormalizingHasher>>,
@@ -93,7 +115,7 @@ pub enum SignatureManyReader<'a> {
         source: Box<Message<'a>>,
     },
     Body {
-        /// One Pass Signature packet
+        /// Signature packets
         packets: Vec<SignaturePacket>,
         /// Running hasher
         hashers: Vec<Option<NormalizingHasher>>,
@@ -103,14 +125,12 @@ pub enum SignatureManyReader<'a> {
         buffer: BytesMut,
     },
     Done {
-        /// One Pass Signature packet
-        packets: Vec<SignaturePacket>,
         /// Finalized hashes
         hashes: Vec<Option<Box<[u8]>>>,
         /// Data source
         source: Box<Message<'a>>,
         /// Final signatures
-        signatures: Vec<Signature>,
+        signatures: Vec<FullSignaturePacket>,
     },
     Error,
 }
@@ -140,11 +160,13 @@ impl<'a> SignatureManyReader<'a> {
 
     pub fn num_one_pass_signatures(&self) -> usize {
         match self {
-            Self::Init { packets, .. }
-            | Self::Body { packets, .. }
-            | Self::Done { packets, .. } => packets
+            Self::Init { packets, .. } | Self::Body { packets, .. } => packets
                 .iter()
                 .filter(|p| matches!(p, SignaturePacket::Ops { .. }))
+                .count(),
+            Self::Done { signatures, .. } => signatures
+                .iter()
+                .filter(|p| matches!(p, FullSignaturePacket::Ops { .. }))
                 .count(),
             Self::Error => panic!("SignatureOnePassManyReader errored"),
         }
@@ -152,11 +174,13 @@ impl<'a> SignatureManyReader<'a> {
 
     pub fn num_regular_signatures(&self) -> usize {
         match self {
-            Self::Init { packets, .. }
-            | Self::Body { packets, .. }
-            | Self::Done { packets, .. } => packets
+            Self::Init { packets, .. } | Self::Body { packets, .. } => packets
                 .iter()
                 .filter(|p| matches!(p, SignaturePacket::Signature { .. }))
+                .count(),
+            Self::Done { signatures, .. } => signatures
+                .iter()
+                .filter(|p| matches!(p, FullSignaturePacket::Signature { .. }))
                 .count(),
             Self::Error => panic!("SignatureOnePassManyReader errored"),
         }
@@ -175,12 +199,12 @@ impl<'a> SignatureManyReader<'a> {
         match self {
             Self::Init { .. } => None,
             Self::Body { .. } => None,
-            Self::Done { signatures, .. } => signatures.get(index),
+            Self::Done { signatures, .. } => signatures.get(index).map(|s| s.signature()),
             Self::Error => panic!("SignatureOnePassManyReader errored"),
         }
     }
 
-    pub fn signatures(&self) -> Option<&[Signature]> {
+    pub fn signatures(&self) -> Option<&[FullSignaturePacket]> {
         match self {
             Self::Init { .. } => None,
             Self::Body { .. } => None,
@@ -290,8 +314,8 @@ impl<'a> SignatureManyReader<'a> {
                             .iter()
                             .filter(|p| matches!(p, SignaturePacket::Ops { .. }))
                             .count();
-                        let mut signatures = Vec::with_capacity(num_ops);
-                        while signatures.len() < num_ops {
+                        let mut one_pass_signatures = Vec::with_capacity(num_ops);
+                        while one_pass_signatures.len() < num_ops {
                             // read next packet from stream, if any
                             let Some(res) = packet_parser.next() else {
                                 // no more packets
@@ -326,7 +350,7 @@ impl<'a> SignatureManyReader<'a> {
                                 res.map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
                             if let Packet::Signature(signature) = packet {
-                                signatures.push(signature);
+                                one_pass_signatures.push(signature);
                             } else {
                                 return Err(io::Error::new(
                                     io::ErrorKind::UnexpectedEof,
@@ -338,18 +362,21 @@ impl<'a> SignatureManyReader<'a> {
                             };
                         }
 
-                        // reverse the order of the signatures as we collected them in the opposite order.
-                        let signatures: Vec<_> = signatures.into_iter().rev().collect();
-
                         // calculate final hashes
                         let mut hashes = Vec::with_capacity(packets.len());
+                        let mut signatures = Vec::with_capacity(packets.len());
 
-                        let mut j = 0; // index into signatures
-                        for (hasher, packet) in hashers.into_iter().zip(packets.iter()) {
+                        for (hasher, packet) in hashers.into_iter().zip(packets.into_iter()) {
                             if let Some(mut hasher) = hasher {
                                 match packet {
-                                    SignaturePacket::Ops { signature: packet } => {
-                                        if !packet.matches(&signatures[j]) {
+                                    SignaturePacket::Ops { signature: ops } => {
+                                        let Some(signature) = one_pass_signatures.pop() else {
+                                            return Err(io::Error::new(
+                                                io::ErrorKind::UnexpectedEof,
+                                                "missing signature packet",
+                                            ));
+                                        };
+                                        if !ops.matches(&signature) {
                                             debug!(
                                                 "Ops and Signature don't match, rejecting this signature"
                                             );
@@ -357,7 +384,7 @@ impl<'a> SignatureManyReader<'a> {
                                             // If Ops and Signature don't match, we consider the signature invalid.
                                             // Return an empty hash to model this.
                                             hashes.push(None);
-                                        } else if let Some(config) = signatures[j].config() {
+                                        } else if let Some(config) = signature.config() {
                                             debug!("calculating final hash");
 
                                             let len = config
@@ -373,11 +400,12 @@ impl<'a> SignatureManyReader<'a> {
                                             hashes.push(None);
                                         }
 
-                                        j += 1;
+                                        signatures
+                                            .push(FullSignaturePacket::Ops { ops, signature });
                                     }
-                                    SignaturePacket::Signature { signature: packet } => {
+                                    SignaturePacket::Signature { signature } => {
                                         // regular signature
-                                        let config = packet.config().ok_or_else(|| {
+                                        let config = signature.config().ok_or_else(|| {
                                             io::Error::new(
                                                 io::ErrorKind::InvalidData,
                                                 "inconsistent signature state",
@@ -392,6 +420,8 @@ impl<'a> SignatureManyReader<'a> {
                                         })?);
 
                                         hashes.push(Some(hasher.finalize()));
+                                        signatures
+                                            .push(FullSignaturePacket::Signature { signature });
                                     }
                                 }
                             } else {
@@ -404,7 +434,6 @@ impl<'a> SignatureManyReader<'a> {
                         let source = parts.into_message(reader);
 
                         *self = Self::Done {
-                            packets,
                             signatures,
                             hashes,
                             source: Box::new(source),
@@ -421,13 +450,11 @@ impl<'a> SignatureManyReader<'a> {
                     return Ok(());
                 }
                 Self::Done {
-                    packets,
                     hashes,
                     source,
                     signatures,
                 } => {
                     *self = Self::Done {
-                        packets,
                         hashes,
                         source,
                         signatures,
