@@ -11,7 +11,7 @@ use crate::{
         UserAttribute, UserId,
     },
     ser::Serialize,
-    types::{CompressionAlgorithm, KeyVersion, Password, SigningKey, Timestamp, VerifyingKey},
+    types::{self, CompressionAlgorithm, KeyVersion, Password, SigningKey, Timestamp},
 };
 
 /// This specifies associated user id and attribute components, plus some metadata for producing
@@ -65,7 +65,7 @@ impl KeyDetails {
     where
         R: CryptoRng + Rng,
         K: SigningKey,
-        P: VerifyingKey + Serialize,
+        P: types::KeyDetails + Serialize,
     {
         let subpackets_with_metadata = || -> Result<Vec<Subpacket>> {
             Ok(vec![

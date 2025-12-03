@@ -59,9 +59,9 @@ impl SignedKeyDetails {
         }
     }
 
-    fn verify_users<P>(&self, key: &P) -> Result<()>
+    fn verify_users<V>(&self, key: &V) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
+        V: VerifyingKey + Serialize,
     {
         for user in &self.users {
             user.verify_bindings(key)?;
@@ -70,9 +70,9 @@ impl SignedKeyDetails {
         Ok(())
     }
 
-    fn verify_attributes<P>(&self, key: &P) -> Result<()>
+    fn verify_attributes<V>(&self, key: &V) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
+        V: VerifyingKey + Serialize,
     {
         for attr in &self.user_attributes {
             attr.verify_bindings(key)?;
@@ -81,9 +81,9 @@ impl SignedKeyDetails {
         Ok(())
     }
 
-    fn verify_revocation_signatures<P>(&self, key: &P) -> Result<()>
+    fn verify_revocation_signatures<V>(&self, key: &V) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
+        V: VerifyingKey + Serialize,
     {
         for sig in &self.revocation_signatures {
             sig.verify_key(key)?;
@@ -92,9 +92,9 @@ impl SignedKeyDetails {
         Ok(())
     }
 
-    fn verify_direct_signatures<P>(&self, key: &P) -> Result<()>
+    fn verify_direct_signatures<V>(&self, key: &V) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
+        V: VerifyingKey + Serialize,
     {
         for sig in &self.direct_signatures {
             sig.verify_key(key)?;
@@ -103,9 +103,9 @@ impl SignedKeyDetails {
         Ok(())
     }
 
-    pub fn verify_bindings<P>(&self, key: &P) -> Result<()>
+    pub fn verify_bindings<V>(&self, key: &V) -> Result<()>
     where
-        P: VerifyingKey + Serialize,
+        V: VerifyingKey + Serialize,
     {
         self.verify_users(key)?;
         self.verify_attributes(key)?;

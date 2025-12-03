@@ -25,7 +25,10 @@ use crate::{
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::{EskType, PkeskBytes, PublicParams, VerifyingKey, *},
+    types::{
+        EcdhPublicParams, EncryptedSecretParams, EskType, KeyDetails, KeyVersion, Mpi, PkeskBytes,
+        PublicParams, S2kParams, StringToKey, Tag,
+    },
     util::TeeWriter,
 };
 
@@ -296,7 +299,7 @@ impl PlainSecretParams {
         &self,
         passphrase: &[u8],
         s2k_params: S2kParams,
-        pub_key: &(impl VerifyingKey + Serialize),
+        pub_key: &(impl KeyDetails + Serialize),
         secret_tag: Option<Tag>,
     ) -> Result<EncryptedSecretParams> {
         let version = pub_key.version();
@@ -402,7 +405,7 @@ impl PlainSecretParams {
         recipient: &P,
     ) -> Result<PlainSessionKey>
     where
-        P: VerifyingKey,
+        P: KeyDetails,
     {
         let decrypted_key = match (self, values) {
             (PlainSecretParams::RSA(ref priv_key), PkeskBytes::Rsa { mpi }) => {
@@ -445,7 +448,7 @@ impl PlainSecretParams {
                 #[cfg(feature = "draft-wussler-openpgp-forwarding")]
                 if let EcdhPublicParams::Curve25519 {
                     ecdh_kdf_type:
-                        EcdhKdfType::Replaced {
+                        crate::types::EcdhKdfType::Replaced {
                             replacement_fingerprint,
                         },
                     ..
@@ -796,7 +799,7 @@ impl PlainSecretParams {
 pub(crate) fn s2k_usage_aead(
     derived: &[u8],
     secret_tag: Tag,
-    pub_key: &(impl VerifyingKey + Serialize),
+    pub_key: &(impl KeyDetails + Serialize),
     sym_alg: SymmetricKeyAlgorithm,
     aead_mode: AeadAlgorithm,
 ) -> Result<([u8; 32], Vec<u8>)> {

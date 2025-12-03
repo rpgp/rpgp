@@ -156,7 +156,7 @@ impl SigningKey for Box<&dyn SigningKey> {
 
 /// Describes keys that can encrypt plain data (i.e. a session key) into data for a
 /// [PKESK](https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio).
-pub trait EncryptionKey: VerifyingKey {
+pub trait EncryptionKey: KeyDetails {
     fn encrypt<R: rand::CryptoRng + rand::Rng>(
         &self,
         rng: R,

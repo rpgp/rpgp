@@ -16,7 +16,7 @@ use crate::{
         SubpacketData, SubpacketType,
     },
     ser::Serialize,
-    types::{Fingerprint, KeyId, KeyVersion, Password, SigningKey, Tag, Timestamp, VerifyingKey},
+    types::{Fingerprint, KeyDetails, KeyId, KeyVersion, Password, SigningKey, Tag, Timestamp},
     util::NormalizingHasher,
 };
 
@@ -226,7 +226,7 @@ impl SignatureConfig {
     ) -> Result<Signature>
     where
         K: SigningKey,
-        P: VerifyingKey + Serialize,
+        P: KeyDetails + Serialize,
     {
         self.sign_certification_third_party(key, key_pw, pub_key, tag, id)
     }
@@ -241,7 +241,7 @@ impl SignatureConfig {
         id: &impl Serialize,
     ) -> Result<Signature>
     where
-        P: VerifyingKey + Serialize,
+        P: KeyDetails + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signer.version() == KeyVersion::V4)
@@ -321,8 +321,8 @@ impl SignatureConfig {
     ) -> Result<Signature>
     where
         K: SigningKey,
-        P: VerifyingKey + Serialize,
-        L: VerifyingKey + Serialize,
+        P: KeyDetails + Serialize,
+        L: KeyDetails + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signer.version() == KeyVersion::V4)
@@ -367,8 +367,8 @@ impl SignatureConfig {
     ) -> Result<Signature>
     where
         K: SigningKey,
-        P: VerifyingKey + Serialize,
-        L: VerifyingKey + Serialize,
+        P: KeyDetails + Serialize,
+        L: KeyDetails + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signer.version() == KeyVersion::V4)
@@ -402,7 +402,7 @@ impl SignatureConfig {
     pub fn sign_key<K, P>(self, signing_key: &K, key_pw: &Password, key: &P) -> Result<Signature>
     where
         K: SigningKey,
-        P: VerifyingKey + Serialize,
+        P: KeyDetails + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signing_key.version() == KeyVersion::V4)

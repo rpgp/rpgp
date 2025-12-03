@@ -171,7 +171,7 @@ impl PublicSubkey {
     ) -> Result<Signature>
     where
         K: SigningKey,
-        P: VerifyingKey + Serialize,
+        P: KeyDetails + Serialize,
     {
         let mut config =
             SignatureConfig::from_key(rng, primary_sec_key, SignatureType::SubkeyBinding)?;
@@ -417,7 +417,7 @@ impl PubKeyInner {
     }
 }
 
-pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: VerifyingKey>(
+pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
     key: &K,
     mut rng: R,
     plain: &[u8],
@@ -1111,7 +1111,7 @@ mod tests {
         #[ignore]
         fn public_key_packet_roundtrip(packet: PublicKey) {
             // dyn compat
-            let _: Box<&dyn VerifyingKey> = Box::new(&packet);
+            let _: Box<&dyn KeyDetails> = Box::new(&packet);
 
             let mut buf = Vec::new();
             packet.to_writer(&mut buf)?;
