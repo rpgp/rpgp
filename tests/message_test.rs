@@ -9,7 +9,7 @@ extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
-use std::fs::File;
+use std::{fs::File, io::BufReader};
 
 use pgp::{
     composed::{
@@ -17,7 +17,7 @@ use pgp::{
         MessageBuilder, PlainSessionKey, SecretKeyParamsBuilder, SignedPublicKey, SignedSecretKey,
     },
     crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
-    packet::{LiteralData, Packet},
+    packet::{LiteralData, Packet, PacketParser},
     ser::Serialize,
     types::{KeyDetails, KeyId, Password},
 };
@@ -1019,34 +1019,18 @@ fn message_parsing_pqc_pkesk() {
     assert_eq!(esk.len(), 2);
 }
 
+/// inline-sign a message with quite a lot of keys, producing a deeply nested message structure
 #[test]
 fn message_many_one_pass_signatures() {
-    // inline-sign a message with quite a lot of keys, producing a deeply nested message structure
-
     pretty_env_logger::try_init().ok();
 
     const PLAIN: &str = "hello";
-    // number of private keys to generate and sign with
-    const NUM: usize = 2000;
 
     let mut rng = ChaCha8Rng::seed_from_u64(0);
 
     // make NUM keys that can produce data signatures
-    let keys: Vec<_> = (0..NUM)
-        .map(|count| {
-            // legal v4 key, with user id
-            let key_params = SecretKeyParamsBuilder::default()
-                .key_type(KeyType::Ed25519)
-                .can_sign(true)
-                .primary_user_id(format!("test{}", count))
-                .build()
-                .unwrap();
-
-            key_params
-                .generate(&mut rng)
-                .expect("failed to generate secret key")
-        })
-        .collect();
+    const NUM: usize = 2000;
+    let keys = make_signing_keys(&mut rng, NUM);
 
     let mut builder = MessageBuilder::from_bytes("", PLAIN.as_bytes());
 
@@ -1083,35 +1067,19 @@ fn message_many_one_pass_signatures() {
     }
 }
 
+/// produce a message that has been prefix-signed by quite a lot of keys,
+/// then attempt to verify the signatures in the message
 #[test]
 fn message_many_prefix_signatures() {
-    // produce a message that has been prefix-signed by quite a lot of keys,
-    // then attempt to verify the signatures in the message
-
     pretty_env_logger::try_init().ok();
-
-    const PLAIN: &str = "hello";
-    // number of private keys to generate and sign with
-    const NUM: usize = 2000;
 
     let mut rng = ChaCha8Rng::seed_from_u64(0);
 
     // make NUM keys that can produce data signatures
-    let keys: Vec<_> = (0..NUM)
-        .map(|count| {
-            // legal v4 key, with user id
-            let key_params = SecretKeyParamsBuilder::default()
-                .key_type(KeyType::Ed25519)
-                .can_sign(true)
-                .primary_user_id(format!("test{}", count))
-                .build()
-                .unwrap();
+    const NUM: usize = 2000;
+    let keys = make_signing_keys(&mut rng, NUM);
 
-            key_params
-                .generate(&mut rng)
-                .expect("failed to generate secret key")
-        })
-        .collect();
+    const PLAIN: &str = "hello";
 
     let sigs: Vec<_> = keys
         .iter()
@@ -1132,8 +1100,6 @@ fn message_many_prefix_signatures() {
 
     let lit = LiteralData::from_bytes(&[][..], PLAIN.as_bytes().into()).expect("literal");
     packets.push(lit.into());
-
-    eprintln!("{:#?}", packets);
 
     let signed = packets.to_bytes().expect("bytes");
 
@@ -1160,4 +1126,128 @@ fn message_many_prefix_signatures() {
             .verify_nested_explicit(i, key.primary_key.public_key())
             .expect("signed");
     }
+}
+
+/// produce a message that mixes prefix-signed and one pass signatures by quite a lot of keys,
+/// then attempt to verify the signatures in the message
+#[test]
+fn message_many_mixed_signatures() {
+    pretty_env_logger::try_init().ok();
+
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    // number of private keys to generate and sign with
+    const NUM: usize = 2000;
+    let keys = make_signing_keys(&mut rng, NUM);
+
+    // order: prefixed first vs. OPS first
+    for order in 0..=1 {
+        let mut packets: Vec<Packet> = Vec::new();
+
+        let mut ops_sigs = 0;
+        let mut prefix_sigs = 0;
+
+        const PLAIN: &str = "hello";
+        let lit = LiteralData::from_bytes(&[][..], PLAIN.as_bytes().into()).expect("literal");
+        packets.push(lit.into());
+
+        for (i, k) in keys.iter().enumerate() {
+            if i % 2 == order {
+                // prefixed sig
+                let sig = DetachedSignature::sign_binary_data(
+                    &mut rng,
+                    &k.primary_key,
+                    &Password::empty(),
+                    HashAlgorithm::Sha256,
+                    PLAIN.as_bytes(),
+                )
+                .expect("sign");
+
+                packets.insert(0, sig.signature.into());
+
+                prefix_sigs += 1;
+            } else {
+                // make ops sig
+
+                let mut builder = MessageBuilder::from_bytes("", PLAIN.as_bytes());
+
+                warn!("signing message");
+                // sign the message with this key
+                builder.sign(&k.primary_key, Password::empty(), HashAlgorithm::Sha256);
+
+                let signed = builder.to_vec(&mut rng).expect("writing");
+                let mut pp = PacketParser::new(BufReader::new(signed.as_slice()));
+                let Ok(Packet::OnePassSignature(ops)) = pp.next().unwrap() else {
+                    panic!("expected OPS");
+                };
+                let _ = pp.next().unwrap();
+                let Ok(Packet::Signature(sig)) = pp.next().unwrap() else {
+                    panic!("expected Signature");
+                };
+
+                packets.insert(0, ops.into());
+                packets.push(sig.into());
+
+                ops_sigs += 1;
+            }
+        }
+
+        let signed = packets.to_bytes().expect("bytes");
+
+        // let mut armored = Vec::new();
+        // pgp::armor::write(
+        //     &packets,
+        //     pgp::armor::BlockType::Message,
+        //     &mut armored,
+        //     None,
+        //     false,
+        // )
+        // .expect("armor");
+        // eprintln!("{}", String::from_utf8_lossy(&armored));
+
+        // parse the message again ...
+        warn!("parsing message");
+        let mut message = Message::from_bytes(&signed[..]).expect("reading");
+
+        eprintln!("msg {:#?}", message);
+
+        let plain = message.as_data_string().unwrap();
+        assert_eq!(plain, PLAIN);
+
+        // ... and try to verify one of the signatures in it
+        warn!("verifying message");
+        assert!(message.is_signed());
+
+        let Message::Signed { reader, .. } = &message else {
+            panic!("invalid message type");
+        };
+        assert_eq!(reader.num_signatures(), keys.len());
+        assert_eq!(reader.num_one_pass_signatures(), ops_sigs);
+        assert_eq!(reader.num_regular_signatures(), prefix_sigs);
+
+        for (i, key) in keys.iter().enumerate() {
+            message
+                .verify_nested_explicit(i, key.primary_key.public_key())
+                .expect("signed");
+        }
+    }
+}
+
+fn make_signing_keys(mut rng: &mut ChaCha8Rng, num: usize) -> Vec<SignedSecretKey> {
+    // make NUM keys that can produce data signatures
+    (0..num)
+        .map(|count| {
+            // legal v4 key, with user id
+            let key_params = SecretKeyParamsBuilder::default()
+                .key_type(KeyType::Ed25519)
+                .can_sign(true)
+                .primary_user_id(format!("test{}", count))
+                .build()
+                .unwrap();
+
+            key_params
+                .generate(&mut rng)
+                .expect("failed to generate secret key")
+        })
+        .collect()
 }
