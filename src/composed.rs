@@ -74,7 +74,7 @@
 //!     .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
 //! builder
 //!     .encrypt_to_key(&mut rng, &signed_public_key.public_subkeys[0])
-//!     .expect("enryption to subkey works");
+//!     .expect("encryption to subkey works");
 //!
 //! // A binary representation of the encrypted OpenPGP message
 //! let encrypted: Vec<u8> = builder.to_vec(&mut rng).unwrap();
