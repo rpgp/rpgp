@@ -2496,11 +2496,11 @@ mod tests {
         let mut data = vec![];
         message.read_to_end(&mut data).expect("read msg");
 
-        let Message::SignedOnePass { reader, .. } = message else {
+        let Message::Signed { reader, .. } = message else {
             panic!("should be a signed message")
         };
 
-        let sig = reader.signature().unwrap();
+        let sig = reader.signature(0).unwrap();
 
         let hashed = &sig.config().unwrap().hashed_subpackets;
         let unhashed = &sig.config().unwrap().unhashed_subpackets;
