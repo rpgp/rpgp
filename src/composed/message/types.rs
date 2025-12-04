@@ -18,7 +18,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        EskType, KeyDetails, Password, PkeskVersion, SecretParams, SkeskVersion, Tag, VerifyingKey,
+        DecryptionKey, EskType, KeyDetails, Password, PkeskVersion, SecretParams, SkeskVersion,
+        Tag, VerifyingKey,
     },
     util::impl_try_from_into,
 };
@@ -1208,7 +1209,7 @@ impl TheRing<'_> {
                             SecretParams::Encrypted(_) => {
                                 // unlock
                                 for pw in &self.key_passwords {
-                                    match $skey.decrypt_session_key(pw, $values, typ) {
+                                    match $skey.decrypt(pw, $values, typ) {
                                         Ok(Ok(session_key)) => {
                                             debug!("decrypted session key");
                                             result.secret_keys[i] = InnerRingResult::Ok;
@@ -1254,14 +1255,14 @@ impl TheRing<'_> {
                 );
                 if esk.match_identity(key.primary_key.public_key()) {
                     let values = esk.values()?;
-                    try_key!(key, key.primary_key.public_key(), values);
+                    try_key!(&key.primary_key, key.primary_key.public_key(), values);
                 }
                 // search subkeys
                 for subkey in &key.secret_subkeys {
                     debug!("checking subkey: {:?}", subkey.legacy_key_id());
                     if esk.match_identity(&subkey.public_key()) {
                         let values = esk.values()?;
-                        try_key!(subkey, subkey.key.public_key(), values);
+                        try_key!(&subkey.key, subkey.key.public_key(), values);
                     }
                 }
             }
