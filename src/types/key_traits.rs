@@ -1,6 +1,7 @@
 use rand::{CryptoRng, Rng};
 
 use crate::{
+    composed::PlainSessionKey,
     crypto::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
@@ -173,5 +174,27 @@ impl<T: EncryptionKey> EncryptionKey for &T {
         typ: EskType,
     ) -> Result<PkeskBytes> {
         (*self).encrypt(rng, plain, typ)
+    }
+}
+
+/// A key that can decrypt encrypted data (i.e. an encrypted session key) from a
+/// [PKESK](https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio).
+pub trait DecryptionKey: KeyDetails {
+    fn decrypt(
+        &self,
+        key_pw: &Password,
+        values: &PkeskBytes,
+        typ: EskType,
+    ) -> Result<Result<PlainSessionKey>>;
+}
+
+impl<T: DecryptionKey> DecryptionKey for &T {
+    fn decrypt(
+        &self,
+        key_pw: &Password,
+        values: &PkeskBytes,
+        typ: EskType,
+    ) -> Result<Result<PlainSessionKey>> {
+        (*self).decrypt(key_pw, values, typ)
     }
 }
