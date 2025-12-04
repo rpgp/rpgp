@@ -1,19 +1,19 @@
 use std::{io, ops::Deref};
 
 use generic_array::GenericArray;
-use log::{debug, warn};
+use log::warn;
 
 use crate::{
     armor,
     composed::{
         signed_key::{SignedKeyDetails, SignedPublicSubKey},
-        ArmorOptions, PlainSessionKey, SignedPublicKey,
+        ArmorOptions, SignedPublicKey,
     },
     crypto::hash::KnownDigest,
     errors::{ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
-    types::{EskType, Imprint, Password, PkeskBytes, Tag, VerifyingKey},
+    types::{Imprint, Tag, VerifyingKey},
 };
 
 /// Represents a secret signed PGP key.
@@ -166,20 +166,6 @@ impl SignedSecretKey {
             public_subkeys,
         )
     }
-
-    /// Decrypts session key using this key.
-    pub fn decrypt_session_key(
-        &self,
-        key_pw: &Password,
-        values: &PkeskBytes,
-        typ: EskType,
-    ) -> Result<Result<PlainSessionKey>> {
-        debug!("decrypt session key");
-
-        self.unlock(key_pw, |pub_params, priv_key| {
-            priv_key.decrypt(pub_params, values, typ, self.primary_key.public_key())
-        })
-    }
 }
 
 impl Serialize for SignedSecretKey {
@@ -263,20 +249,6 @@ impl SignedSecretSubKey {
     /// All binding signatures remain as they are.
     pub fn signed_public_key(&self) -> SignedPublicSubKey {
         SignedPublicSubKey::new(self.key.public_key().clone(), self.signatures.clone())
-    }
-
-    /// Decrypts session key using this key.
-    pub fn decrypt_session_key(
-        &self,
-        key_pw: &Password,
-        values: &PkeskBytes,
-        typ: EskType,
-    ) -> Result<Result<PlainSessionKey>> {
-        debug!("decrypt session key");
-
-        self.unlock(key_pw, |pub_params, priv_key| {
-            priv_key.decrypt(pub_params, values, typ, self.key.public_key())
-        })
     }
 }
 
