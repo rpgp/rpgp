@@ -3,7 +3,14 @@ use std::io::{self, BufRead};
 use bytes::Bytes;
 
 use crate::{
-    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    crypto::{
+        hash::{
+            HashAlgorithm,
+            HashAlgorithm::{Sha256, Sha384, Sha512},
+        },
+        public_key::PublicKeyAlgorithm,
+        sym::SymmetricKeyAlgorithm,
+    },
     errors::{bail, Error, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -235,7 +242,14 @@ impl PublicParams {
     /// key as a signer
     pub fn hash_alg(&self) -> HashAlgorithm {
         match self {
-            PublicParams::AEAD(_) => HashAlgorithm::Sha512, // FIXME?
+            PublicParams::AEAD(params) => match params.sym_alg {
+                // Pick a hash algorithm that is matched with the symmetric algorithm
+                SymmetricKeyAlgorithm::AES256
+                | SymmetricKeyAlgorithm::Camellia256
+                | SymmetricKeyAlgorithm::Twofish => Sha512,
+                SymmetricKeyAlgorithm::AES192 | SymmetricKeyAlgorithm::Camellia192 => Sha384,
+                _ => Sha256,
+            },
 
             PublicParams::RSA(_)
             | PublicParams::DSA(_)
