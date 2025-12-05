@@ -752,6 +752,14 @@ impl Signature {
             .unwrap_or_default()
     }
 
+    /// If the hashed area contains any KeyExpirationTime subpacket, then this
+    /// returns `Some(Duration)` of the first KeyExpirationTime subpacket encountered.
+    ///
+    /// If the hashed area contains no KeyExpirationTime subpacket, this returns `None`.
+    ///
+    /// (Note that a return value of `Some(Duration(0))` also means that no key expiration time
+    /// applies to the target component. This corresponds to a different wire-format
+    /// representation, but is semantically equivalent to `None`.)
     pub fn key_expiration_time(&self) -> Option<Duration> {
         self.config().and_then(|h| {
             h.hashed_subpackets().find_map(|p| match &p.data {
@@ -1029,6 +1037,15 @@ impl Default for SignatureVersion {
     }
 }
 
+/// A signature type defines the meaning of an OpenPGP [`Signature`].
+///
+/// OpenPGP Signatures over data are either [`SignatureType::Binary`] or [`SignatureType::Text`].
+///
+/// Most other signature types are used to form certificates (aka OpenPGP public keys), e.g.
+/// to associate subkeys with a primary key, bind identities to a certificate, and specify
+/// various certificate metadata such as expiration/revocation status, and algorithm preferences.
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-types>
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
@@ -1137,9 +1154,14 @@ pub const CERTIFICATION_SIGNATURE_TYPES: &[SignatureType] = &[
     SignatureType::CertPersona,
 ];
 
+/// Key Flags signature subpacket
+///
+/// A key flag is a semantical annotation to specify which OpenPGP operations a component key
+/// is intended for.
+///
 /// Key flags by default are only 1 byte large, but there are reserved
 /// extensions making them 2 bytes large.
-/// In addition the spec defines them to be arbitrarily large, but this is
+/// In addition, the spec defines them to be arbitrarily large, but this is
 /// not yet used.
 ///
 /// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-key-flags>
@@ -1313,6 +1335,9 @@ impl Serialize for KeyFlags {
     }
 }
 
+/// Encodes the known fields of a [`KeyFlags`].
+///
+/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-key-flags>
 #[bitfield(u16, order = lsb)]
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub struct KnownKeyFlags {
@@ -1342,10 +1367,13 @@ pub struct KnownKeyFlags {
     _padding2: u8,
 }
 
-/// Signals capabilities of the keyholder's OpenPGP software.
+/// Features signature subpacket.
+///
+/// The Features subpacket denotes which advanced OpenPGP features a user's implementation
+/// supports.
 ///
 /// Features are encoded as "N octets of flags", but currently typically use 1 byte.
-/// (Only the first 4 bits have been used so far)
+/// (Only the first 4 bits have been specified so far)
 ///
 /// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-features>
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -1461,7 +1489,7 @@ impl Serialize for Features {
     }
 }
 
-/// Encodes the first byte of a Features.
+/// Encodes the first byte of a [`Features`].
 ///
 /// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-features>
 #[bitfield(u8)]
@@ -1489,6 +1517,16 @@ pub struct KnownFeatures {
     _padding: u8,
 }
 
+/// Notation Data signature subpacket
+///
+/// Used as the payload of a [`SubpacketData::Notation`].
+///
+/// This subpacket describes a "notation" on the signature that the issuer wishes to make.
+/// The notation has a name and a value, each of which are strings of octets.
+/// There may be more than one notation in a signature.
+/// Notations can be used for any extension the issuer of the signature cares to make.
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-notation-data>
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Notation {
     pub readable: bool,
@@ -1496,7 +1534,9 @@ pub struct Notation {
     pub value: Bytes,
 }
 
-/// Codes for revocation reasons
+/// Value of a [`SubpacketData::RevocationReason`] signature subpacket
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-reason-for-revocation>
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum RevocationCode {

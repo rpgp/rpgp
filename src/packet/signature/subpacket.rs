@@ -233,6 +233,11 @@ impl Serialize for SubpacketLength {
     }
 }
 
+/// A subpacket encodes metadata that is included in an OpenPGP [`Signature`] packet.
+///
+/// Signature subpackets are stored in the [`SignatureConfig`](crate::packet::signature::SignatureConfig).
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-subpacket-specifi>
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Subpacket {
     pub is_critical: bool,
