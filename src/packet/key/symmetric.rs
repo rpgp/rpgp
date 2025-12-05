@@ -4,20 +4,14 @@
 
 use std::io::BufRead;
 
-use aead::rand_core::CryptoRng;
-use bytes::{Bytes, BytesMut};
-use hkdf::Hkdf;
+use bytes::Bytes;
 use log::debug;
-use rand::{thread_rng, Rng};
-use sha2::Sha256;
+use rand::{CryptoRng, Rng};
 
 use crate::{
-    crypto::{
-        aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
-        sym::SymmetricKeyAlgorithm, Signer,
-    },
+    crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::{bail, ensure, ensure_eq, unsupported_err},
-    packet::{PacketHeader, PacketTrait, PubKeyInner},
+    packet::{PacketHeader, PacketTrait, PubKeyInner, SignatureVersion},
     ser::Serialize,
     types::{
         EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PkeskBytes,
@@ -123,40 +117,6 @@ impl PersistentSymmetricKey {
     pub fn public_key(&self) -> &super::PublicKey {
         &self.details
     }
-
-    fn calculate_signature(
-        &self,
-        aead: AeadAlgorithm,
-        salt: &[u8; 32],
-        digest: &[u8],
-    ) -> crate::errors::Result<BytesMut> {
-        let SecretParams::Plain(PlainSecretParams::AEAD(plain)) = &self.secret_params else {
-            unimplemented!();
-        };
-
-        let PublicParams::AEAD(public_params) = &self.details.public_params() else {
-            unimplemented!();
-        };
-
-        // use key version as signature version (must currently be 6)
-        let version = self.details.version().into();
-
-        let info = (Tag::Signature, version, aead, public_params.sym_alg);
-
-        let (key, iv) = derive(&plain.key, salt, info);
-
-        // (&self, sym_algorithm: &SymmetricKeyAlgorithm, key: &[u8], nonce: &[u8], associated_data: &[u8], buffer: &mut BytesMut)
-        let mut buf = BytesMut::with_capacity(64);
-
-        // An authentication tag of the size specified by the AEAD mode, created by encrypting the
-        // empty value with the message authentication key and IV computed as described in Section
-        // 7.4, using the symmetric-key cipher of the key and the indicated AEAD mode, with as
-        // additional data the hash digest described in section 5.2.4 of [RFC9580].
-
-        aead.encrypt_in_place(&public_params.sym_alg, &key, &iv, digest, &mut buf)?;
-
-        Ok(buf)
-    }
 }
 
 impl EncryptionKey for PersistentSymmetricKey {
@@ -199,7 +159,7 @@ impl EncryptionKey for PersistentSymmetricKey {
             public_params.sym_alg,
         );
 
-        let (key, iv) = derive(&secret.key, &salt, info);
+        let (key, iv) = crate::crypto::aead_key::SecretKey::derive(&secret.key, &salt, info);
 
         let mut buf = plain.into();
 
@@ -215,45 +175,6 @@ impl EncryptionKey for PersistentSymmetricKey {
     }
 }
 
-impl Signer for PersistentSymmetricKey {
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> crate::errors::Result<SignatureBytes> {
-        // FIXME: should be a parameter?
-        let mut rng = thread_rng();
-
-        let Some(digest_size) = hash.digest_size() else {
-            bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
-        };
-        ensure_eq!(
-            digest.len(),
-            digest_size,
-            "Unexpected digest length {} for hash algorithm {:?}",
-            digest.len(),
-            hash,
-        );
-
-        // The signature consists of this series of values:
-        //
-        // A 1-octet AEAD algorithm (see section 9.6 of [RFC9580]).
-        let aead = AeadAlgorithm::Ocb; // FIXME: should be a parameter
-
-        // 32 octets of salt.
-        // The salt is used to derive the message authentication key and MUST be securely generated
-        // (see section 13.10 of [RFC9580]).
-        let mut salt: [u8; 32] = [0; 32];
-        rng.fill(&mut salt);
-
-        let buf = self.calculate_signature(aead, &salt, digest)?;
-
-        let mut bytes = Vec::new();
-        bytes.push(aead.into());
-        bytes.extend_from_slice(&salt);
-        bytes.extend_from_slice(&buf);
-
-        // TODO: use a separate `SignatureBytes::PSK` variant?
-        Ok(SignatureBytes::Native(bytes.into()))
-    }
-}
-
 impl SigningKey for PersistentSymmetricKey {
     fn sign(
         &self,
@@ -265,9 +186,14 @@ impl SigningKey for PersistentSymmetricKey {
         self.unlock(key_pw, |pub_params, priv_key| {
             use crate::crypto::Signer;
 
+            // FIXME: handle encrypted secret params
+            let SecretParams::Plain(PlainSecretParams::AEAD(secret)) = &self.secret_params else {
+                unimplemented!();
+            };
+
             debug!("unlocked key");
             let sig = match *priv_key {
-                PlainSecretParams::AEAD(ref priv_key) => Signer::sign(self, hash, data)?,
+                PlainSecretParams::AEAD(ref priv_key) => Signer::sign(secret, hash, data)?,
 
                 _ => {
                     unsupported_err!(
@@ -315,8 +241,15 @@ impl VerifyingKey for PersistentSymmetricKey {
             "unexpected tag length"
         );
 
+        // FIXME: handle encrypted secret params
+        let SecretParams::Plain(PlainSecretParams::AEAD(secret)) = &self.secret_params else {
+            unimplemented!();
+        };
+
+        let version = SignatureVersion::V6; // FIXME: should not be fixed
+
         // "buf" is the newly calculated authentication tag
-        let buf = self.calculate_signature(aead, salt.try_into().expect("32"), data)?;
+        let buf = secret.calculate_signature(aead, version, salt.try_into().expect("32"), data)?;
 
         // check if the stored and calculated authentication tags match
         if buf != tag {
@@ -378,37 +311,6 @@ impl Serialize for PersistentSymmetricKey {
     }
 }
 
-/// Key and IV derivation
-/// <https://twisstle.gitlab.io/openpgp-persistent-symmetric-keys/#name-key-and-iv-derivation>
-///
-/// Returns:
-/// - M bits of key, matching the size of SymmetricKeyAlgorithm,
-/// - N bit of IV, matching the nonce size of AeadAlgorithm
-pub(crate) fn derive(
-    persistent_key: &[u8],
-    salt: &[u8; 32],
-    info: (Tag, u8, AeadAlgorithm, SymmetricKeyAlgorithm),
-) -> (Vec<u8>, Vec<u8>) {
-    let (tag, version, aead, sym_alg) = info;
-    let info_bytes: [u8; 4] = [tag.encode(), version, aead.into(), sym_alg.into()];
-
-    let hk = Hkdf::<Sha256>::new(Some(salt), persistent_key);
-
-    // M + N bits are derived using HKDF.
-    // The left-most M bits are used as symmetric algorithm key, the remaining N bits are
-    // used as initialization vector.
-
-    // FIXME: zeroize
-    let mut output = vec![0u8; sym_alg.key_size() + aead.nonce_size()];
-    hk.expand(&info_bytes, &mut output)
-        .expect("expand size is < 255 * HashLength");
-
-    let key = output[0..sym_alg.key_size()].to_vec();
-    let iv = output[sym_alg.key_size()..].to_vec();
-
-    (key, iv)
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -428,13 +330,12 @@ mod tests {
             sym::SymmetricKeyAlgorithm,
         },
         packet::{
-            key::symmetric::{derive, PersistentSymmetricKey},
-            Packet, PacketParser, PubKeyInner, PublicKey,
+            key::symmetric::PersistentSymmetricKey, Packet, PacketParser, PubKeyInner, PublicKey,
         },
         ser::Serialize,
         types::{
             AeadPublicParams, EskType, KeyDetails, KeyVersion, Password, PlainSecretParams,
-            PublicParams, SecretParams, Tag, Timestamp,
+            PublicParams, SecretParams, Timestamp,
         },
     };
 
@@ -462,6 +363,7 @@ mod tests {
 
         let plainsecret = SecretParams::Plain(PlainSecretParams::AEAD(aead_key::SecretKey {
             key: key.to_vec(),
+            sym_alg: SYM_ALG,
         }));
 
         let psk = PersistentSymmetricKey::new(pk, plainsecret).expect("foo");
@@ -613,43 +515,5 @@ QpAiHaqE2GWdapfQFTAq9w2kh1NOzZgzl9VQVYs7XA/CYnhHNt8=
         let _payload = msg.as_data_vec().expect("read");
 
         msg.verify(&psk).expect("ok");
-    }
-
-    /// Key/IV derivation
-    ///
-    /// - persistent key: 16 bytes of 0x00
-    /// - salt: 32 bytes of 0xff
-    /// - info: Signature, Version 6, OCB, AES128
-    ///
-    /// output:
-    /// - key: [e9, de, 26, 72, 2c, fb, 71, 2b, bf, 01, 15, a6, 06, 08, 08, b0]
-    /// - iv: [dc, 1f, 35, cc, 3c, 28, 74, 0f, f4, 37, 09, 9e, ad, c0, 17]
-    #[test]
-    fn psk_derive() {
-        let (key, iv) = derive(
-            &[0; 16],
-            &[0xff; 32],
-            (
-                Tag::Signature,
-                6,
-                AeadAlgorithm::Ocb,
-                SymmetricKeyAlgorithm::AES128,
-            ),
-        );
-
-        assert_eq!(
-            &key,
-            &[
-                0xe9, 0xde, 0x26, 0x72, 0x2c, 0xfb, 0x71, 0x2b, 0xbf, 0x01, 0x15, 0xa6, 0x06, 0x08,
-                0x08, 0xb0
-            ]
-        );
-        assert_eq!(
-            &iv,
-            &[
-                0xdc, 0x1f, 0x35, 0xcc, 0x3c, 0x28, 0x74, 0x0f, 0xf4, 0x37, 0x09, 0x9e, 0xad, 0xc0,
-                0x17
-            ]
-        );
     }
 }
