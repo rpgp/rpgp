@@ -305,6 +305,12 @@ fn subpacket<B: BufRead>(
 
 fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<SignatureBytes> {
     match typ {
+        PublicKeyAlgorithm::AEAD => {
+            let aead = i.read_u8()?.into();
+            let salt = i.read_array()?;
+            let tag = i.rest()?.into();
+            Ok(SignatureBytes::PersistentSymmetric(aead, salt, tag))
+        }
         PublicKeyAlgorithm::RSA | &PublicKeyAlgorithm::RSASign => {
             let v = Mpi::try_from_reader(&mut i)?;
             Ok(SignatureBytes::Mpis(vec![v]))
