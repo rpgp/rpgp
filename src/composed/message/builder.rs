@@ -1528,7 +1528,7 @@ mod tests {
         },
         crypto::sym::SymmetricKeyAlgorithm,
         packet::SubpacketType,
-        types::{EskType, KeyDetails, Timestamp},
+        types::{DecryptionKey, EskType, KeyDetails, Timestamp},
         util::test::{check_strings, random_string, ChaosReader},
     };
 
@@ -2574,7 +2574,7 @@ mod tests {
             panic!("should be pkesk")
         };
 
-        let PlainSessionKey::V3_4 { ref key, .. } = skey.secret_subkeys[0].decrypt_session_key(
+        let PlainSessionKey::V3_4 { ref key, .. } = skey.secret_subkeys[0].decrypt(
             &Password::empty(),
             pkesk.values()?,
             EskType::V3_4,
@@ -2627,11 +2627,8 @@ mod tests {
             panic!("should be pkesk")
         };
 
-        let PlainSessionKey::V6 { ref key } = skey.secret_subkeys[0].decrypt_session_key(
-            &Password::empty(),
-            pkesk.values()?,
-            EskType::V6,
-        )??
+        let PlainSessionKey::V6 { ref key } =
+            skey.secret_subkeys[0].decrypt(&Password::empty(), pkesk.values()?, EskType::V6)??
         else {
             panic!("not a v6 pkesk");
         };

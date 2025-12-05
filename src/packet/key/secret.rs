@@ -6,6 +6,7 @@ use rand::{CryptoRng, Rng};
 
 use super::public::PubKeyInner;
 use crate::{
+    composed::PlainSessionKey,
     crypto::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
@@ -17,8 +18,9 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EddsaLegacyPublicParams, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Password,
-        PlainSecretParams, PublicParams, SecretParams, SignatureBytes, SigningKey, Tag, Timestamp,
+        DecryptionKey, EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails, KeyId,
+        KeyVersion, Password, PkeskBytes, PlainSecretParams, PublicParams, SecretParams,
+        SignatureBytes, SigningKey, Tag, Timestamp,
     },
 };
 
@@ -490,6 +492,32 @@ impl SecretSubkey {
     }
 }
 
+impl DecryptionKey for SecretKey {
+    fn decrypt(
+        &self,
+        key_pw: &Password,
+        values: &PkeskBytes,
+        typ: EskType,
+    ) -> Result<Result<PlainSessionKey>> {
+        self.unlock(key_pw, |pub_params, priv_key| {
+            priv_key.decrypt(pub_params, values, typ, self.public_key())
+        })
+    }
+}
+
+impl DecryptionKey for SecretSubkey {
+    fn decrypt(
+        &self,
+        key_pw: &Password,
+        values: &PkeskBytes,
+        typ: EskType,
+    ) -> Result<Result<PlainSessionKey>> {
+        self.unlock(key_pw, |pub_params, priv_key| {
+            priv_key.decrypt(pub_params, values, typ, self.public_key())
+        })
+    }
+}
+
 fn create_signature(
     pub_params: &PublicParams,
     priv_key: &PlainSecretParams,
@@ -500,6 +528,9 @@ fn create_signature(
 
     debug!("unlocked key");
     match *priv_key {
+        PlainSecretParams::AEAD(_) => {
+            bail!("AEAD can not be used for signing operations with asymmetric keys")
+        }
         PlainSecretParams::RSA(ref priv_key) => {
             let PublicParams::RSA(_) = pub_params else {
                 bail!("inconsistent key");
