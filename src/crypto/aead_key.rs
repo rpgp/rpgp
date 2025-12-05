@@ -120,13 +120,7 @@ impl Signer for SecretKey {
 
         let buf = self.calculate_signature(aead, version, &salt, digest)?;
 
-        let mut bytes = Vec::new();
-        bytes.push(aead.into());
-        bytes.extend_from_slice(&salt);
-        bytes.extend_from_slice(&buf);
-
-        // TODO: use a separate `SignatureBytes::PSK` variant?
-        Ok(SignatureBytes::Native(bytes.into()))
+        Ok(SignatureBytes::PersistentSymmetric(aead, salt, buf.into()))
     }
 }
 
