@@ -105,7 +105,10 @@ impl PlainSecretParams {
                 let key_size = pub_params.sym_alg.key_size();
                 let key = i.take_bytes(key_size)?;
 
-                let key = aead_key::SecretKey { key: key.to_vec() };
+                let key = aead_key::SecretKey {
+                    key: key.to_vec(),
+                    sym_alg: pub_params.sym_alg,
+                };
                 Self::AEAD(key)
             }
             (
@@ -440,7 +443,7 @@ impl PlainSecretParams {
                     encrypted,
                 },
             ) => {
-                let PublicParams::AEAD(pub_param) = pub_params else {
+                let PublicParams::AEAD(_pub_param) = pub_params else {
                     bail!("inconsistent key state");
                 };
 
@@ -452,7 +455,6 @@ impl PlainSecretParams {
                         EskType::V3_4 => 3,
                         EskType::V6 => 6,
                     },
-                    sym_alg: pub_param.sym_alg,
                     salt,
                 })?
             }
