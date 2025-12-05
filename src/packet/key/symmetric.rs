@@ -2,7 +2,10 @@
 //!
 //! Ref <https://twisstle.gitlab.io/openpgp-persistent-symmetric-keys/>
 
-use std::io::BufRead;
+use std::{
+    fmt::{Debug, Formatter},
+    io::BufRead,
+};
 
 use bytes::Bytes;
 use log::debug;
@@ -117,6 +120,18 @@ impl PersistentSymmetricKey {
     pub fn public_key(&self) -> &super::PublicKey {
         &self.details
     }
+
+    pub fn as_unlockable<'a>(
+        &'a self,
+        key_pw: &'a Password,
+    ) -> UnlockablePersistentSymmetricKey<'a> {
+        UnlockablePersistentSymmetricKey { psk: self, key_pw }
+    }
+}
+
+pub struct UnlockablePersistentSymmetricKey<'a> {
+    psk: &'a PersistentSymmetricKey,
+    key_pw: &'a Password,
 }
 
 impl EncryptionKey for PersistentSymmetricKey {
@@ -215,26 +230,53 @@ impl SigningKey for PersistentSymmetricKey {
     }
 }
 
-impl VerifyingKey for PersistentSymmetricKey {
+impl<'a> KeyDetails for UnlockablePersistentSymmetricKey<'a> {
+    fn version(&self) -> KeyVersion {
+        self.psk.version()
+    }
+
+    fn legacy_key_id(&self) -> KeyId {
+        self.psk.legacy_key_id()
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        self.psk.fingerprint()
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.psk.algorithm()
+    }
+
+    fn created_at(&self) -> Timestamp {
+        self.psk.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.psk.expiration()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.psk.public_params()
+    }
+}
+
+impl<'a> Debug for UnlockablePersistentSymmetricKey<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.psk.fmt(f)
+    }
+}
+
+impl<'a> VerifyingKey for UnlockablePersistentSymmetricKey<'a> {
     fn verify(
         &self,
         _hash: HashAlgorithm,
         data: &[u8],
         sig: &SignatureBytes,
     ) -> crate::errors::Result<()> {
-        let SignatureBytes::Native(bytes) = sig else {
+        let SignatureBytes::PersistentSymmetric(aead, salt, tag) = sig else {
             unimplemented!();
         };
 
-        let (aead, rest) = bytes.split_at(1);
-        let (salt, tag) = rest.split_at(32);
-
-        // "tag" is the stored authentication tag from the signature packet
-
-        ensure_eq!(aead.len(), 1, "couldn't find aead byte");
-        let aead: AeadAlgorithm = aead[0].into();
-
-        ensure_eq!(salt.len(), 32, "unexpected salt length");
         ensure_eq!(
             tag.len(),
             aead.tag_size().unwrap_or(0),
@@ -242,14 +284,14 @@ impl VerifyingKey for PersistentSymmetricKey {
         );
 
         // FIXME: handle encrypted secret params
-        let SecretParams::Plain(PlainSecretParams::AEAD(secret)) = &self.secret_params else {
+        let SecretParams::Plain(PlainSecretParams::AEAD(secret)) = &self.psk.secret_params else {
             unimplemented!();
         };
 
         let version = SignatureVersion::V6; // FIXME: should not be fixed
 
         // "buf" is the newly calculated authentication tag
-        let buf = secret.calculate_signature(aead, version, salt.try_into().expect("32"), data)?;
+        let buf = secret.calculate_signature(*aead, version, salt, data)?;
 
         // check if the stored and calculated authentication tags match
         if buf != tag {
@@ -483,7 +525,8 @@ mod tests {
         let (mut msg, _) = Message::from_armor(signed.as_bytes()).expect("parse");
         let _payload = msg.as_data_vec().expect("read");
 
-        msg.verify(&psk).expect("ok");
+        msg.verify(&psk.as_unlockable(&Password::empty()))
+            .expect("ok");
     }
 
     #[test]
@@ -514,6 +557,7 @@ QpAiHaqE2GWdapfQFTAq9w2kh1NOzZgzl9VQVYs7XA/CYnhHNt8=
         let (mut msg, _) = Message::from_armor(MSG.as_bytes()).expect("parse");
         let _payload = msg.as_data_vec().expect("read");
 
-        msg.verify(&psk).expect("ok");
+        msg.verify(&psk.as_unlockable(&Password::empty()))
+            .expect("ok");
     }
 }
