@@ -22,9 +22,9 @@ use crate::{
 pub struct SecretKey {
     #[debug("..")]
     #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
-    pub(crate) key: Vec<u8>, // sized to match the sym_alg in the public key part
+    pub(crate) key: Vec<u8>, // sized to match the sym_alg
 
-    pub(crate) sym_alg: SymmetricKeyAlgorithm,
+    pub(crate) sym_alg: SymmetricKeyAlgorithm, // (copy of the information from the public part)
 }
 
 pub struct EncryptionFields<'a> {
@@ -46,16 +46,13 @@ impl SecretKey {
 
         let (key, iv) = Self::derive(&self.key, salt, info);
 
-        // (&self, sym_algorithm: &SymmetricKeyAlgorithm, key: &[u8], nonce: &[u8], associated_data: &[u8], buffer: &mut BytesMut)
-        let mut buf = BytesMut::with_capacity(64);
-
         // An authentication tag of the size specified by the AEAD mode, created by encrypting the
         // empty value with the message authentication key and IV computed as described in Section
         // 7.4, using the symmetric-key cipher of the key and the indicated AEAD mode, with as
         // additional data the hash digest described in section 5.2.4 of [RFC9580].
 
+        let mut buf = BytesMut::with_capacity(64);
         aead.encrypt_in_place(&self.sym_alg, &key, &iv, digest, &mut buf)?;
-
         Ok(buf)
     }
 
@@ -129,7 +126,7 @@ impl Decryptor for SecretKey {
 
     fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
         let info = (
-            Tag::PublicKeyEncryptedSessionKey, // FIXME: does this need to be flexible?
+            Tag::PublicKeyEncryptedSessionKey,
             data.version,
             data.aead,
             self.sym_alg,
