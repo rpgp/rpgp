@@ -12,7 +12,7 @@ use log::debug;
 use rand::{CryptoRng, Rng};
 
 use crate::{
-    crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm, Signer},
     errors::{bail, ensure, ensure_eq, unsupported_err},
     packet::{PacketHeader, PacketTrait, PubKeyInner, SignatureVersion},
     ser::Serialize,
@@ -198,26 +198,17 @@ impl SigningKey for PersistentSymmetricKey {
         data: &[u8],
     ) -> crate::errors::Result<SignatureBytes> {
         let mut signature: Option<SignatureBytes> = None;
-        self.unlock(key_pw, |pub_params, priv_key| {
-            use crate::crypto::Signer;
-
-            // FIXME: handle encrypted secret params
-            let SecretParams::Plain(PlainSecretParams::AEAD(secret)) = &self.secret_params else {
-                unimplemented!();
+        self.unlock(key_pw, |_pub_params, priv_key| {
+            let PlainSecretParams::AEAD(secret) = &priv_key else {
+                unsupported_err!(
+                    "Unsupported signing algorithm {:?} for a persistent symmetric key",
+                    priv_key
+                );
             };
 
             debug!("unlocked key");
-            let sig = match *priv_key {
-                PlainSecretParams::AEAD(ref priv_key) => Signer::sign(secret, hash, data)?,
 
-                _ => {
-                    unsupported_err!(
-                        "Unsupported signing algorithm {:?} for a persistent symmetric key",
-                        priv_key
-                    );
-                }
-            };
-
+            let sig = secret.sign(hash, data)?;
             signature.replace(sig);
             Ok(())
         })??;
