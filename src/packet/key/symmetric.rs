@@ -12,14 +12,15 @@ use log::debug;
 use rand::{CryptoRng, Rng};
 
 use crate::{
+    composed::PlainSessionKey,
     crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm, Signer},
     errors::{bail, ensure, ensure_eq, unsupported_err},
     packet::{PacketHeader, PacketTrait, PubKeyInner, SignatureVersion},
     ser::Serialize,
     types::{
-        EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PkeskBytes,
-        PlainSecretParams, PublicParams, SecretParams, SignatureBytes, SigningKey, Tag, Timestamp,
-        VerifyingKey,
+        DecryptionKey, EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion,
+        Password, PkeskBytes, PlainSecretParams, PublicParams, SecretParams, SignatureBytes,
+        SigningKey, Tag, Timestamp, VerifyingKey,
     },
 };
 
@@ -221,6 +222,28 @@ impl SigningKey for PersistentSymmetricKey {
     }
 }
 
+impl DecryptionKey for PersistentSymmetricKey {
+    fn decrypt(
+        &self,
+        key_pw: &Password,
+        values: &PkeskBytes,
+        typ: EskType,
+    ) -> crate::errors::Result<crate::errors::Result<PlainSessionKey>> {
+        self.unlock(key_pw, |pub_params, sec_params| {
+            debug!("unlocked key");
+
+            let PlainSecretParams::AEAD(_secret) = &sec_params else {
+                unsupported_err!(
+                    "Unsupported encryption algorithm {:?} for a persistent symmetric key",
+                    sec_params
+                );
+            };
+
+            Ok(sec_params.decrypt(pub_params, values, typ, &self))
+        })?
+    }
+}
+
 impl<'a> KeyDetails for UnlockablePersistentSymmetricKey<'a> {
     fn version(&self) -> KeyVersion {
         self.psk.version()
@@ -367,7 +390,7 @@ mod tests {
         },
         ser::Serialize,
         types::{
-            AeadPublicParams, EskType, KeyDetails, KeyVersion, Password, PlainSecretParams,
+            AeadPublicParams, DecryptionKey, EskType, KeyVersion, Password, PlainSecretParams,
             PublicParams, SecretParams, Timestamp,
         },
     };
@@ -474,18 +497,10 @@ mod tests {
             unimplemented!();
         };
 
-        let SecretParams::Plain(sec_params) = &psk.secret_params else {
-            unimplemented!()
-        };
-
-        let sk = sec_params
-            .decrypt(
-                psk.public_params(),
-                pkesk.values().unwrap(),
-                EskType::V6, // FIXME: generalize
-                &psk,
-            )
-            .expect("decryption failed");
+        let sk = psk
+            .decrypt(&Password::empty(), pkesk.values().unwrap(), EskType::V6)
+            .expect("decryption")
+            .expect("decryption");
 
         let mut dec = msg.decrypt_with_session_key(sk).expect("decryption");
 
