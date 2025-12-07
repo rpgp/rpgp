@@ -418,7 +418,7 @@ mod tests {
         let key: [u8; SYM_ALG.key_size()] = rng.gen();
 
         let plainsecret = SecretParams::Plain(PlainSecretParams::AEAD(aead_key::SecretKey {
-            key: key.to_vec(),
+            key: key.to_vec().into(),
             sym_alg: SYM_ALG,
         }));
 

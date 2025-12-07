@@ -22,7 +22,7 @@ use crate::{
 pub struct SecretKey {
     #[debug("..")]
     #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
-    pub(crate) key: Vec<u8>, // sized to match the sym_alg
+    pub(crate) key: Box<[u8]>, // sized to match the sym_alg
 
     pub(crate) sym_alg: SymmetricKeyAlgorithm, // (copy of the information from the public part)
 }
@@ -168,9 +168,9 @@ mod tests {
     };
 
     prop_compose! {
-        pub fn key_gen()(seed: u64) -> Vec<u8> {
+        pub fn key_gen()(seed: u64) -> Box<[u8]> {
             let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            let mut key   = vec![0u8 ;32]; // FIXME: size depends on sym alg!
+            let mut key :Box<[u8]>  = vec![0u8 ;32].into(); // FIXME: size depends on sym alg!
 
             rng.fill(&mut key[..]);
 
