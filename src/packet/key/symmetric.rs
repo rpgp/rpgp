@@ -292,7 +292,7 @@ impl<'a> VerifyingKey for UnlockablePersistentSymmetricKey<'a> {
         data: &[u8],
         sig: &SignatureBytes,
     ) -> crate::errors::Result<()> {
-        let SignatureBytes::PersistentSymmetric(aead, salt, tag) = sig else {
+        let SignatureBytes::PersistentSymmetric { aead, salt, tag } = sig else {
             unimplemented!();
         };
 
