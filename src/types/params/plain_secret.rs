@@ -26,8 +26,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        EcdhPublicParams, EddsaLegacyPublicParams, EncryptedSecretParams, EskType, KeyDetails,
-        KeyVersion, Mpi, PkeskBytes, PublicParams, S2kParams, StringToKey, Tag,
+        EcdhPublicParams, EddsaLegacyPublicParams,EncryptedSecretParams, EskType, KeyDetails, KeyVersion, Mpi, PkeskBytes,
+        PkeskVersion, PublicParams, S2kParams, StringToKey, Tag,
     },
     util::TeeWriter,
 };
@@ -450,10 +450,9 @@ impl PlainSecretParams {
                 priv_key.decrypt(aead_key::EncryptionFields {
                     data: encrypted,
                     aead: *aead,
-                    // PKESK version
                     version: match typ {
-                        EskType::V3_4 => 3,
-                        EskType::V6 => 6,
+                        EskType::V3_4 => PkeskVersion::V3,
+                        EskType::V6 => PkeskVersion::V6,
                     },
                     salt,
                 })?
