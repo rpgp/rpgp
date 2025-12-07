@@ -138,7 +138,7 @@ pub struct UnlockablePersistentSymmetricKey<'a> {
     key_pw: &'a Password,
 }
 
-impl EncryptionKey for PersistentSymmetricKey {
+impl EncryptionKey for UnlockablePersistentSymmetricKey<'_> {
     fn encrypt<R: CryptoRng + Rng>(
         &self,
         mut rng: R,
@@ -157,40 +157,42 @@ impl EncryptionKey for PersistentSymmetricKey {
         let mut salt: [u8; 32] = [0; 32];
         rng.fill(&mut salt);
 
-        let SecretParams::Plain(PlainSecretParams::AEAD(secret)) = &self.secret_params else {
-            unimplemented!();
-        };
+        self.psk.unlock(self.key_pw, |pub_params, sec_params| {
+            let PlainSecretParams::AEAD(secret) = &sec_params else {
+                unimplemented!();
+            };
 
-        let PublicParams::AEAD(public_params) = &self.details.public_params() else {
-            unimplemented!();
-        };
+            let PublicParams::AEAD(public_params) = pub_params else {
+                unimplemented!();
+            };
 
-        // A symmetric key encryption of the plaintext value described in section 5.1 of [RFC9580],
-        // performed with the key-encryption key and IV computed as described in Section 7.4,
-        // using the symmetric-key cipher of the key and the indicated AEAD mode, with as
-        // additional data the empty string; including the authentication tag.
+            // A symmetric key encryption of the plaintext value described in section 5.1 of [RFC9580],
+            // performed with the key-encryption key and IV computed as described in Section 7.4,
+            // using the symmetric-key cipher of the key and the indicated AEAD mode, with as
+            // additional data the empty string; including the authentication tag.
 
-        let version = self.details.version().into();
-        let info = InfoParameter {
-            tag: Tag::PublicKeyEncryptedSessionKey,
-            version,
-            aead,
-            sym_alg: public_params.sym_alg,
-        };
+            let version = self.psk.details.version().into();
+            let info = InfoParameter {
+                tag: Tag::PublicKeyEncryptedSessionKey,
+                version,
+                aead,
+                sym_alg: public_params.sym_alg,
+            };
 
-        let (key, iv) = crate::crypto::aead_key::SecretKey::derive(&secret.key, &salt, info);
+            let (key, iv) = crate::crypto::aead_key::SecretKey::derive(&secret.key, &salt, info);
 
-        let mut buf = plain.into();
+            let mut buf = plain.into();
 
-        aead.encrypt_in_place(&public_params.sym_alg, &key, &iv, &[], &mut buf)?;
+            aead.encrypt_in_place(&public_params.sym_alg, &key, &iv, &[], &mut buf)?;
 
-        let encrypted: Bytes = buf.into();
+            let encrypted: Bytes = buf.into();
 
-        Ok(PkeskBytes::Aead {
-            aead,
-            salt,
-            encrypted,
-        })
+            Ok(PkeskBytes::Aead {
+                aead,
+                salt,
+                encrypted,
+            })
+        })?
     }
 }
 
@@ -300,23 +302,24 @@ impl<'a> VerifyingKey for UnlockablePersistentSymmetricKey<'a> {
             "unexpected tag length"
         );
 
-        // FIXME: handle encrypted secret params
-        let SecretParams::Plain(PlainSecretParams::AEAD(secret)) = &self.psk.secret_params else {
-            unimplemented!();
-        };
+        self.psk.unlock(self.key_pw, |_pub_params, sec_params| {
+            let PlainSecretParams::AEAD(secret) = &sec_params else {
+                unimplemented!();
+            };
 
-        let version = SignatureVersion::V6; // FIXME: should not be fixed
+            let version = SignatureVersion::V6; // FIXME: should not be fixed
 
-        // "buf" is the newly calculated authentication tag
-        let buf = secret.calculate_signature(*aead, version, salt, data)?;
+            // "buf" is the newly calculated authentication tag
+            let buf = secret.calculate_signature(*aead, version, salt, data)?;
 
-        // check if the stored and calculated authentication tags match
-        if buf != tag {
-            // no: the signature is invalid!
-            bail!("PersistentSymmetricKey signature mismatch");
-        }
+            // check if the stored and calculated authentication tags match
+            if buf != tag {
+                // no: the signature is invalid!
+                bail!("PersistentSymmetricKey signature mismatch");
+            }
 
-        Ok(())
+            Ok(())
+        })?
     }
 }
 
@@ -477,7 +480,9 @@ mod tests {
             AeadAlgorithm::Ocb,
             ChunkSize::default(),
         );
-        builder.encrypt_to_key(&mut rng, &psk).expect("encryption");
+        builder
+            .encrypt_to_key(&mut rng, &psk.as_unlockable(&Password::empty()))
+            .expect("encryption");
 
         let encrypted = builder
             .to_armored_string(&mut rng, ArmorOptions::default())
