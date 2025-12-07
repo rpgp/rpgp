@@ -141,7 +141,11 @@ impl Signer for SecretKey {
 
         let buf = self.calculate_signature(aead, version, &salt, digest)?;
 
-        Ok(SignatureBytes::PersistentSymmetric(aead, salt, buf.into()))
+        Ok(SignatureBytes::PersistentSymmetric {
+            aead,
+            salt,
+            tag: buf.into(),
+        })
     }
 }
 
