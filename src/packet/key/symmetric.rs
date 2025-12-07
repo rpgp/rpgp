@@ -13,7 +13,10 @@ use rand::{CryptoRng, Rng};
 
 use crate::{
     composed::PlainSessionKey,
-    crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm, Signer},
+    crypto::{
+        aead::AeadAlgorithm, aead_key::InfoParameter, hash::HashAlgorithm,
+        public_key::PublicKeyAlgorithm, Signer,
+    },
     errors::{bail, ensure, ensure_eq, unsupported_err},
     packet::{PacketHeader, PacketTrait, PubKeyInner, SignatureVersion},
     ser::Serialize,
@@ -168,12 +171,12 @@ impl EncryptionKey for PersistentSymmetricKey {
         // additional data the empty string; including the authentication tag.
 
         let version = self.details.version().into();
-        let info = (
-            Tag::PublicKeyEncryptedSessionKey,
+        let info = InfoParameter {
+            tag: Tag::PublicKeyEncryptedSessionKey,
             version,
             aead,
-            public_params.sym_alg,
-        );
+            sym_alg: public_params.sym_alg,
+        };
 
         let (key, iv) = crate::crypto::aead_key::SecretKey::derive(&secret.key, &salt, info);
 
