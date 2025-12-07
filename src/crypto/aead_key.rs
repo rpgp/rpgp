@@ -13,7 +13,7 @@ use crate::{
     errors::{bail, ensure_eq, Result},
     packet::SignatureVersion,
     ser::Serialize,
-    types::{SignatureBytes, Tag},
+    types::{PkeskVersion, SignatureBytes, Tag},
 };
 
 /// Secret key for AEAD persistent symmetric keys
@@ -30,7 +30,7 @@ pub struct SecretKey {
 pub struct EncryptionFields<'a> {
     pub data: &'a Bytes,
     pub aead: AeadAlgorithm,
-    pub version: u8,
+    pub version: PkeskVersion,
     pub salt: &'a [u8; 32],
 }
 
@@ -127,7 +127,7 @@ impl Decryptor for SecretKey {
     fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
         let info = (
             Tag::PublicKeyEncryptedSessionKey,
-            data.version,
+            data.version.into(),
             data.aead,
             self.sym_alg,
         );
