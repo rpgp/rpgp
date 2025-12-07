@@ -27,7 +27,11 @@ pub enum SignatureBytes {
     /// A cryptographic "signature" from draft-ietf-openpgp-persistent-symmetric-keys
     ///
     /// See https://twisstle.gitlab.io/openpgp-persistent-symmetric-keys/#name-algorithm-specific-fields-for
-    PersistentSymmetric(AeadAlgorithm, [u8; 32], Vec<u8>),
+    PersistentSymmetric {
+        aead: AeadAlgorithm,
+        salt: [u8; 32],
+        tag: Vec<u8>,
+    },
 }
 
 impl SignatureBytes {
@@ -45,7 +49,7 @@ impl SignatureBytes {
             SignatureBytes::Native(sig) => {
                 writer.write_all(sig)?;
             }
-            SignatureBytes::PersistentSymmetric(aead, salt, tag) => {
+            SignatureBytes::PersistentSymmetric { aead, salt, tag } => {
                 writer.write_u8((*aead).into())?;
                 writer.write_all(salt)?;
                 writer.write_all(tag)?;
@@ -59,7 +63,7 @@ impl SignatureBytes {
         match self {
             SignatureBytes::Mpis(mpis) => mpis.write_len(),
             SignatureBytes::Native(sig) => sig.len(),
-            SignatureBytes::PersistentSymmetric(_, _, tag) => 1 + 32 + tag.len(),
+            SignatureBytes::PersistentSymmetric { tag, .. } => 1 + 32 + tag.len(),
         }
     }
 }
@@ -74,7 +78,7 @@ impl<'a> TryFrom<&'a SignatureBytes> for &'a [Mpi] {
             // We reject this operation because it doesn't fit with the intent of the Sig abstraction
             SignatureBytes::Native(_) => bail!("Native Sig can't be transformed into Mpis"),
 
-            SignatureBytes::PersistentSymmetric(..) => {
+            SignatureBytes::PersistentSymmetric { .. } => {
                 bail!("PersistentSymmetric Sig can't be transformed into Mpis")
             }
         }
@@ -90,7 +94,7 @@ impl<'a> TryFrom<&'a SignatureBytes> for &'a [u8] {
             SignatureBytes::Mpis(_) => bail!("Mpi-based Sig can't be transformed into &[u8]"),
 
             SignatureBytes::Native(native) => Ok(native),
-            SignatureBytes::PersistentSymmetric(..) => {
+            SignatureBytes::PersistentSymmetric { .. } => {
                 bail!("PersistentSymmetric Sig can't be transformed into &[u8]")
             }
         }
