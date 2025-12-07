@@ -34,6 +34,24 @@ pub struct EncryptionFields<'a> {
     pub salt: &'a [u8; 32],
 }
 
+pub(crate) struct InfoParameter {
+    pub tag: Tag,
+    pub version: u8,
+    pub aead: AeadAlgorithm,
+    pub sym_alg: SymmetricKeyAlgorithm,
+}
+
+impl From<InfoParameter> for [u8; 4] {
+    fn from(value: InfoParameter) -> Self {
+        [
+            value.tag.encode(),
+            value.version,
+            value.aead.into(),
+            value.sym_alg.into(),
+        ]
+    }
+}
+
 impl SecretKey {
     pub(crate) fn calculate_signature(
         &self,
@@ -42,7 +60,12 @@ impl SecretKey {
         salt: &[u8; 32],
         digest: &[u8],
     ) -> Result<BytesMut> {
-        let info = (Tag::Signature, version.into(), aead, self.sym_alg);
+        let info = InfoParameter {
+            tag: Tag::Signature,
+            version: version.into(),
+            aead,
+            sym_alg: self.sym_alg,
+        };
 
         let (key, iv) = Self::derive(&self.key, salt, info);
 
@@ -65,24 +88,25 @@ impl SecretKey {
     pub(crate) fn derive(
         persistent_key: &[u8],
         salt: &[u8; 32],
-        info: (Tag, u8, AeadAlgorithm, SymmetricKeyAlgorithm),
+        info: InfoParameter,
     ) -> (Vec<u8>, Vec<u8>) {
-        let (tag, version, aead, sym_alg) = info;
-        let info_bytes: [u8; 4] = [tag.encode(), version, aead.into(), sym_alg.into()];
-
         let hk = Hkdf::<Sha256>::new(Some(salt), persistent_key);
+
+        let key_size = info.sym_alg.key_size();
+        let nonce_size = info.aead.nonce_size();
 
         // M + N bits are derived using HKDF.
         // The left-most M bits are used as symmetric algorithm key, the remaining N bits are
         // used as initialization vector.
+        let info_parameter: [u8; 4] = info.into();
 
         // FIXME: zeroize
-        let mut output = vec![0u8; sym_alg.key_size() + aead.nonce_size()];
-        hk.expand(&info_bytes, &mut output)
+        let mut output = vec![0u8; key_size + nonce_size];
+        hk.expand(&info_parameter, &mut output)
             .expect("expand size is < 255 * HashLength");
 
-        let key = output[0..sym_alg.key_size()].to_vec();
-        let iv = output[sym_alg.key_size()..].to_vec();
+        let key = output[0..key_size].to_vec();
+        let iv = output[key_size..].to_vec();
 
         (key, iv)
     }
@@ -125,12 +149,12 @@ impl Decryptor for SecretKey {
     type EncryptionFields<'a> = EncryptionFields<'a>;
 
     fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
-        let info = (
-            Tag::PublicKeyEncryptedSessionKey,
-            data.version.into(),
-            data.aead,
-            self.sym_alg,
-        );
+        let info = InfoParameter {
+            tag: Tag::PublicKeyEncryptedSessionKey,
+            version: data.version.into(),
+            aead: data.aead,
+            sym_alg: self.sym_alg,
+        };
 
         let (key, iv) = Self::derive(&self.key, data.salt, info);
 
@@ -161,7 +185,7 @@ mod tests {
 
     use crate::{
         crypto::{
-            aead_key::{AeadAlgorithm, SecretKey},
+            aead_key::{AeadAlgorithm, InfoParameter, SecretKey},
             sym::SymmetricKeyAlgorithm,
         },
         types::Tag,
@@ -192,12 +216,12 @@ mod tests {
         let (key, iv) = SecretKey::derive(
             &[0; 16],
             &[0xff; 32],
-            (
-                Tag::Signature,
-                6,
-                AeadAlgorithm::Ocb,
-                SymmetricKeyAlgorithm::AES128,
-            ),
+            InfoParameter {
+                tag: Tag::Signature,
+                version: 6,
+                aead: AeadAlgorithm::Ocb,
+                sym_alg: SymmetricKeyAlgorithm::AES128,
+            },
         );
 
         assert_eq!(
