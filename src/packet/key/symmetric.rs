@@ -158,12 +158,12 @@ impl EncryptionKey for UnlockablePersistentSymmetricKey<'_> {
         rng.fill(&mut salt);
 
         self.psk.unlock(self.key_pw, |pub_params, sec_params| {
-            let PlainSecretParams::AEAD(secret) = &sec_params else {
-                unimplemented!();
+            let PublicParams::AEAD(public_params) = pub_params else {
+                bail!("Unsupported public parameters for persistent symmetric key: {pub_params:?}");
             };
 
-            let PublicParams::AEAD(public_params) = pub_params else {
-                unimplemented!();
+            let PlainSecretParams::AEAD(secret) = &sec_params else {
+                bail!("Unsupported secret parameters for persistent symmetric key: {sec_params:?}");
             };
 
             // A symmetric key encryption of the plaintext value described in section 5.1 of [RFC9580],
@@ -293,7 +293,7 @@ impl<'a> VerifyingKey for UnlockablePersistentSymmetricKey<'a> {
         sig: &SignatureBytes,
     ) -> crate::errors::Result<()> {
         let SignatureBytes::PersistentSymmetric { aead, salt, tag } = sig else {
-            unimplemented!();
+            bail!("Unsupported SignatureBytes for persistent symmetric key: {sig:?}");
         };
 
         ensure_eq!(
@@ -304,7 +304,7 @@ impl<'a> VerifyingKey for UnlockablePersistentSymmetricKey<'a> {
 
         self.psk.unlock(self.key_pw, |_pub_params, sec_params| {
             let PlainSecretParams::AEAD(secret) = &sec_params else {
-                unimplemented!();
+                bail!("Unsupported secret parameters for persistent symmetric key: {sec_params:?}");
             };
 
             let version = SignatureVersion::V6; // FIXME: should not be fixed
