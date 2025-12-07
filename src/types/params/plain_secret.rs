@@ -106,7 +106,7 @@ impl PlainSecretParams {
                 let key = i.take_bytes(key_size)?;
 
                 let key = aead_key::SecretKey {
-                    key: key.to_vec(),
+                    key: key.to_vec().into(),
                     sym_alg: pub_params.sym_alg,
                 };
                 Self::AEAD(key)
