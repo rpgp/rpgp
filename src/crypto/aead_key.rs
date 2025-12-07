@@ -133,7 +133,7 @@ impl Signer for SecretKey {
         // 32 octets of salt.
         // The salt is used to derive the message authentication key and MUST be securely generated
         // (see section 13.10 of [RFC9580]).
-        let mut rng = thread_rng(); // FIXME: should be a parameter?
+        let mut rng = thread_rng(); // FIXME: should be a parameter
         let mut salt: [u8; 32] = [0; 32];
         rng.fill(&mut salt);
 
