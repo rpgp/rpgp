@@ -59,7 +59,7 @@ impl PersistentSymmetricKey {
         })
     }
 
-    /// Parses a `SecretKey` packet from the given buffer.
+    /// Parses a `PersistentSymmetricKey` packet from the given buffer.
     pub fn try_from_reader<B: BufRead>(
         packet_header: PacketHeader,
         input: B,
