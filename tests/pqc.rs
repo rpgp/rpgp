@@ -1,4 +1,5 @@
 #![cfg(feature = "draft-pqc")]
+use chacha20::ChaCha8Rng;
 use pgp::{
     composed::{
         Deserializable, DetachedSignature, KeyType, Message, MessageBuilder,
@@ -7,8 +8,7 @@ use pgp::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
     types::{KeyDetails, KeyVersion, Password},
 };
-use rand::{CryptoRng, RngCore, SeedableRng};
-use rand_chacha::ChaCha8Rng;
+use rand::{CryptoRng, SeedableRng};
 use smallvec::smallvec;
 use testresult::TestResult;
 
@@ -211,7 +211,7 @@ fn test_a_2_4_signed_encrypted() -> TestResult {
     .test()
 }
 
-fn gen_key<R: RngCore + CryptoRng>(mut rng: R) -> TestResult<SignedSecretKey> {
+fn gen_key<R: CryptoRng + ?Sized>(rng: &mut R) -> TestResult<SignedSecretKey> {
     let key_params = SecretKeyParamsBuilder::default()
         .version(KeyVersion::V6)
         .key_type(KeyType::Ed448)
@@ -237,7 +237,7 @@ fn gen_key<R: RngCore + CryptoRng>(mut rng: R) -> TestResult<SignedSecretKey> {
         .unwrap();
 
     let signed_key = key_params
-        .generate(&mut rng)
+        .generate(rng)
         .expect("failed to generate secret key");
 
     signed_key.verify_bindings()?;
