@@ -6,6 +6,7 @@ use rand::{CryptoRng, Rng};
 
 use super::public::PubKeyInner;
 use crate::{
+    composed::PlainSessionKey,
     crypto::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
@@ -17,8 +18,9 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EddsaLegacyPublicParams, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Password,
-        PlainSecretParams, PublicParams, SecretParams, SignatureBytes, SigningKey, Tag, Timestamp,
+        DecryptionKey, EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails, KeyId,
+        KeyVersion, Password, PkeskBytes, PlainSecretParams, PublicParams, SecretParams,
+        SignatureBytes, SigningKey, Tag, Timestamp,
     },
 };
 
@@ -487,6 +489,32 @@ impl SecretSubkey {
             keyflags,
             embedded,
         )
+    }
+}
+
+impl DecryptionKey for SecretKey {
+    fn decrypt(
+        &self,
+        key_pw: &Password,
+        values: &PkeskBytes,
+        typ: EskType,
+    ) -> Result<Result<PlainSessionKey>> {
+        self.unlock(key_pw, |pub_params, priv_key| {
+            priv_key.decrypt(pub_params, values, typ, self.public_key())
+        })
+    }
+}
+
+impl DecryptionKey for SecretSubkey {
+    fn decrypt(
+        &self,
+        key_pw: &Password,
+        values: &PkeskBytes,
+        typ: EskType,
+    ) -> Result<Result<PlainSessionKey>> {
+        self.unlock(key_pw, |pub_params, priv_key| {
+            priv_key.decrypt(pub_params, values, typ, self.public_key())
+        })
     }
 }
 
