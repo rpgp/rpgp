@@ -19,6 +19,7 @@ use crate::{
 };
 
 /// Public Key Encrypted Session Key Packet (PKESK)
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-public-key-encrypted-sessio>
 ///
 /// A PKESK contains an encrypted session key that has been encrypted to a specific public key.
