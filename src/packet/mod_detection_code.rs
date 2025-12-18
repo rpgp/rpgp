@@ -8,6 +8,7 @@ use crate::{
 };
 
 /// Modification Detection Code Packet
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#version-one-seipd>
 ///
 /// Also see <https://www.rfc-editor.org/rfc/rfc9580.html#name-terminology-changes>:

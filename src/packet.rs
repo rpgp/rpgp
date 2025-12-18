@@ -6,8 +6,8 @@
 //! Every OpenPGP object consists of a set of "packets". Usually, those are used in
 //! [`composed`](crate::composed) objects, such as Transferable Public Keys, or Messages.
 //!
-//! Users of rPGP will usually only use this low-level packet functionality indirectly via
-//! composed objects.
+//! Users of rPGP will usually only use this low-level packet module indirectly via
+//! [`composed`](crate::composed) objects.
 //!
 //! However, users are able to use this low-level module, to implement operations at the packet
 //! level. Be aware that the packet level API makes no attempt at being safe to use:

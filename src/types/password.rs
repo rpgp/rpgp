@@ -1,6 +1,9 @@
 use zeroize::Zeroizing;
 
-/// Wraps around a callback to unlock keys.
+/// A type to unlock a secret key packet, or an
+/// [SKESK packet](crate::packet::SymKeyEncryptedSessionKey).
+///
+/// Can contain either a callback or an explicit value.
 #[derive(derive_more::Debug)]
 pub enum Password {
     Dynamic(#[debug("Box<Fn>")] Box<dyn Fn() -> Zeroizing<Vec<u8>> + 'static + Send + Sync>),

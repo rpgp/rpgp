@@ -21,7 +21,12 @@ use crate::{
 };
 
 /// User ID Packet
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-user-id-packet-type-id-13>
+///
+/// User ID packets are used to associate identities with OpenPGP certificate objects
+/// (also see [`SignedPublickey`](crate::composed::SignedPublicKey)).
+/// E.g. to associate an email address with a key.
 ///
 /// # Examples
 ///

@@ -16,15 +16,45 @@ use crate::{
     types::Tag,
 };
 
-/// Either a standard OpenPGP SEIPD config or a Gnupg-specific AEAD config
+/// Configuration of a protected data packet (OpenPGP SEIPD v1/v2, or GnuPG-specific AEAD)
+///
+/// Used in [`SymEncryptedProtectedDataReader`](crate::composed::SymEncryptedProtectedDataReader)
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum ProtectedDataConfig {
     Seipd(SymEncryptedProtectedDataConfig),
     GnupgAead(GnupgAeadDataConfig),
 }
 
-/// Symmetrically Encrypted Integrity Protected Data Packet
-/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetrically-encrypted-and>
+/// Symmetrically Encrypted Integrity Protected Data (SEIPD) Packet
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetrically-encrypted-and>
+///
+/// This is a container format that can be used to encrypt OpenPGP message payloads.
+///
+/// Two versions of the SEIPD packet currently exist, representing formats from different eras of
+/// OpenPGP's development:
+///
+/// - [Version 1 SEIPD](https://www.rfc-editor.org/rfc/rfc9580.html#name-version-1-symmetrically-enc):
+///   This format was introduced by RFC 4880 (Nov 2007), and is universally supported.
+///   It uses standard symmetric encryption, paired with  a custom
+///   ["Modification Detection Code"](crate::packet::ModDetectionCode) mechanism to defend against
+///   changes to the ciphertext.
+/// - [Version 2 SEIPD](https://www.rfc-editor.org/rfc/rfc9580.html#name-version-2-symmetrically-enc):
+///   This format was introduced by RFC 9580 (Jul 2024) and uses standard
+///   [AEAD encryption schemes](https://en.wikipedia.org/wiki/Authenticated_encryption) for both
+///   encryption and to protect against changes to the ciphertext.
+///
+/// Both versions of SEIPD defend against
+/// [ciphertext malleability](https://www.rfc-editor.org/rfc/rfc9580.html#name-avoiding-ciphertext-malleab),
+/// but using different technologies.
+///
+/// In context where all participants support v2 SEIPD, this newer format should be preferred.
+/// However, not all OpenPGP implementations support that format yet.
+/// So in some contexts v1 SEIPD should be preferred for compatibility.
+///
+/// Note that support for v2 SEIPD may be signaled by peers via the
+/// [`Features`](crate::packet::Features) mechanism in
+/// [certificates](crate::composed::SignedPublicKey) of peers.
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct SymEncryptedProtectedData {
     packet_header: PacketHeader,
@@ -33,6 +63,7 @@ pub struct SymEncryptedProtectedData {
     data: Bytes,
 }
 
+/// Configuration of a [`SymEncryptedProtectedData`] packet
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum Config {
     V1,
@@ -283,6 +314,7 @@ impl PacketTrait for SymEncryptedProtectedData {
     }
 }
 
+/// Decrypts an encrypted data stream
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum StreamDecryptor<R: BufRead> {

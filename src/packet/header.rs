@@ -11,7 +11,7 @@ use crate::{
     types::{PacketHeaderVersion, PacketLength, Tag},
 };
 
-/// Represents a packet header.
+/// Represents the header of a [`Packet`](crate::packet::Packet).
 ///
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-headers>
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

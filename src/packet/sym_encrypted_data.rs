@@ -6,6 +6,7 @@ use super::PacketHeader;
 use crate::{errors::Result, packet::PacketTrait, parsing_reader::BufReadParsing, ser::Serialize};
 
 /// Symmetrically Encrypted Data Packet
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetrically-encrypted-dat>
 ///
 /// "This packet is obsolete. An implementation MUST NOT create this packet.

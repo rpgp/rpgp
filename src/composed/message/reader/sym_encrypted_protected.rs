@@ -12,6 +12,8 @@ use crate::{
     types::Tag,
 };
 
+/// Reads and decrypts a [`SymEncryptedProtectedData`](crate::packet::SymEncryptedProtectedData)
+/// packet.
 #[derive(Debug)]
 pub struct SymEncryptedProtectedDataReader<R: DebugBufRead> {
     config: ProtectedDataConfig,

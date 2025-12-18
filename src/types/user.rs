@@ -9,6 +9,9 @@ use crate::{
     types::{KeyDetails, Tag, VerifyingKey},
 };
 
+/// This type combines a [`UserId`] with a list of signatures over it.
+///
+/// This is typically used as part of a [`SignedPublicKey`](crate::composed::SignedPublicKey).
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedUser {
     pub id: UserId,
@@ -89,6 +92,9 @@ impl Serialize for SignedUser {
     }
 }
 
+/// This type combines a [`UserAttribute`] with a list of signatures over it.
+///
+/// This is typically used as part of a [`SignedPublicKey`](crate::composed::SignedPublicKey).
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedUserAttribute {
     pub attr: UserAttribute,

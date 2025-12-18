@@ -79,9 +79,11 @@ enum Source<R = DummyReader> {
     Reader { file_name: Bytes, reader: R },
 }
 
+/// Configuration for a message that won't get encrypted
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct NoEncryption;
 
+/// Configuration for a v1 SEIPD encrypted message
 #[derive(Debug, PartialEq, Clone)]
 pub struct EncryptionSeipdV1 {
     session_key: RawSessionKey,
@@ -90,6 +92,7 @@ pub struct EncryptionSeipdV1 {
     sym_alg: SymmetricKeyAlgorithm,
 }
 
+/// Configuration for a v2 SEIPD encrypted message
 #[derive(derive_more::Debug, PartialEq, Clone)]
 pub struct EncryptionSeipdV2 {
     session_key: RawSessionKey,
@@ -102,6 +105,8 @@ pub struct EncryptionSeipdV2 {
     salt: [u8; 32],
 }
 
+/// Common trait for all types of encryption that can happen in the context of a
+/// [`MessageBuilder`](crate::composed::MessageBuilder)
 pub trait Encryption: PartialEq {
     fn encrypt<R, READ, W>(
         self,
@@ -119,10 +124,11 @@ pub trait Encryption: PartialEq {
     fn is_plaintext(&self) -> bool;
 }
 
-/// Subpacket configuration for a Signature packet.
+/// Subpacket configuration for a data signature (either in the context of a message, or as a
+/// detached signature).
 ///
-/// The subpacket configuration may be implicit (relying on rPGP to set default subpackets), or
-/// user-provided and explicit (consisting of lists of hashed and unhashed subpackets).
+/// The subpacket configuration may either be implicit (relying on rPGP to set default subpackets),
+/// or user-provided and explicit (consisting of lists of hashed and unhashed subpackets).
 #[derive(Debug, Default)]
 pub enum SubpacketConfig {
     /// Signature subpackets are automatically produced while signing.
@@ -565,6 +571,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// # Example
     /// ```rust,no_run
     /// use pgp::composed::MessageBuilder;
+    /// use pgp::crypto::aead::AeadAlgorithm;
     /// use pgp::crypto::sym::SymmetricKeyAlgorithm;
     ///
     /// # use pgp::types::{KeyDetails, SignatureBytes, PublicParams, KeyId, Fingerprint, KeyVersion};
@@ -582,8 +589,12 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// let message = "Hello, world!";
     ///
     /// let mut rng = rand::thread_rng();
-    /// let mut builder = MessageBuilder::from_bytes("", message.as_bytes())
-    ///    .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+    /// let mut builder = MessageBuilder::from_bytes("", message.as_bytes()).seipd_v2(
+    ///     &mut rng,
+    ///     SymmetricKeyAlgorithm::AES256,
+    ///     AeadAlgorithm::Ocb,
+    ///     Default::default(),
+    /// );
     ///
     /// builder.encrypt_to_key(&mut rng, &public_key_1);
     /// // Optionally, you can also encrypt to multiple keys
