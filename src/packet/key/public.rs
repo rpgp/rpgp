@@ -26,12 +26,24 @@ use crate::{
     },
 };
 
+/// Public Key Packet
+///
+/// A "primary" public key packet, usually for use in a
+/// [SignedPublicKey](crate::composed::SignedPublicKey) composed object.
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-public-key-packet-type-id-6>
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PublicKey {
     packet_header: PacketHeader,
     inner: PubKeyInner,
 }
 
+/// Public Subkey Packet
+///
+/// A public subkey key packet, usually for use in a
+/// [SignedPublicKey](crate::composed::SignedPublicKey) composed object.
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-public-subkey-packet-type-i>
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PublicSubkey {
     packet_header: PacketHeader,

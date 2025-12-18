@@ -16,7 +16,9 @@ use crate::{
     util::fill_buffer,
 };
 
-/// Packet for compressed data.
+/// Compressed Data packet.
+///
+/// This is a container format that can be used for OpenPGP message payloads.
 ///
 /// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-compressed-data-packet-type>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
