@@ -12,6 +12,7 @@ use crate::{
 
 const BUFFER_SIZE: usize = 8 * 1024;
 
+/// Reads and decompresses a [`CompressedData`](crate::packet::CompressedData) packet.
 #[derive(Debug)]
 pub enum CompressedDataReader<R: DebugBufRead> {
     Body {

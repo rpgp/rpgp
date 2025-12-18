@@ -114,6 +114,10 @@ impl PublicOrSecret {
     }
 }
 
+/// Consumes a series of [`Packet`]s and transforms them into a series of composed
+/// [`PublicOrSecret`] objects.
+///
+/// Each [`PublicOrSecret`] object contains either a [`SignedPublicKey`] or a [`SignedSecretKey`].
 pub struct PubPrivIterator<I: Sized + Iterator<Item = Result<Packet>>> {
     inner: Option<iter::Peekable<I>>,
 }
