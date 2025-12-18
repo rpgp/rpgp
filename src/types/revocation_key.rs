@@ -3,6 +3,12 @@ use smallvec::SmallVec;
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
 
+/// "Revocation key" signature subpacket (deprecated)
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-revocation-key-deprecated>
+///
+/// This deprecated mechanism was intended to allow a specified key to issue revocations
+/// for a key.
 #[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 pub struct RevocationKey {
     pub class: RevocationKeyClass,
@@ -11,6 +17,7 @@ pub struct RevocationKey {
     pub fingerprint: SmallVec<[u8; 20]>,
 }
 
+/// "Class" setting for a [`RevocationKey`] subpacket (deprecated)
 #[derive(Debug, PartialEq, Eq, Copy, Clone, TryFromPrimitive)]
 #[repr(u8)]
 pub enum RevocationKeyClass {

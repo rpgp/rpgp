@@ -47,6 +47,7 @@ impl EncryptionCaps {
     }
 }
 
+/// Specification for creation of a [`SignedSecretKey`]
 #[derive(Debug, PartialEq, Eq, Builder)]
 #[builder(build_fn(validate = "Self::validate"))]
 pub struct SecretKeyParams {
@@ -113,6 +114,7 @@ pub struct SecretKeyParams {
     subkeys: Vec<SubkeyParams>,
 }
 
+/// Specification for creation of a subkey
 #[derive(Debug, Clone, PartialEq, Eq, Builder)]
 pub struct SubkeyParams {
     // -- OpenPGP key version of this subkey
@@ -380,6 +382,7 @@ impl SecretKeyParams {
     }
 }
 
+/// Specifies the cipher of a key packet
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KeyType {
     /// Encryption & Signing with RSA and the given bitsize.
@@ -423,6 +426,7 @@ pub enum KeyType {
     SlhDsaShake256s,
 }
 
+/// DSA key size specification
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum DsaKeySize {

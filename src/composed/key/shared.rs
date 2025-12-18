@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// This specifies associated user id and attribute components, plus some metadata for producing
-/// a [crate::composed::SignedSecretKey].
+/// a [`SignedSecretKey`](crate::composed::SignedSecretKey).
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct KeyDetails {
     primary_user_id: Option<UserId>,

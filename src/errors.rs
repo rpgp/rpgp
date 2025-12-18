@@ -1,3 +1,5 @@
+//! rPGP errors
+
 use std::num::TryFromIntError;
 
 use ed25519_dalek::SignatureError;

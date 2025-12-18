@@ -5,6 +5,8 @@ use crate::{
 
 /// Represents a Fingerprint.
 ///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#key-ids-fingerprints>
+///
 /// OpenPGP fingerprints consist of two pieces of information:
 /// The key version, and binary data that represents the fingerprint itself.
 #[derive(Clone, Eq, Hash, PartialEq, derive_more::Debug, derive_more::Display)]

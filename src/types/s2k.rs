@@ -20,9 +20,9 @@ const DEFAULT_ITER_SALTED_COUNT: u8 = 224;
 /// Restriction for Argon2 memory usage (in KiB) to prevent OOM attacks
 const ARGON2_MEMORY_LIMIT_KIB: u32 = 2 * 1024 * 1024; // 2 ~mio KiB (== 2 GiB)
 
-/// The available s2k usages.
+/// The available String-to-Key (S2K) usages.
 ///
-/// Ref 3.7.2.1. Secret-Key Encryption
+/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-secret-key-encryption>
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum S2kUsage {
     /// 0
@@ -37,6 +37,13 @@ pub enum S2kUsage {
     MalleableCfb,
 }
 
+/// Parameters for "String-to-Key (S2K) Usage".
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-s2k-usage>
+///
+/// This specifies a symmetric encryption method, for using a symmetric key (that was obtained
+/// from a [`StringToKey`]) to lock secret key packets, or protect a session key in an
+/// [SKESK](crate::packet::SymKeyEncryptedSessionKey).
 #[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 pub enum S2kParams {
     Unprotected,
@@ -144,6 +151,14 @@ impl From<u8> for S2kUsage {
     }
 }
 
+/// A String-to-Key (S2K) Specifier
+///
+/// This type specifies a method of deriving a symmetric secret from a (potentially low-entropy)
+/// password.
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-string-to-key-s2k-specifier>
+///
+/// The output of a [`StringToKey`] is usually used with a [`S2kParams`].
 #[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum StringToKey {

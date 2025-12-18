@@ -1,3 +1,5 @@
+//! rPGP types
+
 mod compression;
 mod duration;
 mod fingerprint;
@@ -32,7 +34,12 @@ pub use self::{
     user::{SignedUser, SignedUserAttribute},
 };
 
-/// Select which type of encrypted session key data should be produced in an encryption step
+/// Specify the type of an encrypted session key.
+///
+/// This distinguishes between the two generations of encrypted session key:
+///
+/// - The RFC 2440-era PKESK v3 and SKESK v4, vs
+/// - The RFC 9580 PKESK v6 and SKESK v6
 #[derive(Debug, Copy, Clone)]
 pub enum EskType {
     /// V3 PKESK or V4 SKESK (these are used in RFC 4880 and 2440)

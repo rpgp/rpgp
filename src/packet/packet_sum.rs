@@ -16,6 +16,7 @@ use crate::{
 };
 
 /// Represents a Packet. A packet is the record structure used to encode a chunk of data in OpenPGP.
+///
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-syntax>
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[allow(clippy::large_enum_variant)] // TODO: fix me
