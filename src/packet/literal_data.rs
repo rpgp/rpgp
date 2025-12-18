@@ -19,6 +19,13 @@ use crate::{
 };
 
 /// Literal Data Packet
+///
+/// This is the foundational container format for OpenPGP message payloads.
+/// All plaintext that is handled in OpenPGP messages always resides in a [`LiteralData`] packet,
+/// and may be additionally wrapped in more data container layers (such as
+/// [`CompressedData`](crate::packet::CompressedData) or
+/// [`SymEncryptedProtectedData`](crate::packet::SymEncryptedProtectedData)).
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-literal-data-packet-type-id>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -37,6 +44,19 @@ pub struct LiteralData {
     )]
     data: Bytes,
 }
+
+/// The metadata contained in a [`LiteralData`] packet.
+///
+/// Note that OpenPGP signatures do not include this metadata!
+/// It is not protected against tampering in a signed document.
+///
+/// A receiving implementation MUST NOT treat those fields as though they were cryptographically
+/// secured by the surrounding signature when either representing them to the user or acting on them.
+///
+/// Due to their inherent malleability, an implementation that generates a Literal Data packet
+/// SHOULD avoid storing any significant data in these fields
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-literal-data-packet-type-id>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct LiteralDataHeader {
     mode: DataMode,
@@ -87,6 +107,9 @@ impl LiteralDataHeader {
     }
 }
 
+/// Specifies what type of data is contained in a [`LiteralData`] packet.
+///
+/// Also see <https://www.rfc-editor.org/rfc/rfc9580.html#name-literal-data-packet-type-id>
 #[derive(Debug, Copy, Clone, FromPrimitive, IntoPrimitive, PartialEq, Eq)]
 #[repr(u8)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]

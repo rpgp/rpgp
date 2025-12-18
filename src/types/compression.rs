@@ -1,6 +1,7 @@
 use num_enum::{FromPrimitive, IntoPrimitive};
 
 /// Available compression algorithms.
+///
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-compression-algorithms>
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]

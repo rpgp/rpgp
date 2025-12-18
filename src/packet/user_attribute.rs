@@ -36,7 +36,15 @@ const JPEG_HEADER_PREFIX: &[u8; 4] = &[
 ];
 
 /// User Attribute Packet
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-user-attribute-packet-type->
+///
+/// The [`UserAttribute`] packet is similar to the [`UserId`](crate::packet::UserId) packet.
+/// It is also typically associated with a [`SignedPublicKey`](crate::composed::SignedPublicKey)
+/// composed object by the key holder (and may also be certified by third parties via signatures).
+///
+/// (Note that while User Attributes are a long-established feature of OpenPGP, and widely
+/// supported, they are not currently widely used.)
 #[derive(Clone, PartialEq, Eq, derive_more::Debug, derive_more::Display)]
 pub enum UserAttribute {
     #[display("User Attribute: Image (len: {})", data.len())]
@@ -57,6 +65,13 @@ pub enum UserAttribute {
     },
 }
 
+/// An image header is used in the image attribute subpacket.
+///
+/// This subpacket is used in [`UserAttribute`] packets.
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-image-attribute-subpacket>
+///
+/// Note that the Image Attribute subpacket are not commonly used.
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum ImageHeader {
     V1(ImageHeaderV1),
@@ -69,6 +84,9 @@ pub enum ImageHeader {
     },
 }
 
+/// Payload of a v1 [`ImageHeader`]
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-image-attribute-subpacket>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum ImageHeaderV1 {
     Jpeg {

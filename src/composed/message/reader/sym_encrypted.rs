@@ -9,6 +9,7 @@ use crate::{
     types::Tag,
 };
 
+/// Reads and decrypts a legacy [`SymEncryptedData`](crate::packet::SymEncryptedData) packet.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum SymEncryptedDataReader<R: BufRead> {

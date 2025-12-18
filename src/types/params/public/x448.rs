@@ -8,6 +8,7 @@ use crate::{
     ser::Serialize,
 };
 
+/// Raw X448 public key material
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct X448PublicParams {
     pub key: x448::PublicKey,
