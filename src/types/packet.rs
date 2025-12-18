@@ -86,12 +86,14 @@ impl PacketLength {
     }
 }
 
-/// Packet Type ID, see <https://www.rfc-editor.org/rfc/rfc9580.html#packet-types>
+/// Packet Type ID
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#packet-types>
 ///
 /// The "Packet Type ID" was called "Packet tag" in RFC 4880 (Section 4.3 "Packet Tags").
 /// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#appendix-B.1-3.7.1>
 ///
-/// However, rPGP will continue to use the term "(Packet) Tag" for the time being.
+/// However, rPGP continues to use the term "(Packet) Tag" for the time being.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
@@ -222,7 +224,9 @@ impl From<ExperimentalTag> for u8 {
     }
 }
 
-/// Tag that can only be `0`, `15`, `16`, or `64` and above.
+/// An invalid packet tag.
+///
+/// This type can only be constructed with the values `0`, `15`, `16`, or `64` and above.
 /// Those IDs are invalid and should not occur in the wild.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(transparent)]
@@ -402,6 +406,7 @@ impl PacketHeaderVersion {
     }
 }
 
+/// The version of a key packet
 // TODO: find a better place for this
 #[derive(Debug, PartialEq, Eq, Clone, Copy, PartialOrd, FromPrimitive, IntoPrimitive)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -439,6 +444,7 @@ impl Default for KeyVersion {
     }
 }
 
+/// Version of a [PKESK](crate::packet::PublicKeyEncryptedSessionKey) packet
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum PkeskVersion {
@@ -449,6 +455,7 @@ pub enum PkeskVersion {
     Other(u8),
 }
 
+/// The version of an [SKESK](crate::packet::SymKeyEncryptedSessionKey) packet
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum SkeskVersion {

@@ -2,6 +2,7 @@ use std::io::{self, BufRead};
 
 use crate::{errors::Result, parsing_reader::BufReadParsing, ser::Serialize};
 
+/// Raw X25519 public key material
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct X25519PublicParams {
