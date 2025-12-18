@@ -570,7 +570,7 @@ fn ecdsa_signed_public_key() {
         Default::default(),
     );
 
-    let signed_public_key = SignedPublicKey::from_signer(
+    let signed_public_key = SignedPublicKey::bind_with_signing_key(
         rand::thread_rng(),
         &signer,
         signer.public_key().clone(),
@@ -580,5 +580,7 @@ fn ecdsa_signed_public_key() {
     )
     .expect("sign public key from the HSM");
 
-    let _ = signed_public_key;
+    signed_public_key
+        .verify_bindings()
+        .expect("binding signatures are ok")
 }
