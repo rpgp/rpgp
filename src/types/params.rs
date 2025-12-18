@@ -1,7 +1,7 @@
-pub mod encrypted_secret;
-pub mod plain_secret;
-pub mod public;
-pub mod secret;
+mod encrypted_secret;
+mod plain_secret;
+mod public;
+mod secret;
 
 pub use self::{
     encrypted_secret::*,
