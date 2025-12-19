@@ -4,15 +4,15 @@ use std::{fmt::Debug, fs::File};
 use p256::pkcs8::DecodePrivateKey;
 use pgp::{
     adapter::{EcdsaSigner, RsaSigner},
-    composed::{Esk, Message, SignedPublicKey, SignedSecretKey},
+    composed::{self, Esk, Message, SignedPublicKey, SignedSecretKey},
     crypto::{
         checksum, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
     packet::{self, PubKeyInner, PublicKey, SignatureConfig},
     types::{
-        EcdhPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes,
-        PublicParams, SignatureBytes, SigningKey, Timestamp, VerifyingKey,
+        EcdhPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, PacketHeaderVersion,
+        Password, PkeskBytes, PublicParams, SignatureBytes, SigningKey, Timestamp, VerifyingKey,
     },
 };
 
@@ -541,4 +541,44 @@ fn rsa_signer() {
     let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();
 
     signature.verify(&signer, DATA).expect("ok");
+}
+
+#[test]
+fn ecdsa_signed_public_key() {
+    let inner =
+        p256::ecdsa::SigningKey::read_pkcs8_pem_file("tests/unit-tests/hsm/p256.pem").unwrap();
+
+    let signer =
+        EcdsaSigner::<_, p256::NistP256>::new(inner, KeyVersion::V4, Timestamp::now()).unwrap();
+
+    let mut keyflags = pgp::packet::KeyFlags::default();
+    keyflags.set_sign(true);
+
+    let user_id =
+        pgp::packet::UserId::from_str(PacketHeaderVersion::New, "John Doe <jdoe@example.com>")
+            .unwrap();
+
+    let details = composed::KeyDetails::new(
+        Some(user_id),
+        Default::default(),
+        Default::default(),
+        keyflags,
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+    );
+
+    let signed_public_key = SignedPublicKey::from_signer(
+        rand::thread_rng(),
+        &signer,
+        signer.public_key().clone(),
+        details,
+        &Password::empty(),
+        Vec::new(),
+    )
+    .expect("sign public key from the HSM");
+
+    let _ = signed_public_key;
 }
