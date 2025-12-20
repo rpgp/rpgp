@@ -1434,7 +1434,7 @@ fn test_locked_v6_go() {
             .unwrap();
 
     pkey.unlock(&Password::from("password"), |public, secret| {
-        assert_eq!(public.hash_alg(), HashAlgorithm::Sha3_512);
+        assert_eq!(public.hash_alg(), HashAlgorithm::Sha512);
         assert!(
             matches!(secret, PlainSecretParams::Ed448(_)),
             "{:?}",
