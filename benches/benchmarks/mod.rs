@@ -37,7 +37,8 @@ pub fn build_key(kt: KeyType, kt_sub: KeyType) -> SignedSecretKey {
             SubkeyParamsBuilder::default()
                 .key_type(kt_sub)
                 .passphrase(None)
-                .can_encrypt(true)
+                .can_encrypt_comms(true)
+                .can_encrypt_storage(true)
                 .build()
                 .unwrap(),
         )
