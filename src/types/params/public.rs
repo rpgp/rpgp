@@ -241,18 +241,18 @@ impl PublicParams {
             PublicParams::ECDSA(EcdsaPublicParams::P384 { .. }) => HashAlgorithm::Sha384,
             PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => HashAlgorithm::Sha512,
 
-            PublicParams::Ed448(_) => HashAlgorithm::Sha3_512,
+            PublicParams::Ed448(_) => HashAlgorithm::Sha512,
 
             #[cfg(feature = "draft-pqc")]
-            PublicParams::MlDsa65Ed25519(_) => HashAlgorithm::Sha3_256,
+            PublicParams::MlDsa65Ed25519(_) => HashAlgorithm::Sha256,
             #[cfg(feature = "draft-pqc")]
-            PublicParams::MlDsa87Ed448(_) => HashAlgorithm::Sha3_512,
+            PublicParams::MlDsa87Ed448(_) => HashAlgorithm::Sha512,
             #[cfg(feature = "draft-pqc")]
-            PublicParams::SlhDsaShake128s(_) => HashAlgorithm::Sha3_256,
+            PublicParams::SlhDsaShake128s(_) => HashAlgorithm::Sha256,
             #[cfg(feature = "draft-pqc")]
-            PublicParams::SlhDsaShake128f(_) => HashAlgorithm::Sha3_256,
+            PublicParams::SlhDsaShake128f(_) => HashAlgorithm::Sha256,
             #[cfg(feature = "draft-pqc")]
-            PublicParams::SlhDsaShake256s(_) => HashAlgorithm::Sha3_512,
+            PublicParams::SlhDsaShake256s(_) => HashAlgorithm::Sha512,
 
             // Not actually signing capable
             PublicParams::Elgamal(_)
