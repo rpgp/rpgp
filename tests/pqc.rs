@@ -228,7 +228,8 @@ fn gen_key<R: RngCore + CryptoRng>(mut rng: R) -> TestResult<SignedSecretKey> {
             SubkeyParamsBuilder::default()
                 .version(KeyVersion::V6)
                 .key_type(KeyType::MlKem1024X448)
-                .can_encrypt(true)
+                .can_encrypt_comms(true)
+                .can_encrypt_storage(true)
                 .passphrase(None)
                 .build()
                 .unwrap(),
