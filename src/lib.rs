@@ -1,4 +1,7 @@
 #![doc = include_str!("../README.md")]
+// Pending zeroize_derive 1.5.1 release
+// see https://github.com/RustCrypto/utils/pull/1270
+#![allow(unused_assignments)]
 
 //! # Further reading
 //!
