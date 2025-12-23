@@ -62,7 +62,7 @@ pub enum PkeskBytes {
     MlKem1024X448 {
         /// Ephemeral X448public key (32 bytes).
         #[debug("{}", hex::encode(ecdh_ciphertext.as_bytes()))]
-        ecdh_ciphertext: cx448::x448::PublicKey,
+        ecdh_ciphertext: x448::PublicKey,
         #[debug("{}", hex::encode(&ml_kem_ciphertext[..]))]
         ml_kem_ciphertext: Box<[u8; 1568]>,
         /// Encrypted and wrapped session key.
@@ -218,7 +218,7 @@ impl PkeskBytes {
                 // A fixed-length octet string representing an ECDH ephemeral public key in the format associated with
                 // the curve as specified in Section 4.1.1.
                 let ephemeral_public = i.read_array::<56>()?;
-                let ephemeral_public = cx448::x448::PublicKey::from_bytes(&ephemeral_public)
+                let ephemeral_public = x448::PublicKey::from_bytes(&ephemeral_public)
                     .ok_or_else(|| crate::errors::format_err!("invalid x448 public key"))?;
 
                 // A fixed-length octet string of the ML-KEM ciphertext, whose length depends on the algorithm ID as specified in Table 4.
