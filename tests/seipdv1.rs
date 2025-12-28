@@ -1,10 +1,14 @@
+use std::io::Read;
+
 use pgp::{
     composed::{Edata, Message, MessageBuilder, PlainSessionKey, RawSessionKey},
     crypto::sym::SymmetricKeyAlgorithm,
+    errors::Error,
     packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
 };
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+use snafu::AsErrorSource;
 
 const SYM_ALG: SymmetricKeyAlgorithm = SymmetricKeyAlgorithm::AES256;
 
@@ -97,6 +101,95 @@ pub fn mdc_test() {
                 );
 
                 panic!("No MDC error in iteration {i} (outer ok count {count})");
+            }
+        }
+    }
+}
+
+/// Decrypt SEIPDv1 EData with wrong session keys.
+///
+/// This should not leak specific error from parsing the resulting (wrong and unauthenticated)
+/// plaintext as a message.
+///
+/// The mal-decrypted and unauthenticated  "plaintext" is handled via `Message::from_edata` and
+/// `Message::internal_from_bytes`.
+#[test]
+pub fn mdc_test_error_uniformity() {
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    let input_data = b"hello world".repeat(1024);
+
+    let mut raw = vec![0u8; 32];
+    rng.fill_bytes(&mut raw);
+
+    let mut builder = MessageBuilder::from_bytes("plaintext.txt", input_data)
+        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+    builder.set_session_key(raw.into()).expect("ok");
+
+    let mut encrypted_data = Vec::new();
+    builder
+        .to_writer(&mut rng, &mut encrypted_data)
+        .expect("ok");
+
+    // Attempt decryption with a series of (wrong) session keys and observe the resulting errors
+    for _ in 0..1_024 {
+        let encrypted = Message::from_bytes(&*encrypted_data).expect("ok");
+
+        let mut raw = vec![0u8; 32];
+        rng.fill_bytes(&mut raw);
+
+        let sk = PlainSessionKey::V3_4 {
+            key: raw.clone().into(),
+            sym_alg: SymmetricKeyAlgorithm::AES256,
+        };
+
+        let Message::Encrypted { ref edata, .. } = &encrypted else {
+            panic!("expected encrypted data");
+        };
+
+        let Edata::SymEncryptedProtectedData { reader } = &edata else {
+            panic!("expected SEIPD");
+        };
+
+        assert!(
+            matches!(
+                reader.config(),
+                ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::V1)
+            ),
+            "Expected SEIPD v1"
+        );
+
+        let res = encrypted.decrypt_with_session_key(sk.clone());
+
+        match res {
+            Ok(mut msg) => {
+                let mut out = Vec::new();
+                let res = msg.read_to_end(&mut out);
+
+                match res {
+                    Ok(_) => {
+                        eprintln!("Decrypted data: {:02x?}", out);
+                        eprintln!("Session key: {:02x?}", raw);
+
+                        panic!("NO MDC ERROR - this should never happen");
+                    }
+                    Err(e) => {
+                        let src = e.as_error_source();
+                        let s = src.to_string();
+
+                        // FIXME: this is an io::Error type
+                        assert_eq!(
+                            &s, "Error while handling unauthenticated data",
+                            "unexpected io error '{s}'"
+                        );
+                    }
+                }
+            }
+
+            Err(e) => {
+                // FIXME: this is an rPGP error type
+
+                assert!(matches!(e, Error::InUnauthenticatedData));
             }
         }
     }
