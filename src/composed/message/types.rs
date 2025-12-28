@@ -966,7 +966,8 @@ impl<'a> Message<'a> {
                 } else {
                     edata.decrypt(&session_key)?;
                 }
-                let message = Message::from_edata(edata, is_nested)?;
+                // FIXME: be more specific about setting "maybe unauthenticated"
+                let message = Message::from_edata(edata, is_nested, true)?;
                 Ok((message, result))
             }
         }
@@ -1121,9 +1122,11 @@ impl Read for Message<'_> {
             Self::Signed { reader, .. } => reader.read_to_end(buf),
             Self::SignedOnePass { reader, .. } => reader.read_to_end(buf),
             Self::Encrypted { edata, .. } => edata.read_to_end(buf),
-        }?;
+        }
+        .map_err(|_| io::Error::other(Error::InUnauthenticatedData))?;
 
-        self.check_trailing_data()?;
+        self.check_trailing_data() // make error output (mostly) uniform
+            .map_err(|_| io::Error::other(Error::InUnauthenticatedData))?;
 
         Ok(read)
     }
