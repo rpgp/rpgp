@@ -110,6 +110,11 @@ impl MessageReader<'_> {
 
                 let message_reader = inner_reader.get_mut().get_mut();
                 message_reader.check_trailing_data()?;
+
+                // read to end to force check of MDC
+                // TODO: only do this for SEIPD (v1?)
+                let mut out = Vec::new();
+                inner_reader.read_to_end(&mut out)?;
             }
             MessageReader::Reader(r) => {
                 let parser = crate::packet::PacketParser::new(r);
