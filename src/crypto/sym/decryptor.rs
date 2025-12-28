@@ -16,7 +16,7 @@ use zeroize::Zeroizing;
 
 use crate::{
     crypto::sym::SymmetricKeyAlgorithm,
-    errors::{bail, Result},
+    errors::{bail, Error, Result},
     util::{fill_buffer, fill_buffer_bytes},
 };
 
@@ -468,7 +468,7 @@ where
                             {
                                 return Err(io::Error::new(
                                     io::ErrorKind::InvalidInput,
-                                    "invalid MDC ",
+                                    Error::MdcError,
                                 ));
                             }
                         }
