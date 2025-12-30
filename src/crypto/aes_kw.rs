@@ -3,6 +3,7 @@ use generic_array::{
     GenericArray,
 };
 use snafu::{ResultExt, Snafu};
+use zeroize::Zeroizing;
 
 /// AES key wrap possible errors.
 #[derive(Debug, Snafu)]
@@ -44,7 +45,7 @@ pub fn wrap(key: &[u8], data: &[u8]) -> Result<Vec<u8>, Error> {
 
 /// AES Key Unwrap
 /// As defined in RFC 3394.
-pub fn unwrap(key: &[u8], data: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn unwrap(key: &[u8], data: &[u8]) -> Result<Zeroizing<Vec<u8>>, Error> {
     let aes_size = key.len() * 8;
     let res = match aes_size {
         128 => {
@@ -65,7 +66,8 @@ pub fn unwrap(key: &[u8], data: &[u8]) -> Result<Vec<u8>, Error> {
         _ => {
             return Err(InvalidKeySizeSnafu { size: aes_size }.build());
         }
-    };
+    }
+    .map(Into::into);
 
     res.context(WrapSnafu)
 }

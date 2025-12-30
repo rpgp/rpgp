@@ -210,7 +210,7 @@ impl FakeHsm {
                         panic!("unsupported params: {params:?}");
                     }
                 };
-                let decrypted_key: Vec<u8> = pgp::crypto::ecdh::derive_session_key(
+                let decrypted_key = pgp::crypto::ecdh::derive_session_key(
                     &shared_secret,
                     encrypted_session_key,
                     encrypted_session_key.len(),
@@ -220,7 +220,7 @@ impl FakeHsm {
                     self.public_key.fingerprint().as_bytes(),
                 )?;
 
-                decrypted_key
+                (*decrypted_key).clone() // FIXME
             }
 
             _ => unimplemented!(),

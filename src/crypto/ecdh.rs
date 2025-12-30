@@ -316,7 +316,7 @@ impl Decryptor for SecretKey {
         );
 
         if res.is_ok() {
-            return res;
+            return res.map(|x| (*x).clone()); // FIXME
         }
 
         #[cfg(feature = "malformed-artifact-compat")]
@@ -355,7 +355,7 @@ impl Decryptor for SecretKey {
             ) {
                 log::info!("Decrypted erroneous ECDH session key by go crypto");
 
-                return Ok(sk);
+                return Ok(sk.to_vec()); // FIXME
             }
 
             // 2. Try with stripped trailing zeroes (-> work around old OpenPGP.js bug)
@@ -375,11 +375,11 @@ impl Decryptor for SecretKey {
             ) {
                 log::info!("Decrypted erroneous ECDH session key by OpenPGP.js");
 
-                return Ok(sk);
+                return Ok(sk.to_vec()); // FIXME
             }
         }
 
-        res
+        res.map(|x| (*x).clone()) // FIXME
     }
 }
 
@@ -421,7 +421,7 @@ pub fn derive_session_key(
     hash: HashAlgorithm,
     alg_sym: SymmetricKeyAlgorithm,
     fingerprint: &[u8],
-) -> Result<Vec<u8>> {
+) -> Result<Zeroizing<Vec<u8>>> {
     let param = build_ecdh_param(&curve.oid(), alg_sym, hash, fingerprint);
 
     // Perform key derivation

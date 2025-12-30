@@ -160,7 +160,7 @@ impl Decryptor for SecretKey {
         let decrypted_key = aes_kw::unwrap(&kek, data.encrypted_session_key)?;
         ensure!(!decrypted_key.is_empty(), "empty key is not valid");
 
-        Ok(decrypted_key)
+        Ok(decrypted_key.to_vec()) // FIXME
     }
 }
 
