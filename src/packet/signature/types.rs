@@ -1133,7 +1133,7 @@ pub enum SignatureType {
 pub const CERTIFICATION_SIGNATURE_TYPES: &[SignatureType] = &[
     SignatureType::CertPositive,
     SignatureType::CertGeneric,
-    SignatureType::CertPositive,
+    SignatureType::CertCasual,
     SignatureType::CertPersona,
 ];
 
