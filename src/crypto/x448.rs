@@ -1,5 +1,5 @@
 use cx448::x448;
-use hkdf::Hkdf;
+use hkdf::HkdfExtract;
 use log::debug;
 use rand::{CryptoRng, Rng};
 use sha2::Sha512;
@@ -125,10 +125,10 @@ pub fn derive_session_key(
 ) -> Result<Vec<u8>> {
     let okm = hkdf(&ephemeral, recipient_public, &shared_secret)?;
 
-    let decrypted_key = aes_kw::unwrap(&okm, encrypted_session_key)?;
+    let decrypted_key = aes_kw::unwrap(&*okm, encrypted_session_key)?;
     ensure!(!decrypted_key.is_empty(), "empty key is not valid");
 
-    Ok(decrypted_key)
+    Ok((*decrypted_key).clone())
 }
 
 /// HKDF for X448
@@ -137,7 +137,7 @@ pub fn hkdf(
     ephemeral: &[u8; 56],
     recipient_public: &[u8; 56],
     shared_secret: &[u8; 56],
-) -> Result<[u8; 32]> {
+) -> Result<Zeroizing<[u8; 32]>> {
     // TODO: maybe share/DRY this code with the analogous x25519 implementation?
 
     const INFO: &[u8] = b"OpenPGP X448";
@@ -147,15 +147,16 @@ pub fn hkdf(
     // 56 octets of the recipient public key material.
     // 56 octets of the shared secret.
 
-    let mut input = Zeroizing::new(vec![]);
-    input.extend_from_slice(ephemeral);
-    input.extend_from_slice(recipient_public);
-    input.extend_from_slice(shared_secret);
+    let mut hkdf_extract = HkdfExtract::<Sha512>::new(None);
+    hkdf_extract.input_ikm(ephemeral);
+    hkdf_extract.input_ikm(recipient_public);
+    hkdf_extract.input_ikm(shared_secret);
+
+    let (_, hkdf) = hkdf_extract.finalize();
 
     // HKDF with SHA512, an info parameter of "OpenPGP X448" and no salt.
-    let hk = Hkdf::<Sha512>::new(None, &input);
-    let mut okm = [0u8; 32];
-    hk.expand(INFO, &mut okm)
+    let mut okm = Zeroizing::new([0u8; 32]);
+    hkdf.expand(INFO, &mut (*okm))
         .expect("32 is a valid length for Sha512 to output");
 
     Ok(okm)
@@ -206,7 +207,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     )?;
 
     // Perform AES Key Wrap
-    let wrapped = aes_kw::wrap(&okm, plain)?;
+    let wrapped = aes_kw::wrap(&*okm, plain)?;
 
     Ok((*ephemeral_public.as_bytes(), wrapped))
 }

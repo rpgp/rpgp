@@ -1,6 +1,6 @@
 use std::cmp::PartialEq;
 
-use hkdf::Hkdf;
+use hkdf::HkdfExtract;
 use log::debug;
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
@@ -108,6 +108,7 @@ impl Decryptor for SecretKey {
             shared_secret,
             data.encrypted_session_key,
         )
+        .map(|x| (*x).clone()) // FIXME
     }
 }
 
@@ -120,10 +121,10 @@ pub fn derive_session_key(
     recipient_public: [u8; 32],
     shared_secret: [u8; 32],
     encrypted_session_key: &[u8],
-) -> Result<Vec<u8>> {
+) -> Result<Zeroizing<Vec<u8>>> {
     let okm = hkdf(&ephemeral, &recipient_public, &shared_secret)?;
 
-    let decrypted_key = aes_kw::unwrap(&okm, encrypted_session_key)?;
+    let decrypted_key = aes_kw::unwrap(&*okm, encrypted_session_key)?;
     ensure!(!decrypted_key.is_empty(), "empty key is not valid");
 
     Ok(decrypted_key)
@@ -135,7 +136,7 @@ pub fn hkdf(
     ephemeral: &[u8; 32],
     recipient_public: &[u8; 32],
     shared_secret: &[u8; 32],
-) -> Result<[u8; 16]> {
+) -> Result<Zeroizing<[u8; 16]>> {
     const INFO: &[u8] = b"OpenPGP X25519";
 
     // The input of HKDF is the concatenation of the following three values:
@@ -143,15 +144,16 @@ pub fn hkdf(
     // 32 octets of the recipient public key material.
     // 32 octets of the shared secret.
 
-    let mut input = Zeroizing::new(vec![]);
-    input.extend_from_slice(ephemeral);
-    input.extend_from_slice(recipient_public);
-    input.extend_from_slice(shared_secret);
+    let mut hkdf_extract = HkdfExtract::<Sha256>::new(None);
+    hkdf_extract.input_ikm(ephemeral);
+    hkdf_extract.input_ikm(recipient_public);
+    hkdf_extract.input_ikm(shared_secret);
+
+    let (_, hkdf) = hkdf_extract.finalize();
 
     // HKDF with SHA256, an info parameter of "OpenPGP X25519" and no salt.
-    let hk = Hkdf::<Sha256>::new(None, &input);
-    let mut okm = [0u8; 16];
-    hk.expand(INFO, &mut okm)
+    let mut okm = Zeroizing::new([0u8; 16]);
+    hkdf.expand(INFO, &mut (*okm))
         .expect("16 is a valid length for Sha256 to output");
 
     Ok(okm)
@@ -197,7 +199,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     )?;
 
     // Perform AES Key Wrap
-    let wrapped = aes_kw::wrap(&okm, plain)?;
+    let wrapped = aes_kw::wrap(&*okm, plain)?;
 
     Ok((ephemeral_public.to_bytes(), wrapped))
 }
@@ -249,10 +251,10 @@ mod tests {
 
         // test hkdf helper
         let okm = super::hkdf(&ephemeral_key, &public_key, &shared_point).unwrap();
-        assert_eq!(okm, hkdf);
+        assert_eq!(*okm, hkdf);
 
-        let decrypted_key = aes_kw::unwrap(&okm, &esk).unwrap();
-        assert_eq!(decrypted_key, decrypted);
+        let decrypted_key = aes_kw::unwrap(&*okm, &esk).unwrap();
+        assert_eq!(*decrypted_key, decrypted);
 
         // test SecretKey::decrypt
         let sk = SecretKey {
@@ -266,7 +268,7 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(decrypted_key, decrypted2);
+        assert_eq!(*decrypted_key, decrypted2);
     }
 
     #[test]
