@@ -4,17 +4,19 @@ use std::{fmt::Debug, fs::File};
 use p256::pkcs8::DecodePrivateKey;
 use pgp::{
     adapter::{EcdsaSigner, RsaSigner},
-    composed::{self, Esk, Message, SignedPublicKey, SignedSecretKey},
+    composed::{self, Esk, Message, SignedPublicKey, SignedPublicSubKey, SignedSecretKey},
     crypto::{
         checksum, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    packet::{self, PubKeyInner, PublicKey, SignatureConfig},
+    packet::{self, PubKeyInner, PublicKey, SecretSubkey, SignatureConfig},
     types::{
         EcdhPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, PacketHeaderVersion,
         Password, PkeskBytes, PublicParams, SignatureBytes, SigningKey, Timestamp, VerifyingKey,
     },
 };
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 
 #[derive(Debug, Clone)]
 pub struct FakeHsm {
@@ -583,4 +585,87 @@ fn ecdsa_signed_public_key() {
     signed_public_key
         .verify_bindings()
         .expect("binding signatures are ok")
+}
+
+#[test]
+fn ecdsa_signed_public_key_with_signing_subkey() {
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    let inner =
+        p256::ecdsa::SigningKey::read_pkcs8_pem_file("tests/unit-tests/hsm/p256.pem").unwrap();
+
+    let signer =
+        EcdsaSigner::<_, p256::NistP256>::new(inner, KeyVersion::V4, Timestamp::now()).unwrap();
+
+    let keyflags = pgp::packet::KeyFlags::default();
+
+    let user_id =
+        pgp::packet::UserId::from_str(PacketHeaderVersion::New, "John Doe <jdoe@example.com>")
+            .unwrap();
+
+    let details = composed::KeyDetails::new(
+        Some(user_id),
+        Default::default(),
+        Default::default(),
+        keyflags,
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+    );
+
+    // create a valid signing capable subkey, complete with "embedded back signature"
+    let signing_subkey_pub: SignedPublicSubKey = {
+        let mut keyflags = packet::KeyFlags::default();
+        keyflags.set_sign(true);
+
+        let key_type = composed::KeyType::Ed25519Legacy;
+        let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();
+
+        let pub_key = PubKeyInner::new(
+            KeyVersion::V4,
+            key_type.to_alg(),
+            Timestamp::now(),
+            None,
+            public_params,
+        )
+        .unwrap();
+        let pub_key = packet::PublicSubkey::from_inner(pub_key).unwrap();
+        let sec_key = SecretSubkey::new(pub_key.clone(), secret_params).unwrap();
+
+        // the primary key states that it is willing to be associated with the subkey
+        let backsig = sec_key
+            .sign_primary_key_binding(&mut rng, signer.public_key(), &"".into())
+            .expect("sign backsignature");
+
+        let embedded = Some(backsig);
+
+        let sig = pub_key
+            .sign(
+                &mut rng,
+                &signer,
+                signer.public_key(),
+                &Password::empty(),
+                keyflags,
+                embedded,
+            )
+            .expect("sign subkey");
+
+        SignedPublicSubKey::new(pub_key, vec![sig])
+    };
+
+    let signed_public_key = SignedPublicKey::bind_with_signing_key(
+        rand::thread_rng(),
+        &signer,
+        signer.public_key().clone(),
+        details,
+        &Password::empty(),
+        vec![signing_subkey_pub],
+    )
+    .expect("sign public key from the HSM");
+
+    signed_public_key
+        .verify_bindings()
+        .expect("binding signatures (including embedded backsig in subkey) are ok")
 }
