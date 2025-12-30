@@ -143,7 +143,7 @@ pub fn hkdf(
     // 32 octets of the recipient public key material.
     // 32 octets of the shared secret.
 
-    let mut input = vec![];
+    let mut input = Zeroizing::new(vec![]);
     input.extend_from_slice(ephemeral);
     input.extend_from_slice(recipient_public);
     input.extend_from_slice(shared_secret);
