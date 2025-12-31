@@ -13,6 +13,7 @@ use crate::{
 
 const BUFFER_SIZE: usize = 8 * 1024;
 
+/// Reads a one-pass signed message
 #[derive(derive_more::Debug)]
 pub enum SignatureOnePassReader<'a> {
     Init {

@@ -5,6 +5,8 @@ use byteorder::BigEndian;
 use crate::ser::Serialize;
 
 /// Duration in seconds
+///
+/// This type is related to an OpenPGP [`Timestamp`](crate::types::Timestamp)
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Default)]
 pub struct Duration(u32);
 

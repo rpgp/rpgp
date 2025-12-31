@@ -1,4 +1,4 @@
-//! # Cryptography module
+//! Low-level cryptographic building blocks
 
 use self::hash::HashAlgorithm;
 use crate::types::SignatureBytes;

@@ -22,8 +22,15 @@ use crate::{
     types::{Password, SkeskVersion, StringToKey, Tag},
 };
 
-/// Symmetric-Key Encrypted Session Key Packet
+/// Symmetric-Key Encrypted Session Key (SKESK) Packet
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetric-key-encrypted-ses>
+///
+/// This packet stores an encrypted **session key**, which is used to encrypt a data packet as
+/// part of a messages.
+///
+/// The SKESK is a password-based variation of the
+/// [`PublicKeyEncryptedSessionKey`](crate::packet::PublicKeyEncryptedSessionKey) (PKESK) packet.
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub enum SymKeyEncryptedSessionKey {
     V4 {
@@ -58,6 +65,7 @@ pub enum SymKeyEncryptedSessionKey {
     },
 }
 
+/// AEAD configuration for a v6 (or v5) [`SymKeyEncryptedSessionKey`] (SKESK)
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum AeadProps {
