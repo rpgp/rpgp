@@ -196,6 +196,8 @@ impl SymmetricKeyAlgorithm {
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode. Does
     /// resynchronization.
+    ///
+    /// NOTE: This code is not used in rPGP anymore
     pub fn decrypt(self, key: &[u8], prefix: &mut [u8], ciphertext: &mut [u8]) -> Result<()> {
         debug!("unprotected decrypt");
         let iv_vec = vec![0u8; self.block_size()];
@@ -208,6 +210,8 @@ impl SymmetricKeyAlgorithm {
     /// Does not do resynchronization.
     ///
     /// The result will be in `ciphertext`.
+    ///
+    /// NOTE: This code is not used in rPGP anymore
     pub fn decrypt_protected(
         self,
         key: &[u8],
@@ -248,6 +252,8 @@ impl SymmetricKeyAlgorithm {
     /// (128 bits), the IV is 18 octets long, and octets 17 and 18 replicate
     /// octets 15 and 16.  Those extra two octets are an easy check for a
     /// correct key.
+    ///
+    /// NOTE: This code is not used in rPGP anymore
     pub fn decrypt_with_iv(
         self,
         key: &[u8],
@@ -305,6 +311,8 @@ impl SymmetricKeyAlgorithm {
     }
 
     /// Applies the legacy resyncing
+    ///
+    /// NOTE: This code is not used in rPGP anymore
     pub fn decrypt_with_iv_resync(
         self,
         key: &[u8],
