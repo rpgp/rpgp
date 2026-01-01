@@ -14,7 +14,7 @@ use crate::{
     crypto::{aes_kw, public_key::PublicKeyAlgorithm, Decryptor},
     errors::{ensure, Result},
     ser::Serialize,
-    types::MlKem768X25519PublicParams,
+    types::public::MlKem768X25519PublicParams,
 };
 
 /// Size in bytes of the X25519 secret key.

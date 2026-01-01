@@ -8,7 +8,7 @@ use crate::{
     crypto::{ecc_curve::ECCCurve, hash::HashAlgorithm, Signer},
     errors::{bail, ensure, ensure_eq, unsupported_err, Error, Result},
     ser::Serialize,
-    types::{EcdsaPublicParams, Mpi, SignatureBytes},
+    types::{public::EcdsaPublicParams, Mpi, SignatureBytes},
 };
 
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]

@@ -5,7 +5,7 @@ use crate::{
     crypto::{hash::HashAlgorithm, Signer},
     errors::{bail, ensure, ensure_eq, format_err, Result},
     ser::Serialize,
-    types::{Ed448PublicParams, SignatureBytes},
+    types::{public::Ed448PublicParams, SignatureBytes},
 };
 
 const MIN_HASH_LEN_BITS: usize = 512;

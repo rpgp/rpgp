@@ -11,7 +11,11 @@ use crate::{
     },
     errors::{ensure, ensure_eq, unsupported_err, Error, Result},
     ser::Serialize,
-    types::{ecdh::EcdhKdfType, pad_key, EcdhPublicParams, Mpi, PkeskBytes},
+    types::{
+        plain_secret::pad_key,
+        public::{ecdh::EcdhKdfType, EcdhPublicParams},
+        Mpi, PkeskBytes,
+    },
 };
 
 /// 20 octets representing "Anonymous Sender    ".

@@ -2,7 +2,7 @@ use zeroize::Zeroize;
 
 use crate::{
     ser::Serialize,
-    types::{ElgamalPublicParams, Mpi},
+    types::{public::ElgamalPublicParams, Mpi},
 };
 
 /// Secret key for Elgamal.

@@ -17,8 +17,9 @@ use crate::{
     errors::{bail, Result},
     packet::{PubKeyInner, PublicKey},
     types::{
-        Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicParams, RsaPublicParams,
-        SignatureBytes, SigningKey, Timestamp, VerifyingKey,
+        public::{PublicParams, RsaPublicParams},
+        Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, SignatureBytes, SigningKey,
+        Timestamp, VerifyingKey,
     },
 };
 

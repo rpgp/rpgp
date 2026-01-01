@@ -9,7 +9,7 @@ use crate::{
     crypto::{hash::HashAlgorithm, Signer},
     errors::{unimplemented_err, Result},
     ser::Serialize,
-    types::{DsaPublicParams, Mpi, SignatureBytes},
+    types::{public::DsaPublicParams, Mpi, SignatureBytes},
 };
 
 /// Secret key for DSA.

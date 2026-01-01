@@ -10,7 +10,7 @@ pub use self::{
     ecdsa::{EcdsaSigner, PgpEcdsaPublicKey},
     rsa::RsaSigner,
 };
-use crate::{crypto::public_key::PublicKeyAlgorithm, types::PublicParams};
+use crate::{crypto::public_key::PublicKeyAlgorithm, types::public::PublicParams};
 
 /// Public key PGP parameters for a given public key
 pub trait PublicKey {

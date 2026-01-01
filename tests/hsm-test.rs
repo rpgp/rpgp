@@ -11,8 +11,9 @@ use pgp::{
     },
     packet::{self, PubKeyInner, PublicKey, SignatureConfig},
     types::{
-        EcdhPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes,
-        PublicParams, SignatureBytes, SigningKey, Timestamp, VerifyingKey,
+        public::{EcdhPublicParams, PublicParams},
+        Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes, SignatureBytes,
+        SigningKey, Timestamp, VerifyingKey,
     },
 };
 
