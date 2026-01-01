@@ -1,5 +1,5 @@
 use ml_dsa::{KeyGen, MlDsa65};
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use signature::{Signer as _, Verifier};
 use zeroize::ZeroizeOnDrop;
 
@@ -44,11 +44,11 @@ impl From<&SecretKey> for MlDsa65Ed25519PublicParams {
 
 impl SecretKey {
     /// Generate an Ed448 `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
-        let ed25519 = ed25519_dalek::SigningKey::generate(&mut rng);
+    pub fn generate<R: RngCore + CryptoRng + ?Sized>(rng: &mut R) -> Self {
+        let ed25519 = ed25519_dalek::SigningKey::generate(rng);
         let mut ml_dsa_seed = [0u8; ML_DSA65_KEY_LEN];
         rng.fill_bytes(&mut ml_dsa_seed);
-        let ml_dsa = MlDsa65::key_gen_internal(&ml_dsa_seed.into());
+        let ml_dsa = MlDsa65::from_seed(&ml_dsa_seed.into());
 
         SecretKey {
             ed25519,
@@ -62,7 +62,7 @@ impl SecretKey {
     pub fn try_from_bytes(ed25519: [u8; 32], ml_dsa: [u8; 32]) -> Result<Self> {
         let ed25519 = ed25519_dalek::SigningKey::from_bytes(&ed25519);
         // use the seed format
-        let keypair = MlDsa65::key_gen_internal(&ml_dsa.into());
+        let keypair = MlDsa65::from_seed(&ml_dsa.into());
 
         Ok(Self {
             ed25519,
@@ -144,9 +144,9 @@ pub fn verify(
 
 #[cfg(test)]
 mod tests {
+    use chacha20::ChaCha8Rng;
     use proptest::prelude::*;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use super::*;
 

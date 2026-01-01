@@ -1,4 +1,4 @@
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use signature::{Signer as _, Verifier};
 use slh_dsa::Shake128s;
 use zeroize::ZeroizeOnDrop;
@@ -41,8 +41,8 @@ impl From<&SecretKey> for SlhDsaShake128sPublicParams {
 
 impl SecretKey {
     /// Generate an Ed448 `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
-        let key = slh_dsa::SigningKey::new(&mut rng);
+    pub fn generate<R: RngCore + CryptoRng + ?Sized>(rng: &mut R) -> Self {
+        let key = slh_dsa::SigningKey::new(rng);
 
         SecretKey { key }
     }
@@ -117,9 +117,9 @@ pub fn verify(
 
 #[cfg(test)]
 mod tests {
+    use chacha20::ChaCha8Rng;
     use proptest::prelude::*;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use super::*;
 
