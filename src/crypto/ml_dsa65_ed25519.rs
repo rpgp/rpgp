@@ -7,7 +7,7 @@ use crate::{
     crypto::{hash::HashAlgorithm, Signer},
     errors::{ensure, ensure_eq, Result},
     ser::Serialize,
-    types::{MlDsa65Ed25519PublicParams, SignatureBytes},
+    types::{public::MlDsa65Ed25519PublicParams, SignatureBytes},
 };
 
 /// Size in bytes of the ED25519 secret key.

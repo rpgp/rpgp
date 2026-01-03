@@ -14,8 +14,8 @@ use crate::{
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{
-        EncryptionKey, EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength,
-        PkeskBytes, PublicParams, SignatureBytes, Tag, Timestamp, VerifyingKey,
+        public::PublicParams, EncryptionKey, EskType, Fingerprint, Imprint, KeyDetails, KeyId,
+        KeyVersion, PacketLength, PkeskBytes, SignatureBytes, Tag, Timestamp, VerifyingKey,
     },
 };
 

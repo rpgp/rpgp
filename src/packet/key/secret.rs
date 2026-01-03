@@ -18,9 +18,11 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        DecryptionKey, EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails, KeyId,
-        KeyVersion, Password, PkeskBytes, PlainSecretParams, PublicParams, SecretParams,
-        SignatureBytes, SigningKey, Tag, Timestamp,
+        plain_secret::PlainSecretParams,
+        public::{EddsaLegacyPublicParams, PublicParams},
+        secret::SecretParams,
+        DecryptionKey, EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Password,
+        PkeskBytes, SignatureBytes, SigningKey, Tag, Timestamp,
     },
 };
 

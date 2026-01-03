@@ -6,7 +6,7 @@ use crate::{
     crypto::public_key::PublicKeyAlgorithm,
     errors::{ensure, unsupported_err, Result},
     parsing_reader::BufReadParsing,
-    types::{KeyVersion, PublicParams, SecretParams, Timestamp},
+    types::{public::PublicParams, secret::SecretParams, KeyVersion, Timestamp},
 };
 
 /// Parse the whole private key, both public and private fields.

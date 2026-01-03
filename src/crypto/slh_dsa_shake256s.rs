@@ -7,7 +7,7 @@ use crate::{
     crypto::{hash::HashAlgorithm, Signer},
     errors::{ensure, ensure_eq, format_err, Result},
     ser::Serialize,
-    types::{SignatureBytes, SlhDsaShake256sPublicParams},
+    types::{public::SlhDsaShake256sPublicParams, SignatureBytes},
 };
 
 /// Size in bytes of the serialized secret key.

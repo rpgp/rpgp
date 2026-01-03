@@ -9,7 +9,10 @@ use crate::{
     crypto::checksum,
     errors::{bail, ensure, unsupported_err, InvalidInputSnafu, Result},
     ser::Serialize,
-    types::*,
+    types::{
+        plain_secret::{s2k_usage_aead, PlainSecretParams},
+        *,
+    },
 };
 
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]

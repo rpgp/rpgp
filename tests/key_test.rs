@@ -25,9 +25,10 @@ use pgp::{
     },
     ser::Serialize,
     types::{
+        plain_secret::PlainSecretParams, public::PublicParams, secret::SecretParams,
         CompressionAlgorithm, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Mpi,
-        PacketHeaderVersion, PacketLength, Password, PlainSecretParams, PublicParams, S2kParams,
-        SecretParams, SignedUser, StringToKey, Tag, Timestamp,
+        PacketHeaderVersion, PacketLength, Password, S2kParams, SignedUser, StringToKey, Tag,
+        Timestamp,
     },
 };
 use rand::SeedableRng;
