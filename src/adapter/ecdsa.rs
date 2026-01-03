@@ -172,8 +172,8 @@ impl<C, T> KeyDetails for EcdsaSigner<T, C> {
         self.public_key.created_at()
     }
 
-    fn expiration(&self) -> Option<u16> {
-        self.public_key.expiration()
+    fn v3_expiration_days(&self) -> Option<u16> {
+        self.public_key.v3_expiration_days()
     }
 
     fn public_params(&self) -> &PublicParams {
