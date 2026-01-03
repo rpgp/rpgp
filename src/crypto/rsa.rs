@@ -25,9 +25,9 @@ use crate::{
 };
 
 /// MAX_KEY_SIZE limits rsa key size while parsing public key packets
-#[cfg(not(feature = "malformed-artifact-compat"))]
+#[cfg(not(feature = "large-rsa"))]
 pub(crate) const MAX_KEY_SIZE: usize = 8192;
-#[cfg(feature = "malformed-artifact-compat")]
+#[cfg(feature = "large-rsa")]
 pub(crate) const MAX_KEY_SIZE: usize = 16384;
 
 /// The MAX_KEY_SIZE_GENERATE limit applies to generating a new SecretKey
