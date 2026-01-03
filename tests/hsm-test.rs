@@ -86,8 +86,8 @@ impl KeyDetails for FakeHsm {
         self.public_key.created_at()
     }
 
-    fn expiration(&self) -> Option<u16> {
-        self.public_key.expiration()
+    fn v3_expiration_days(&self) -> Option<u16> {
+        self.public_key.v3_expiration_days()
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -341,7 +341,7 @@ fn card_decrypt() {
                 enc_subkey.version(),
                 enc_subkey.algorithm(),
                 enc_subkey.created_at(),
-                enc_subkey.expiration(),
+                enc_subkey.v3_expiration_days(),
                 enc_subkey.public_params().clone(),
             )
             .unwrap(),
