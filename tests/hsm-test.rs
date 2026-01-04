@@ -220,7 +220,7 @@ impl FakeHsm {
                     self.public_key.fingerprint().as_bytes(),
                 )?;
 
-                (*decrypted_key).clone() // FIXME
+                (*decrypted_key).clone() // strip away the zeroizing that we don't need in this test
             }
 
             _ => unimplemented!(),
