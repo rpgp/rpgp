@@ -82,7 +82,7 @@ pub struct EncryptionFields<'a> {
 impl Decryptor for SecretKey {
     type EncryptionFields<'a> = EncryptionFields<'a>;
 
-    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
+    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Zeroizing<Vec<u8>>> {
         debug!("X448 decrypt");
 
         let shared_secret = {
@@ -122,13 +122,13 @@ pub fn derive_session_key(
     recipient_public: &[u8; 56],
     shared_secret: [u8; 56],
     encrypted_session_key: &[u8],
-) -> Result<Vec<u8>> {
+) -> Result<Zeroizing<Vec<u8>>> {
     let okm = hkdf(&ephemeral, recipient_public, &shared_secret)?;
 
     let decrypted_key = aes_kw::unwrap(&*okm, encrypted_session_key)?;
     ensure!(!decrypted_key.is_empty(), "empty key is not valid");
 
-    Ok((*decrypted_key).clone())
+    Ok(decrypted_key)
 }
 
 /// HKDF for X448

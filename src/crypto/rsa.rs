@@ -15,7 +15,7 @@ use signature::{
     hazmat::{PrehashSigner, PrehashVerifier},
     SignatureEncoding,
 };
-use zeroize::ZeroizeOnDrop;
+use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::{
     crypto::{hash::HashAlgorithm, Decryptor, Signer},
@@ -144,10 +144,10 @@ impl Decryptor for SecretKey {
     type EncryptionFields<'a> = &'a Mpi;
 
     /// RSA decryption using PKCS1v15 padding.
-    fn decrypt(&self, mpi: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
+    fn decrypt(&self, mpi: Self::EncryptionFields<'_>) -> Result<Zeroizing<Vec<u8>>> {
         let m = self.0.decrypt(Pkcs1v15Encrypt, mpi.as_ref())?;
 
-        Ok(m)
+        Ok(m.into())
     }
 }
 

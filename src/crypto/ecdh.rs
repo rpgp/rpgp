@@ -265,7 +265,7 @@ pub struct EncryptionFields<'a> {
 impl Decryptor for SecretKey {
     type EncryptionFields<'a> = EncryptionFields<'a>;
 
-    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
+    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Zeroizing<Vec<u8>>> {
         debug!("ECDH decrypt");
 
         let encrypted_key_len: usize = data.encrypted_session_key.len();
@@ -316,7 +316,7 @@ impl Decryptor for SecretKey {
         );
 
         if res.is_ok() {
-            return res.map(|x| (*x).clone()); // FIXME
+            return res;
         }
 
         #[cfg(feature = "malformed-artifact-compat")]
@@ -355,7 +355,7 @@ impl Decryptor for SecretKey {
             ) {
                 log::info!("Decrypted erroneous ECDH session key by go crypto");
 
-                return Ok(sk.to_vec()); // FIXME
+                return Ok(sk);
             }
 
             // 2. Try with stripped trailing zeroes (-> work around old OpenPGP.js bug)
@@ -375,11 +375,11 @@ impl Decryptor for SecretKey {
             ) {
                 log::info!("Decrypted erroneous ECDH session key by OpenPGP.js");
 
-                return Ok(sk.to_vec()); // FIXME
+                return Ok(sk);
             }
         }
 
-        res.map(|x| (*x).clone()) // FIXME
+        res
     }
 }
 

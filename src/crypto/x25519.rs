@@ -85,7 +85,7 @@ pub struct EncryptionFields<'a> {
 impl Decryptor for SecretKey {
     type EncryptionFields<'a> = EncryptionFields<'a>;
 
-    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
+    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Zeroizing<Vec<u8>>> {
         debug!("X25519 decrypt");
 
         let shared_secret = {
@@ -108,7 +108,6 @@ impl Decryptor for SecretKey {
             shared_secret,
             data.encrypted_session_key,
         )
-        .map(|x| (*x).clone()) // FIXME
     }
 }
 
@@ -268,7 +267,7 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(*decrypted_key, decrypted2);
+        assert_eq!(decrypted_key, decrypted2);
     }
 
     #[test]

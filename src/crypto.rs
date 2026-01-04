@@ -1,5 +1,7 @@
 //! # Cryptography module
 
+use zeroize::Zeroizing;
+
 use self::hash::HashAlgorithm;
 use crate::types::SignatureBytes;
 
@@ -49,7 +51,10 @@ pub mod public_key;
 pub trait Decryptor {
     type EncryptionFields<'a>;
 
-    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> crate::errors::Result<Vec<u8>>;
+    fn decrypt(
+        &self,
+        data: Self::EncryptionFields<'_>,
+    ) -> crate::errors::Result<Zeroizing<Vec<u8>>>;
 }
 
 /// Describes keys that can sign data.
