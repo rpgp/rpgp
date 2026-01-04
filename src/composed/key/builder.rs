@@ -24,22 +24,26 @@ use crate::{
     },
 };
 
+/// A type to specify a configuration for the two key flags
+/// "encrypt communications" and "encrypt storage".
+///
+/// <https://www.rfc-editor.org/rfc/rfc9580#name-key-flags>
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
 pub enum EncryptionFlags {
     #[default]
     None,
     Comms,
     Storage,
-    Both,
+    CommsStorage,
 }
 
 impl EncryptionFlags {
     fn comms(&self) -> bool {
-        *self == Self::Comms || *self == Self::Both
+        *self == Self::Comms || *self == Self::CommsStorage
     }
 
     fn storage(&self) -> bool {
-        *self == Self::Storage || *self == Self::Both
+        *self == Self::Storage || *self == Self::CommsStorage
     }
 }
 
@@ -156,7 +160,7 @@ impl SecretKeyParamsBuilder {
                     "KeyType {key_type:?} can not be used for signing keys"
                 ));
             }
-            if (can_encrypt == Some(EncryptionFlags::Both)
+            if (can_encrypt == Some(EncryptionFlags::CommsStorage)
                 || can_encrypt == Some(EncryptionFlags::Storage)
                 || can_encrypt == Some(EncryptionFlags::Comms))
                 && !key_type.can_encrypt()
@@ -704,7 +708,7 @@ mod tests {
                     .version(version)
                     .key_type(KeyType::Rsa(2048))
                     .passphrase(Some("hello".into()))
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .build()
                     .unwrap(),
             )
@@ -720,7 +724,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(version)
                     .key_type(KeyType::Rsa(2048))
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .build()
                     .unwrap(),
             )
@@ -826,7 +830,7 @@ mod tests {
             .subkey(
                 SubkeyParamsBuilder::default()
                     .key_type(KeyType::ECDH(ECCCurve::Curve25519))
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -925,7 +929,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(version)
                     .key_type(KeyType::X25519)
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -999,7 +1003,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(version)
                     .key_type(KeyType::ECDH(ecdh.clone()))
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -1143,7 +1147,7 @@ mod tests {
             .subkey(
                 SubkeyParamsBuilder::default()
                     .key_type(KeyType::ECDH(ECCCurve::Curve25519))
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -1268,7 +1272,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(version)
                     .key_type(KeyType::X448)
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -1390,7 +1394,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(KeyVersion::V4)
                     .key_type(KeyType::X25519)
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .build()
                     .unwrap(),
             )
@@ -1438,7 +1442,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(KeyVersion::V4)
                     .key_type(KeyType::X25519)
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .build()
                     .unwrap(),
             )
@@ -1462,7 +1466,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(KeyVersion::V4)
                     .key_type(KeyType::X25519)
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .build()
                     .unwrap(),
             )
@@ -1486,7 +1490,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(KeyVersion::V6)
                     .key_type(KeyType::X25519)
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .build()
                     .unwrap(),
             )
@@ -1513,7 +1517,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(KeyVersion::V6)
                     .key_type(KeyType::X25519)
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .build()
                     .unwrap(),
             )
@@ -1576,7 +1580,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(KeyVersion::V6)
                     .key_type(KeyType::X25519)
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -1646,7 +1650,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(version)
                     .key_type(KeyType::MlKem768X25519)
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -1725,7 +1729,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(version)
                     .key_type(KeyType::MlKem1024X448)
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -1868,7 +1872,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(version)
                     .key_type(encrypt)
-                    .can_encrypt(EncryptionFlags::Both)
+                    .can_encrypt(EncryptionFlags::CommsStorage)
                     .passphrase(None)
                     .build()
                     .unwrap(),

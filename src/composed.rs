@@ -52,7 +52,7 @@
 //!     .preferred_compression_algorithms(smallvec![])
 //!     .subkeys(vec![SubkeyParamsBuilder::default()
 //!         .key_type(KeyType::ECDH(ECCCurve::Curve25519))
-//!         .can_encrypt(EncryptionFlags::Both)
+//!         .can_encrypt(EncryptionFlags::CommsStorage)
 //!         .build()
 //!         .expect("Must be able to create subkey")]);
 //! let secret_key_params = key_params
