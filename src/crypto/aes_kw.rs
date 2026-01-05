@@ -5,6 +5,8 @@ use generic_array::{
 use snafu::{ResultExt, Snafu};
 use zeroize::Zeroizing;
 
+const IV_LEN: usize = 8;
+
 /// AES key wrap possible errors.
 #[derive(Debug, Snafu)]
 pub enum Error {
@@ -46,30 +48,33 @@ pub fn wrap(key: &[u8], data: &[u8]) -> Result<Vec<u8>, Error> {
 /// AES Key Unwrap
 /// As defined in RFC 3394.
 pub fn unwrap(key: &[u8], data: &[u8]) -> Result<Zeroizing<Vec<u8>>, Error> {
+    let len = data.len() - IV_LEN;
+    let mut out = Zeroizing::new(vec![0u8; len]);
+
     let aes_size = key.len() * 8;
-    let res = match aes_size {
+    match aes_size {
         128 => {
             let key = GenericArray::<u8, U16>::from_slice(key);
             let kek = aes_kw::KekAes128::new(key);
-            kek.unwrap_vec(data)
+            kek.unwrap(data, &mut out)
         }
         192 => {
             let key = GenericArray::<u8, U24>::from_slice(key);
             let kek = aes_kw::KekAes192::new(key);
-            kek.unwrap_vec(data)
+            kek.unwrap(data, &mut out)
         }
         256 => {
             let key = GenericArray::<u8, U32>::from_slice(key);
             let kek = aes_kw::KekAes256::new(key);
-            kek.unwrap_vec(data)
+            kek.unwrap(data, &mut out)
         }
         _ => {
             return Err(InvalidKeySizeSnafu { size: aes_size }.build());
         }
     }
-    .map(Into::into);
+    .context(WrapSnafu)?;
 
-    res.context(WrapSnafu)
+    Ok(out)
 }
 
 #[cfg(test)]
