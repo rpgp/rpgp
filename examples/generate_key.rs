@@ -1,6 +1,6 @@
 use pgp::{
     composed::{
-        EncryptionFlags, KeyType, SecretKeyParamsBuilder, SignedPublicKey, SignedSecretKey,
+        EncryptionCaps, KeyType, SecretKeyParamsBuilder, SignedPublicKey, SignedSecretKey,
         SubkeyParamsBuilder, SubkeyParamsBuilderError,
     },
     crypto::ecc_curve::ECCCurve,
@@ -61,19 +61,19 @@ fn keygen(
     signkey
         .key_type(signing_key_type)
         .can_sign(true)
-        .can_encrypt(EncryptionFlags::CommsStorage)
+        .can_encrypt(EncryptionCaps::All)
         .can_authenticate(false);
     let mut encryptkey = SubkeyParamsBuilder::default();
     encryptkey
         .key_type(encryption_key_type)
         .can_sign(false)
-        .can_encrypt(EncryptionFlags::CommsStorage)
+        .can_encrypt(EncryptionCaps::All)
         .can_authenticate(false);
     let mut authkey = SubkeyParamsBuilder::default();
     authkey
         .key_type(auth_key_type)
         .can_sign(false)
-        .can_encrypt(EncryptionFlags::CommsStorage)
+        .can_encrypt(EncryptionCaps::All)
         .can_authenticate(true);
 
     // Set up parameter builder for the full private key
@@ -82,7 +82,7 @@ fn keygen(
         .key_type(primary_key_type)
         .can_certify(true)
         .can_sign(false)
-        .can_encrypt(EncryptionFlags::CommsStorage)
+        .can_encrypt(EncryptionCaps::All)
         .primary_user_id(uid.into())
         .subkeys(vec![
             signkey.build()?,

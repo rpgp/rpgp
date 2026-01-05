@@ -1,6 +1,6 @@
 use pgp::{
     composed::{
-        EncryptionFlags, KeyType, SecretKeyParamsBuilder, SignedSecretKey, SubkeyParamsBuilder,
+        EncryptionCaps, KeyType, SecretKeyParamsBuilder, SignedSecretKey, SubkeyParamsBuilder,
     },
     crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
     types::CompressionAlgorithm,
@@ -39,7 +39,7 @@ pub fn build_key(kt: KeyType, kt_sub: KeyType) -> SignedSecretKey {
             SubkeyParamsBuilder::default()
                 .key_type(kt_sub)
                 .passphrase(None)
-                .can_encrypt(EncryptionFlags::CommsStorage)
+                .can_encrypt(EncryptionCaps::All)
                 .build()
                 .unwrap(),
         )

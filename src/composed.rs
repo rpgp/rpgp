@@ -28,7 +28,7 @@
 //! ```rust
 //! use pgp::{
 //!     composed::{
-//!         EncryptionFlags, KeyType, Message, MessageBuilder, SecretKeyParamsBuilder,
+//!         EncryptionCaps, KeyType, Message, MessageBuilder, SecretKeyParamsBuilder,
 //!         SignedPublicKey, SignedSecretKey, SubkeyParamsBuilder,
 //!     },
 //!     crypto::{ecc_curve::ECCCurve, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
@@ -52,7 +52,7 @@
 //!     .preferred_compression_algorithms(smallvec![])
 //!     .subkeys(vec![SubkeyParamsBuilder::default()
 //!         .key_type(KeyType::ECDH(ECCCurve::Curve25519))
-//!         .can_encrypt(EncryptionFlags::CommsStorage)
+//!         .can_encrypt(EncryptionCaps::All)
 //!         .build()
 //!         .expect("Must be able to create subkey")]);
 //! let secret_key_params = key_params

@@ -2,7 +2,7 @@ use std::fs::File;
 
 use pgp::{
     composed::{
-        CleartextSignedMessage, EncryptionFlags, KeyType, Message, MessageBuilder,
+        CleartextSignedMessage, EncryptionCaps, KeyType, Message, MessageBuilder,
         SecretKeyParamsBuilder, SignedPublicKey, SignedSecretKey,
     },
     crypto::{
@@ -227,7 +227,7 @@ fn rfc9580_legacy_25519_illegal_in_v6() {
     key_params
         .key_type(KeyType::ECDH(ECCCurve::Curve25519))
         .version(KeyVersion::V6)
-        .can_encrypt(EncryptionFlags::CommsStorage)
+        .can_encrypt(EncryptionCaps::All)
         .primary_user_id("Me <me@example.com>".into());
     let secret_key_params = key_params
         .build()
