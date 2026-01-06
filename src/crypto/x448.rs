@@ -9,7 +9,7 @@ use crate::{
     crypto::{aes_kw, Decryptor},
     errors::{bail, ensure, Result},
     ser::Serialize,
-    types::public::X448PublicParams,
+    types::X448PublicParams,
 };
 
 pub const KEY_LEN: usize = 56;

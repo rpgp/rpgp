@@ -13,8 +13,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        public::PublicParams, EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion,
-        PkeskBytes, PkeskVersion, Tag,
+        EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PkeskBytes,
+        PkeskVersion, PublicParams, Tag,
     },
 };
 

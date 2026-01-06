@@ -22,10 +22,7 @@ use crate::{
     crypto::{hash::HashAlgorithm, Signer},
     errors::{bail, ensure, ensure_eq, Result},
     ser::Serialize,
-    types::{
-        public::{Ed25519PublicParams, EddsaLegacyPublicParams},
-        Mpi, SignatureBytes,
-    },
+    types::{Ed25519PublicParams, EddsaLegacyPublicParams, Mpi, SignatureBytes},
 };
 
 const MIN_HASH_LEN_BITS: usize = 256;

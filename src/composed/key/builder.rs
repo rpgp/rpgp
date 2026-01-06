@@ -17,8 +17,8 @@ use crate::{
     errors::Result,
     packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
     types::{
-        self, plain_secret::PlainSecretParams, public::PublicParams, secret::SecretParams,
-        CompressionAlgorithm, Duration, Password, S2kParams, Timestamp,
+        self, CompressionAlgorithm, Duration, Password, PlainSecretParams, PublicParams, S2kParams,
+        Timestamp,
     },
 };
 
@@ -491,7 +491,10 @@ impl KeyType {
         }
     }
 
-    pub fn generate<R: Rng + CryptoRng>(&self, rng: R) -> Result<(PublicParams, SecretParams)> {
+    pub fn generate<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+    ) -> Result<(PublicParams, types::SecretParams)> {
         let (pub_params, plain) = match self {
             KeyType::Rsa(bit_size) => {
                 let secret = rsa::SecretKey::generate(rng, *bit_size as usize)?;
@@ -600,7 +603,7 @@ impl KeyType {
             }
         };
 
-        Ok((pub_params, SecretParams::Plain(plain)))
+        Ok((pub_params, types::SecretParams::Plain(plain)))
     }
 }
 

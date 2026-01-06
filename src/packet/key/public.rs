@@ -20,9 +20,9 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        public::{EcdhPublicParams, EddsaLegacyPublicParams, PublicParams},
-        EncryptionKey, EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Mpi, Password,
-        PkeskBytes, SignatureBytes, SigningKey, Tag, Timestamp, VerifyingKey,
+        EcdhPublicParams, EddsaLegacyPublicParams, EncryptionKey, EskType, Fingerprint, Imprint,
+        KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes, PublicParams, SignatureBytes,
+        SigningKey, Tag, Timestamp, VerifyingKey,
     },
 };
 

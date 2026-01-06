@@ -21,7 +21,7 @@ use crate::{
     crypto::{hash::HashAlgorithm, Decryptor, Signer},
     errors::{format_err, unsupported_err, Error, Result},
     ser::Serialize,
-    types::{public::RsaPublicParams, Mpi, PkeskBytes, SignatureBytes},
+    types::{Mpi, PkeskBytes, RsaPublicParams, SignatureBytes},
 };
 
 /// MAX_KEY_SIZE limits rsa key size while parsing public key packets

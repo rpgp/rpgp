@@ -18,8 +18,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        secret::SecretParams, DecryptionKey, EskType, KeyDetails, Password, PkeskVersion,
-        SkeskVersion, Tag, VerifyingKey,
+        DecryptionKey, EskType, KeyDetails, Password, PkeskVersion, SecretParams, SkeskVersion,
+        Tag, VerifyingKey,
     },
     util::impl_try_from_into,
 };

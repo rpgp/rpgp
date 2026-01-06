@@ -10,7 +10,7 @@ use crate::{
 };
 
 mod dsa;
-pub mod ecdh;
+pub(crate) mod ecdh;
 mod ecdsa;
 mod ed25519;
 mod ed448;
@@ -48,7 +48,7 @@ pub use self::{
     slh_dsa_shake128f::SlhDsaShake128fPublicParams, slh_dsa_shake128s::SlhDsaShake128sPublicParams,
     slh_dsa_shake256s::SlhDsaShake256sPublicParams,
 };
-use super::plain_secret::PlainSecretParams;
+use super::PlainSecretParams;
 
 /// Represent the public parameters for the different algorithms.
 #[derive(PartialEq, Eq, Clone, derive_more::Debug)]

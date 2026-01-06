@@ -6,10 +6,7 @@ use crate::{
     crypto::{aead::AeadAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
     errors::{bail, InvalidInputSnafu, Result},
     parsing_reader::BufReadParsing,
-    types::{
-        encrypted_secret::EncryptedSecretParams, plain_secret::PlainSecretParams,
-        public::PublicParams, *,
-    },
+    types::*,
 };
 
 /// A list of params that are used to represent the values of possibly encrypted key,

@@ -17,9 +17,8 @@ use crate::{
     errors::{ensure_eq, Result},
     packet::{PubKeyInner, PublicKey},
     types::{
-        public::{EcdsaPublicParams, PublicParams},
-        Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, SignatureBytes, SigningKey,
-        Timestamp, VerifyingKey,
+        EcdsaPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicParams,
+        SignatureBytes, SigningKey, Timestamp, VerifyingKey,
     },
 };
 

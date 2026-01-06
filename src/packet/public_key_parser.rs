@@ -6,7 +6,7 @@ use crate::{
     crypto::public_key::PublicKeyAlgorithm,
     errors::{ensure, unsupported_err, Result},
     parsing_reader::BufReadParsing,
-    types::{public::PublicParams, KeyVersion, Timestamp},
+    types::{KeyVersion, PublicParams, Timestamp},
 };
 
 fn public_key_parser_v4_v6<B: BufRead>(

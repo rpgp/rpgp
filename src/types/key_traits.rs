@@ -8,7 +8,7 @@ use crate::{
     },
     errors::Result,
     types::{
-        public::PublicParams, EskType, Fingerprint, KeyId, KeyVersion, Password, PkeskBytes,
+        EskType, Fingerprint, KeyId, KeyVersion, Password, PkeskBytes, PublicParams,
         SignatureBytes, Timestamp,
     },
 };

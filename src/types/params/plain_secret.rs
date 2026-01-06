@@ -26,9 +26,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        encrypted_secret::EncryptedSecretParams,
-        public::{EcdhPublicParams, PublicParams},
-        EskType, KeyDetails, KeyVersion, Mpi, PkeskBytes, S2kParams, StringToKey, Tag,
+        EcdhPublicParams, EncryptedSecretParams, EskType, KeyDetails, KeyVersion, Mpi, PkeskBytes,
+        PublicParams, S2kParams, StringToKey, Tag,
     },
     util::TeeWriter,
 };
@@ -449,7 +448,7 @@ impl PlainSecretParams {
                 #[cfg(feature = "draft-wussler-openpgp-forwarding")]
                 if let EcdhPublicParams::Curve25519 {
                     ecdh_kdf_type:
-                        crate::types::params::public::ecdh::EcdhKdfType::Replaced {
+                        crate::types::EcdhKdfType::Replaced {
                             replacement_fingerprint,
                         },
                     ..

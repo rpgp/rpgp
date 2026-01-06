@@ -14,7 +14,7 @@ use crate::{
     crypto::{aes_kw, public_key::PublicKeyAlgorithm, Decryptor},
     errors::{ensure, Result},
     ser::Serialize,
-    types::public::MlKem1024X448PublicParams,
+    types::MlKem1024X448PublicParams,
 };
 
 /// Size in bytes of the X448 secret key.

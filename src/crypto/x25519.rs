@@ -11,7 +11,7 @@ use crate::{
     crypto::{aes_kw, Decryptor},
     errors::{ensure, Result},
     ser::Serialize,
-    types::public::X25519PublicParams,
+    types::X25519PublicParams,
 };
 
 pub const KEY_LEN: usize = 32;

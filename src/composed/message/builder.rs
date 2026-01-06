@@ -407,7 +407,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     /// use pgp::composed::MessageBuilder;
     /// use pgp::crypto::sym::SymmetricKeyAlgorithm;
     ///
-    /// # use pgp::types::{KeyDetails, SignatureBytes, public::PublicParams, KeyId, Fingerprint, KeyVersion};
+    /// # use pgp::types::{KeyDetails, SignatureBytes, PublicParams, KeyId, Fingerprint, KeyVersion};
     /// # use pgp::crypto::hash::HashAlgorithm;
     /// # use pgp::crypto::public_key::PublicKeyAlgorithm;
     /// # use pgp::errors::Result;
@@ -567,7 +567,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// use pgp::composed::MessageBuilder;
     /// use pgp::crypto::sym::SymmetricKeyAlgorithm;
     ///
-    /// # use pgp::types::{KeyDetails, SignatureBytes, public::PublicParams, KeyId, Fingerprint, KeyVersion};
+    /// # use pgp::types::{KeyDetails, SignatureBytes, PublicParams, KeyId, Fingerprint, KeyVersion};
     /// # use pgp::crypto::hash::HashAlgorithm;
     /// # use pgp::crypto::public_key::PublicKeyAlgorithm;
     /// # use pgp::errors::Result;
