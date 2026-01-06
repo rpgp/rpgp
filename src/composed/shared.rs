@@ -1,5 +1,5 @@
 use std::{
-    io::{BufRead, BufReader, Read},
+    io::{self, BufRead, Read},
     path::Path,
 };
 
@@ -9,11 +9,12 @@ use crate::{
     armor::{self, BlockType, DearmorOptions},
     errors::{bail, format_err, unimplemented_err, Error, Result},
     packet::{Packet, PacketParser},
+    util::{BufReader, FinalizingBufRead},
 };
 
 pub trait Deserializable: Sized {
     /// Parse a single byte encoded composition.
-    fn from_bytes<R: BufRead>(bytes: R) -> Result<Self> {
+    fn from_bytes<R: FinalizingBufRead>(bytes: R) -> Result<Self> {
         let mut el = Self::from_bytes_many(bytes)?;
         el.next()
             .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())?
@@ -33,11 +34,13 @@ pub trait Deserializable: Sized {
     fn from_string_many<'a>(
         input: &'a str,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
-        Self::from_armor_many_buf(input.as_bytes())
+        Self::from_armor_many_buf(BufReader::new(io::BufReader::new(input.as_bytes())))
     }
 
     /// Armored ascii data.
-    fn from_armor_single<R: Read>(input: R) -> Result<(Self, armor::Headers)> {
+    fn from_armor_single<R: Read + std::fmt::Debug + Send>(
+        input: R,
+    ) -> Result<(Self, armor::Headers)> {
         let (mut el, headers) = Self::from_armor_many(input)?;
         Ok((
             el.next()
@@ -47,12 +50,12 @@ pub trait Deserializable: Sized {
     }
 
     /// Armored ascii data.
-    fn from_armor_single_buf<R: BufRead>(input: R) -> Result<(Self, armor::Headers)> {
+    fn from_armor_single_buf<R: FinalizingBufRead>(input: R) -> Result<(Self, armor::Headers)> {
         Self::from_armor_single_buf_with_options(input, DearmorOptions::default())
     }
 
     /// Armored ascii data, with explicit options for dearmoring.
-    fn from_armor_single_buf_with_options<R: BufRead>(
+    fn from_armor_single_buf_with_options<R: FinalizingBufRead>(
         input: R,
         opt: DearmorOptions,
     ) -> Result<(Self, armor::Headers)> {
@@ -65,21 +68,21 @@ pub trait Deserializable: Sized {
     }
 
     /// Armored ascii data.
-    fn from_armor_many<'a, R: Read + 'a>(
+    fn from_armor_many<'a, R: Read + std::fmt::Debug + 'a + Send>(
         input: R,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
-        Self::from_armor_many_buf(BufReader::new(input))
+        Self::from_armor_many_buf(BufReader::new(io::BufReader::new(input)))
     }
 
     /// Armored ascii data.
-    fn from_armor_many_buf<'a, R: BufRead + 'a>(
+    fn from_armor_many_buf<'a, R: FinalizingBufRead + 'a>(
         input: R,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
         Self::from_armor_many_buf_with_options(input, DearmorOptions::default())
     }
 
     /// Armored ascii data, with explicit options for dearmoring.
-    fn from_armor_many_buf_with_options<'a, R: BufRead + 'a>(
+    fn from_armor_many_buf_with_options<'a, R: FinalizingBufRead + 'a>(
         input: R,
         opt: DearmorOptions,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
@@ -106,7 +109,10 @@ pub trait Deserializable: Sized {
                     bail!("unexpected block type: {}", typ);
                 }
 
-                Ok((Self::from_bytes_many(BufReader::new(dearmor))?, headers))
+                Ok((
+                    Self::from_bytes_many(BufReader::new(io::BufReader::new(dearmor)))?,
+                    headers,
+                ))
             }
             BlockType::PublicKeyPKCS1(_)
             | BlockType::PublicKeyPKCS8
@@ -120,7 +126,7 @@ pub trait Deserializable: Sized {
     }
 
     /// Parse a list of compositions in raw byte format.
-    fn from_bytes_many<'a, R: BufRead + 'a>(
+    fn from_bytes_many<'a, R: FinalizingBufRead + 'a>(
         bytes: R,
     ) -> Result<Box<dyn Iterator<Item = Result<Self>> + 'a>> {
         let packets = PacketParser::new(bytes)
@@ -151,13 +157,15 @@ pub trait Deserializable: Sized {
         path: P,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>>>, armor::Headers)> {
         let file = std::fs::File::open(path)?;
-        Self::from_armor_many_buf(BufReader::new(file))
+        // TODO: specialized file versoin
+        Self::from_armor_many_buf(BufReader::new(io::BufReader::new(file)))
     }
 
     /// Ready binary packets from the given file.
     fn from_file_many<P: AsRef<Path>>(path: P) -> Result<Box<dyn Iterator<Item = Result<Self>>>> {
         let file = std::fs::File::open(path)?;
-        Self::from_bytes_many(BufReader::new(file))
+        // TODO: specialized file versoin
+        Self::from_bytes_many(BufReader::new(io::BufReader::new(file)))
     }
 
     /// Turn a list of packets into a usable representation.
@@ -172,11 +180,13 @@ pub trait Deserializable: Sized {
     ///
     /// Returns a composition and a BTreeMap containing armor headers
     /// (None, if the data was unarmored)
-    fn from_reader_single<'a, R: Read + 'a>(input: R) -> Result<(Self, Option<armor::Headers>)> {
-        Self::from_reader_single_buf(BufReader::new(input))
+    fn from_reader_single<'a, R: Read + std::fmt::Debug + Send + 'a>(
+        input: R,
+    ) -> Result<(Self, Option<armor::Headers>)> {
+        Self::from_reader_single_buf(BufReader::new(io::BufReader::new(input)))
     }
 
-    fn from_reader_single_buf<'a, R: BufRead + 'a>(
+    fn from_reader_single_buf<'a, R: FinalizingBufRead + 'a>(
         mut input: R,
     ) -> Result<(Self, Option<armor::Headers>)> {
         if !is_binary(&mut input)? {
@@ -195,20 +205,20 @@ pub trait Deserializable: Sized {
     ///
     /// Returns an iterator of compositions and a BTreeMap containing armor headers
     /// (None, if the data was unarmored)
-    fn from_reader_many<'a, R: Read + 'a>(
+    fn from_reader_many<'a, R: Read + std::fmt::Debug + Send + 'a>(
         input: R,
     ) -> Result<(
         Box<dyn Iterator<Item = Result<Self>> + 'a>,
         Option<armor::Headers>,
     )> {
-        Self::from_reader_many_buf(BufReader::new(input))
+        Self::from_reader_many_buf(BufReader::new(io::BufReader::new(input)))
     }
 
     /// Parses a list of compositions, from either ASCII-armored or binary OpenPGP data.
     ///
     /// Returns an iterator of compositions and a BTreeMap containing armor headers
     /// (None, if the data was unarmored)
-    fn from_reader_many_buf<'a, R: BufRead + 'a>(
+    fn from_reader_many_buf<'a, R: FinalizingBufRead + 'a>(
         mut input: R,
     ) -> Result<(
         Box<dyn Iterator<Item = Result<Self>> + 'a>,

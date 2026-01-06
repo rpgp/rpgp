@@ -21,6 +21,7 @@ use crate::{
     },
     ser::Serialize,
     types::{KeyVersion, Password, SigningKey, Timestamp, VerifyingKey},
+    util::FinalizingBufRead,
 };
 
 /// Implementation of a Cleartext Signed Message.
@@ -160,17 +161,26 @@ where {
     }
 
     /// Parse from an arbitrary reader, containing the text of the message.
-    pub fn from_armor<R: Read>(bytes: R) -> Result<(Self, Headers)> {
-        Self::from_armor_buf(BufReader::new(bytes), DearmorOptions::default())
+    pub fn from_armor<R: Read + std::fmt::Debug + Send>(bytes: R) -> Result<(Self, Headers)> {
+        Self::from_armor_buf(
+            crate::util::BufReader::new(std::io::BufReader::new(bytes)),
+            DearmorOptions::default(),
+        )
     }
 
     /// Parse from string, containing the text of the message.
     pub fn from_string(input: &str) -> Result<(Self, Headers)> {
-        Self::from_armor_buf(input.as_bytes(), DearmorOptions::default())
+        Self::from_armor_buf(
+            crate::util::BufReader::new(input.as_bytes()),
+            DearmorOptions::default(),
+        )
     }
 
     /// Parse from a buffered reader, containing the text of the message.
-    pub fn from_armor_buf<R: BufRead>(mut b: R, opt: DearmorOptions) -> Result<(Self, Headers)> {
+    pub fn from_armor_buf<R: FinalizingBufRead>(
+        mut b: R,
+        opt: DearmorOptions,
+    ) -> Result<(Self, Headers)> {
         debug!("parsing cleartext message");
         // Headers
         let (typ, headers, has_leading_data) =
@@ -184,7 +194,7 @@ where {
         Self::from_armor_after_header(b, headers, opt)
     }
 
-    pub fn from_armor_after_header<R: BufRead>(
+    pub fn from_armor_after_header<R: FinalizingBufRead>(
         mut b: R,
         headers: Headers,
         opt: DearmorOptions,
@@ -210,7 +220,7 @@ where {
         let mut signatures = vec![];
 
         // TODO: limited read to 1GiB
-        let pp = PacketParser::new(BufReader::new(&mut dearmor));
+        let pp = PacketParser::new(crate::util::BufReader::new(BufReader::new(&mut dearmor)));
         for res in pp {
             match res {
                 Ok(Packet::Signature(sig)) => signatures.push(sig),

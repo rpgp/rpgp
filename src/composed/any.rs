@@ -1,4 +1,4 @@
-use std::io::{BufRead, BufReader, Read};
+use std::io::{self, Read};
 
 use crate::{
     armor::{self, BlockType, Dearmor, DearmorOptions},
@@ -7,6 +7,7 @@ use crate::{
         SignedPublicKey, SignedSecretKey,
     },
     errors::{ensure, unimplemented_err, Result},
+    util::{BufReader, FinalizingBufRead},
 };
 
 /// A flexible representation of what can be represented in an armor file.
@@ -25,23 +26,23 @@ impl<'a> Any<'a> {
     pub fn from_armor<R: std::fmt::Debug + Read + 'a + Send>(
         bytes: R,
     ) -> Result<(Self, armor::Headers)> {
-        Self::from_armor_buf(BufReader::new(bytes))
+        Self::from_armor_buf(BufReader::new(io::BufReader::new(bytes)))
     }
 
     /// Parse a single armor encoded composition.
     pub fn from_string(input: &'a str) -> Result<(Self, armor::Headers)> {
-        Self::from_armor_buf(input.as_bytes())
+        Self::from_armor_buf(BufReader::new(input.as_bytes()))
     }
 
     /// Parse armored ascii data.
-    pub fn from_armor_buf<R: BufRead + std::fmt::Debug + 'a + Send>(
+    pub fn from_armor_buf<R: FinalizingBufRead + 'a + Send>(
         input: R,
     ) -> Result<(Self, armor::Headers)> {
         Self::from_armor_buf_with_options(input, DearmorOptions::default())
     }
 
     /// Parse armored ascii data, with explicit options for dearmoring.
-    pub fn from_armor_buf_with_options<R: BufRead + std::fmt::Debug + 'a + Send>(
+    pub fn from_armor_buf_with_options<R: FinalizingBufRead + 'a + Send>(
         input: R,
         opt: DearmorOptions,
     ) -> Result<(Self, armor::Headers)> {
@@ -52,22 +53,23 @@ impl<'a> Any<'a> {
             // Standard PGP types
             BlockType::PublicKey => {
                 let dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
-                let key = SignedPublicKey::from_bytes(BufReader::new(dearmor))?;
+                let key = SignedPublicKey::from_bytes(BufReader::new(io::BufReader::new(dearmor)))?;
                 Ok((Self::PublicKey(key), headers))
             }
             BlockType::PrivateKey => {
                 let dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
-                let key = SignedSecretKey::from_bytes(BufReader::new(dearmor))?;
+                let key = SignedSecretKey::from_bytes(BufReader::new(io::BufReader::new(dearmor)))?;
                 Ok((Self::SecretKey(key), headers))
             }
             BlockType::Message => {
                 let dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
-                let msg = Message::from_bytes(BufReader::new(dearmor))?;
+                let msg = Message::from_bytes(BufReader::new(io::BufReader::new(dearmor)))?;
                 Ok((Self::Message(msg), headers))
             }
             BlockType::Signature => {
                 let dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
-                let sig = DetachedSignature::from_bytes(BufReader::new(dearmor))?;
+                let sig =
+                    DetachedSignature::from_bytes(BufReader::new(io::BufReader::new(dearmor)))?;
                 Ok((Self::Signature(sig), headers))
             }
             BlockType::CleartextMessage => {

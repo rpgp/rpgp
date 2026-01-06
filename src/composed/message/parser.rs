@@ -1,5 +1,5 @@
 use std::{
-    io::{BufRead, BufReader},
+    io::{self, BufRead},
     path::Path,
 };
 
@@ -7,7 +7,7 @@ use super::{
     reader::{
         CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassReader,
     },
-    DebugBufRead, MessageReader,
+    MessageReader,
 };
 use crate::{
     armor::{BlockType, DearmorOptions},
@@ -16,6 +16,7 @@ use crate::{
     packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
     parsing_reader::BufReadParsing,
     types::{PkeskVersion, SkeskVersion, Tag},
+    util::{BufReader, FinalizingBufRead},
 };
 
 /// Parses a single message level
@@ -96,7 +97,9 @@ pub(super) fn next(
                                             esk_filter(esks, PkeskVersion::V6, &[SkeskVersion::V6])
                                         }
                                         ProtectedDataConfig::GnupgAead { .. } => {
-                                            bail!("GnupgAead config not allowed in SymEncryptedProtectedData")
+                                            bail!(
+                                                "GnupgAead config not allowed in SymEncryptedProtectedData"
+                                            )
                                         }
                                     }
                                 }
@@ -237,8 +240,8 @@ impl<'a> Message<'a> {
     }
 
     /// Parses a message from the given bytes.
-    pub fn from_bytes<R: BufRead + std::fmt::Debug + 'a + Send>(source: R) -> Result<Self> {
-        let source = MessageReader::Reader(Box::new(source) as Box<dyn DebugBufRead>);
+    pub fn from_bytes<R: FinalizingBufRead + 'a + Send>(source: R) -> Result<Self> {
+        let source = MessageReader::Reader(Box::new(source) as Box<dyn FinalizingBufRead>);
         let parser = crate::packet::PacketParser::new(source);
         Self::from_packets(parser)
     }
@@ -275,7 +278,8 @@ impl<'a> Message<'a> {
     /// From armored file
     pub fn from_armor_file<P: AsRef<Path>>(path: P) -> Result<(Self, crate::armor::Headers)> {
         let file = std::fs::File::open(path)?;
-        Self::from_armor(BufReader::new(file))
+        // TODO: specialized file version
+        Self::from_armor(BufReader::new(io::BufReader::new(file)))
     }
 
     /// From armored string
@@ -286,7 +290,8 @@ impl<'a> Message<'a> {
     /// From binary file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let file = std::fs::File::open(path)?;
-        Self::from_bytes(BufReader::new(file))
+        // TODO: use specialized reader for files
+        Self::from_bytes(BufReader::new(io::BufReader::new(file)))
     }
 
     /// Armored ascii data.
@@ -317,7 +322,10 @@ impl<'a> Message<'a> {
                     bail!("unexpected block type: {}", typ);
                 }
 
-                Ok((Self::from_bytes(BufReader::new(dearmor))?, headers))
+                Ok((
+                    Self::from_bytes(BufReader::new(io::BufReader::new(dearmor)))?,
+                    headers,
+                ))
             }
             BlockType::PublicKey
             | BlockType::PrivateKey
@@ -339,7 +347,7 @@ impl<'a> Message<'a> {
         mut source: R,
     ) -> Result<(Self, Option<crate::armor::Headers>)> {
         if is_binary(&mut source)? {
-            let msg = Self::from_bytes(source)?;
+            let msg = Self::from_bytes(BufReader::new(source))?;
             Ok((msg, None))
         } else {
             let (msg, headers) = Self::from_armor(source)?;

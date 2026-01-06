@@ -18,6 +18,7 @@ use zeroize::Zeroizing;
 use crate::{
     composed::RawSessionKey,
     errors::{bail, ensure, unimplemented_err, Error, Result},
+    util::FinalizingBufRead,
 };
 
 mod decryptor;
@@ -527,7 +528,7 @@ impl SymmetricKeyAlgorithm {
         ciphertext: R,
     ) -> Result<StreamDecryptor<R>>
     where
-        R: std::io::BufRead,
+        R: FinalizingBufRead,
     {
         StreamDecryptor::new(self, true, key, ciphertext)
     }
@@ -539,7 +540,7 @@ impl SymmetricKeyAlgorithm {
         ciphertext: R,
     ) -> Result<StreamDecryptor<R>>
     where
-        R: std::io::BufRead,
+        R: FinalizingBufRead,
     {
         StreamDecryptor::new(self, false, key, ciphertext)
     }

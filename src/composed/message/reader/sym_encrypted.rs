@@ -7,18 +7,19 @@ use crate::{
     errors::{bail, Result},
     packet::PacketHeader,
     types::Tag,
+    util::FinalizingBufRead,
 };
 
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-pub enum SymEncryptedDataReader<R: BufRead> {
+pub enum SymEncryptedDataReader<R: FinalizingBufRead> {
     Body {
         decryptor: MaybeDecryptor<PacketBodyReader<R>>,
     },
     Error,
 }
 
-impl<R: BufRead> SymEncryptedDataReader<R> {
+impl<R: FinalizingBufRead> SymEncryptedDataReader<R> {
     pub fn new(source: PacketBodyReader<R>) -> Result<Self> {
         debug_assert_eq!(source.packet_header().tag(), Tag::SymEncryptedData);
 
@@ -75,7 +76,16 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
     }
 }
 
-impl<R: BufRead> BufRead for SymEncryptedDataReader<R> {
+impl<R: FinalizingBufRead> FinalizingBufRead for SymEncryptedDataReader<R> {
+    fn is_done(&self) -> bool {
+        match self {
+            Self::Body { decryptor } => decryptor.is_done(),
+            Self::Error => panic!("SymEncryptedDataReader errored"),
+        }
+    }
+}
+
+impl<R: FinalizingBufRead> BufRead for SymEncryptedDataReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         match self {
             Self::Body { ref mut decryptor } => decryptor.fill_buf(),
@@ -93,7 +103,7 @@ impl<R: BufRead> BufRead for SymEncryptedDataReader<R> {
     }
 }
 
-impl<R: BufRead> Read for SymEncryptedDataReader<R> {
+impl<R: FinalizingBufRead> Read for SymEncryptedDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::Body { decryptor } => decryptor.read(buf),
@@ -104,12 +114,12 @@ impl<R: BufRead> Read for SymEncryptedDataReader<R> {
 
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-pub enum MaybeDecryptor<R: BufRead> {
+pub enum MaybeDecryptor<R: FinalizingBufRead> {
     Raw(R),
     Decryptor(StreamDecryptor<R>),
 }
 
-impl<R: BufRead> MaybeDecryptor<R> {
+impl<R: FinalizingBufRead> MaybeDecryptor<R> {
     pub fn into_inner(self) -> R {
         match self {
             Self::Raw(r) => r,
@@ -132,7 +142,16 @@ impl<R: BufRead> MaybeDecryptor<R> {
     }
 }
 
-impl<R: BufRead> BufRead for MaybeDecryptor<R> {
+impl<R: FinalizingBufRead> FinalizingBufRead for MaybeDecryptor<R> {
+    fn is_done(&self) -> bool {
+        match self {
+            Self::Raw(r) => r.is_done(),
+            Self::Decryptor(r) => r.is_done(),
+        }
+    }
+}
+
+impl<R: FinalizingBufRead> BufRead for MaybeDecryptor<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         match self {
             Self::Raw(r) => r.fill_buf(),
@@ -148,7 +167,7 @@ impl<R: BufRead> BufRead for MaybeDecryptor<R> {
     }
 }
 
-impl<R: BufRead> Read for MaybeDecryptor<R> {
+impl<R: FinalizingBufRead> Read for MaybeDecryptor<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::Raw(r) => r.read(buf),

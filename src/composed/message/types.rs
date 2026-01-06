@@ -21,19 +21,15 @@ use crate::{
         DecryptionKey, EskType, KeyDetails, Password, PkeskVersion, SecretParams, SkeskVersion,
         Tag, VerifyingKey,
     },
-    util::impl_try_from_into,
+    util::{impl_try_from_into, FinalizingBufRead},
 };
-
-pub trait DebugBufRead: BufRead + std::fmt::Debug + Send {}
-
-impl<T: BufRead + std::fmt::Debug + Send> DebugBufRead for T {}
 
 /// The inner reader type in a nested message
 #[derive(Debug)]
 pub enum MessageReader<'a> {
     Compressed(Box<CompressedDataReader<MessageReader<'a>>>),
     Edata(Box<Edata<'a>>),
-    Reader(Box<dyn DebugBufRead + 'a>),
+    Reader(Box<dyn FinalizingBufRead + 'a>),
 }
 
 impl MessageReader<'_> {
@@ -46,7 +42,7 @@ impl MessageReader<'_> {
     }
 
     fn check_trailing_data(&mut self) -> io::Result<()> {
-        fn check_next_packet<R: DebugBufRead>(
+        fn check_next_packet<R: FinalizingBufRead>(
             mut parser: crate::packet::PacketParser<R>,
         ) -> io::Result<()> {
             match parser.next_ref() {
@@ -104,10 +100,7 @@ impl MessageReader<'_> {
 
                 let message_reader = inner_reader.get_mut().get_mut();
                 message_reader.check_trailing_data()?;
-
-                // read to end (to force check of final AEAD authentication tag or MDC)
-                let mut out = Vec::new();
-                inner_reader.read_to_end(&mut out)?;
+                debug_assert!(inner_reader.is_done(), "{inner_reader:?}");
             }
             MessageReader::Reader(r) => {
                 let parser = crate::packet::PacketParser::new(r);
@@ -125,6 +118,16 @@ impl Read for MessageReader<'_> {
             Self::Compressed(r) => r.read(buf),
             Self::Edata(r) => r.read(buf),
             Self::Reader(r) => r.read(buf),
+        }
+    }
+}
+
+impl FinalizingBufRead for MessageReader<'_> {
+    fn is_done(&self) -> bool {
+        match self {
+            Self::Compressed(r) => r.is_done(),
+            Self::Edata(r) => r.is_done(),
+            Self::Reader(r) => r.is_done(),
         }
     }
 }
@@ -567,6 +570,16 @@ impl<'a> Edata<'a> {
                 Ok(Self::SymEncryptedProtectedData { reader })
             }
             _ => unreachable!("must not be called with a different tag"),
+        }
+    }
+}
+
+impl FinalizingBufRead for Edata<'_> {
+    fn is_done(&self) -> bool {
+        match self {
+            Self::SymEncryptedData { reader } => reader.is_done(),
+            Self::SymEncryptedProtectedData { reader } => reader.is_done(),
+            Self::GnupgAeadData { reader } => reader.is_done(),
         }
     }
 }
@@ -1936,6 +1949,7 @@ mod tests {
 
     #[test]
     fn test_x25519_signing_bytes_compressed() {
+        pretty_env_logger::try_init().ok();
         let (skey, _headers) = SignedSecretKey::from_armor_single(
             fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
         )

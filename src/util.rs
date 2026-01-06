@@ -6,6 +6,96 @@ use bytes::{Buf, BufMut, BytesMut};
 use digest::DynDigest;
 use nom::Input;
 
+pub trait FinalizingBufRead: io::BufRead + std::fmt::Debug + Send {
+    fn is_done(&self) -> bool;
+}
+
+impl FinalizingBufRead for &[u8] {
+    fn is_done(&self) -> bool {
+        self.is_empty()
+    }
+}
+
+impl<T> FinalizingBufRead for io::Cursor<T>
+where
+    T: AsRef<[u8]> + std::fmt::Debug + Send,
+{
+    fn is_done(&self) -> bool {
+        let len = self.get_ref().as_ref().len() as u64;
+        len == 0 || self.position() >= len - 1
+    }
+}
+
+#[derive(Debug)]
+pub struct BufReader<R: io::BufRead> {
+    reader: R,
+    eof: bool,
+}
+
+impl<R: io::BufRead> BufReader<R> {
+    pub fn new(reader: R) -> Self {
+        Self { reader, eof: false }
+    }
+}
+
+impl<R: io::BufRead + std::fmt::Debug + Send> FinalizingBufRead for BufReader<R> {
+    fn is_done(&self) -> bool {
+        self.eof
+    }
+}
+
+impl<R: io::BufRead> io::Read for BufReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        dbg!(buf.len());
+        // make sure to delegate to the BufReads
+
+        let mut rem = self.reader.fill_buf()?;
+        let nread = rem.read(buf)?;
+        self.reader.consume(nread);
+        dbg!(nread);
+
+        Ok(nread)
+    }
+}
+
+impl<R: io::BufRead> io::BufRead for BufReader<R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match self.reader.fill_buf() {
+            Ok(s) => {
+                if s.is_empty() {
+                    self.eof = true;
+                }
+                Ok(s)
+            }
+            Err(err) => {
+                dbg!(&err);
+                if err.kind() == io::ErrorKind::UnexpectedEof {
+                    self.eof = true;
+                }
+                Err(err)
+            }
+        }
+    }
+
+    fn consume(&mut self, amount: usize) {
+        self.reader.consume(amount);
+        // make sure to read to update EOF state
+        self.fill_buf().ok();
+    }
+}
+
+impl<T: FinalizingBufRead> FinalizingBufRead for &mut T {
+    fn is_done(&self) -> bool {
+        (**self).is_done()
+    }
+}
+
+impl<T: FinalizingBufRead + ?Sized> FinalizingBufRead for Box<T> {
+    fn is_done(&self) -> bool {
+        (**self).is_done()
+    }
+}
+
 /// This function will fill `buffer` to its full capacity, until the underlying reader is depleted.
 ///
 /// If this function returns fewer bytes than `buffer.len()` the underlying reader is finished.

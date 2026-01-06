@@ -8,67 +8,79 @@ use crate::{
     packet::PacketHeader,
     parsing_reader::BufReadParsing,
     types::{PacketLength, Tag},
-    util::fill_buffer_bytes,
+    util::{fill_buffer_bytes, FinalizingBufRead},
 };
 
 const BUFFER_SIZE: usize = 8 * 1024;
 
 #[derive(Debug)]
-pub struct PacketBodyReader<R: BufRead> {
+pub struct PacketBodyReader<R: FinalizingBufRead> {
     packet_header: PacketHeader,
     state: State<R>,
 }
 
 #[derive(derive_more::Debug)]
-enum State<R: BufRead> {
+enum State<R: FinalizingBufRead> {
     Body {
         #[debug("{}", hex::encode(buffer))]
         buffer: BytesMut,
         source: LimitedReader<R>,
     },
     Done {
+        #[debug("{}", hex::encode(buffer))]
+        buffer: BytesMut,
         source: R,
     },
     Error,
 }
 
-impl<R: BufRead> BufRead for PacketBodyReader<R> {
+impl<R: FinalizingBufRead> FinalizingBufRead for PacketBodyReader<R> {
+    fn is_done(&self) -> bool {
+        match &self.state {
+            State::Body { .. } => false,
+            State::Done { buffer, .. } => !buffer.has_remaining(),
+            State::Error => panic!("PacketBodyReader errored"),
+        }
+    }
+}
+
+impl<R: FinalizingBufRead> BufRead for PacketBodyReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
         match self.state {
-            State::Body { ref mut buffer, .. } => Ok(&buffer[..]),
-            State::Done { .. } => Ok(&[][..]),
+            State::Body { ref mut buffer, .. } | State::Done { ref mut buffer, .. } => {
+                Ok(&buffer[..])
+            }
+
             State::Error => Err(io::Error::other("PacketBodyReader errored")),
         }
     }
 
     fn consume(&mut self, amt: usize) {
         match self.state {
-            State::Body { ref mut buffer, .. } => {
+            State::Body { ref mut buffer, .. } | State::Done { ref mut buffer, .. } => {
                 buffer.advance(amt);
             }
-            State::Done { .. } => {}
             State::Error => panic!("PacketBodyReader errored"),
         }
     }
 }
 
-impl<R: BufRead> Read for PacketBodyReader<R> {
+impl<R: FinalizingBufRead> Read for PacketBodyReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
         match self.state {
-            State::Body { ref mut buffer, .. } => {
+            State::Body { ref mut buffer, .. } | State::Done { ref mut buffer, .. } => {
                 let to_write = buffer.remaining().min(buf.len());
                 buffer.copy_to_slice(&mut buf[..to_write]);
                 Ok(to_write)
             }
-            State::Done { .. } => Ok(0),
             State::Error => Err(io::Error::other("PacketBodyReader errored")),
         }
     }
 }
 
-impl<R: BufRead> PacketBodyReader<R> {
+impl<R: FinalizingBufRead> PacketBodyReader<R> {
     pub fn new(packet_header: PacketHeader, source: R) -> io::Result<Self> {
         let source = match packet_header.packet_length() {
             PacketLength::Fixed(len) => {
@@ -130,18 +142,31 @@ impl<R: BufRead> PacketBodyReader<R> {
     pub fn new_done(packet_header: PacketHeader, source: R) -> Self {
         Self {
             packet_header,
-            state: State::Done { source },
+            state: State::Done {
+                source,
+                buffer: BytesMut::new(),
+            },
         }
-    }
-
-    pub fn is_done(&self) -> bool {
-        matches!(self.state, State::Done { .. })
     }
 
     pub fn into_inner(self) -> R {
         match self.state {
-            State::Body { source, .. } => source.into_inner(),
-            State::Done { source } => source,
+            State::Body { source, buffer } => {
+                debug_assert!(
+                    !buffer.has_remaining(),
+                    "discarding potentially valid data: {}",
+                    hex::encode(buffer)
+                );
+                source.into_inner()
+            }
+            State::Done { source, buffer } => {
+                debug_assert!(
+                    !buffer.has_remaining(),
+                    "discarding potentially valid data: {}",
+                    hex::encode(buffer)
+                );
+                source
+            }
             State::Error => panic!("PacketBodyReader errored"),
         }
     }
@@ -149,7 +174,7 @@ impl<R: BufRead> PacketBodyReader<R> {
     pub fn get_mut(&mut self) -> &mut R {
         match &mut self.state {
             State::Body { source, .. } => source.get_mut(),
-            State::Done { source } => source,
+            State::Done { source, .. } => source,
             State::Error => panic!("PacketBodyReader errored"),
         }
     }
@@ -175,8 +200,10 @@ impl<R: BufRead> PacketBodyReader<R> {
                     }
 
                     let read = fill_buffer_bytes(&mut source, &mut buffer, BUFFER_SIZE)?;
+                    let source_is_done = source.is_done();
+                    dbg!(read, source_is_done);
 
-                    if read == 0 {
+                    if read == 0 || source_is_done {
                         debug!("body source done: {:?}", self.packet_header);
                         match source {
                             LimitedReader::Fixed { mut reader } => {
@@ -190,11 +217,12 @@ impl<R: BufRead> PacketBodyReader<R> {
                                 }
 
                                 self.state = State::Done {
+                                    buffer,
                                     source: reader.into_inner(),
                                 };
                             }
                             LimitedReader::Indeterminate(source) => {
-                                self.state = State::Done { source };
+                                self.state = State::Done { buffer, source };
                             }
                             LimitedReader::Partial(r) => {
                                 // new round
@@ -229,8 +257,8 @@ impl<R: BufRead> PacketBodyReader<R> {
                     }
                     return Ok(());
                 }
-                State::Done { source } => {
-                    self.state = State::Done { source };
+                State::Done { source, buffer } => {
+                    self.state = State::Done { source, buffer };
                     return Ok(());
                 }
                 State::Error => {

@@ -10,7 +10,7 @@ use crate::{
         sym::SymmetricKeyAlgorithm,
     },
     types::Tag,
-    util::fill_buffer_bytes,
+    util::{fill_buffer_bytes, FinalizingBufRead},
 };
 
 /// Currently the tag size for all known aeads is 16.
@@ -304,6 +304,13 @@ impl<R: BufRead> StreamDecryptor<R> {
     fn out_buffer_remaining(&self) -> usize {
         let start = self.in_buffer_end + self.out_buffer_start;
         self.buffer.len() - start
+    }
+}
+
+impl<R: FinalizingBufRead> FinalizingBufRead for StreamDecryptor<R> {
+    fn is_done(&self) -> bool {
+        dbg!(self.out_buffer(), self.out_buffer_remaining());
+        self.out_buffer().is_empty()
     }
 }
 

@@ -1,10 +1,22 @@
 use std::io::{self, BufRead, Read};
 
+use crate::util::FinalizingBufRead;
+
 #[derive(Debug)]
 pub enum LimitedReader<R: BufRead> {
     Fixed { reader: io::Take<R> },
     Indeterminate(R),
     Partial(io::Take<R>),
+}
+
+impl<R: FinalizingBufRead> FinalizingBufRead for LimitedReader<R> {
+    fn is_done(&self) -> bool {
+        match self {
+            Self::Fixed { reader } => reader.limit() == 0,
+            Self::Indeterminate(reader) => reader.is_done(),
+            Self::Partial(reader) => reader.limit() == 0,
+        }
+    }
 }
 
 impl<R: BufRead> BufRead for LimitedReader<R> {

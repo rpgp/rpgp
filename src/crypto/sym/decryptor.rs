@@ -17,7 +17,7 @@ use zeroize::Zeroizing;
 use crate::{
     crypto::sym::SymmetricKeyAlgorithm,
     errors::{bail, Result},
-    util::{fill_buffer, fill_buffer_bytes},
+    util::{fill_buffer, fill_buffer_bytes, FinalizingBufRead},
 };
 
 const MDC_LEN: usize = 22;
@@ -27,7 +27,7 @@ const BUFFER_SIZE: usize = 1024 * 8;
 #[allow(clippy::large_enum_variant)]
 pub enum StreamDecryptor<R>
 where
-    R: BufRead,
+    R: FinalizingBufRead,
 {
     Idea(StreamDecryptorInner<Idea, R>),
     TripleDes(StreamDecryptorInner<TdesEde3, R>),
@@ -42,9 +42,30 @@ where
     Camellia256(StreamDecryptorInner<Camellia256, R>),
 }
 
+impl<R> FinalizingBufRead for StreamDecryptor<R>
+where
+    R: FinalizingBufRead,
+{
+    fn is_done(&self) -> bool {
+        match self {
+            Self::Idea(i) => i.is_done(),
+            Self::TripleDes(i) => i.is_done(),
+            Self::Cast5(i) => i.is_done(),
+            Self::Blowfish(i) => i.is_done(),
+            Self::Aes128(i) => i.is_done(),
+            Self::Aes192(i) => i.is_done(),
+            Self::Aes256(i) => i.is_done(),
+            Self::Twofish(i) => i.is_done(),
+            Self::Camellia128(i) => i.is_done(),
+            Self::Camellia192(i) => i.is_done(),
+            Self::Camellia256(i) => i.is_done(),
+        }
+    }
+}
+
 impl<R> BufRead for StreamDecryptor<R>
 where
-    R: BufRead,
+    R: FinalizingBufRead,
 {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         match self {
@@ -81,7 +102,7 @@ where
 
 impl<R> Read for StreamDecryptor<R>
 where
-    R: BufRead,
+    R: FinalizingBufRead,
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
@@ -117,7 +138,7 @@ where
 
 impl<R> StreamDecryptor<R>
 where
-    R: BufRead,
+    R: FinalizingBufRead,
 {
     pub fn new(
         alg: SymmetricKeyAlgorithm,
@@ -239,7 +260,7 @@ pub enum StreamDecryptorInner<M, R>
 where
     M: BlockDecrypt + BlockEncryptMut + BlockCipher,
     BufDecryptor<M>: KeyIvInit,
-    R: BufRead,
+    R: FinalizingBufRead,
 {
     Prefix {
         #[debug("BufDecryptor")]
@@ -269,7 +290,7 @@ impl<M, R> StreamDecryptorInner<M, R>
 where
     M: BlockDecrypt + BlockEncryptMut + BlockCipher,
     BufDecryptor<M>: KeyIvInit,
-    R: BufRead,
+    R: FinalizingBufRead,
 {
     fn new(protected: bool, source: R, key: &[u8]) -> Result<Self> {
         debug!("protected decrypt stream");
@@ -341,6 +362,7 @@ where
                     // need to keep at least a full mdc len in the buffer, to make sure we process
                     // that at the end, and to return it
 
+                    dbg!(protected.is_protected(), buffer.remaining());
                     if protected.is_protected() && buffer.remaining() > MDC_LEN
                         || !protected.is_protected() && buffer.has_remaining()
                     {
@@ -350,9 +372,21 @@ where
                         let current_len = buffer.remaining();
                         let buf_size = BUFFER_SIZE;
                         let to_read = buf_size - current_len;
-                        let read = fill_buffer_bytes(source, buffer, buf_size)?;
+                        let read = fill_buffer_bytes(&mut *source, buffer, buf_size)?;
                         let is_last_read = read < to_read;
+                        let source_is_done = source.is_done();
                         decryptor.decrypt(&mut buffer[current_len..]);
+
+                        dbg!(
+                            is_last_read,
+                            source_is_done,
+                            buffer.remaining(),
+                            current_len,
+                            read,
+                            to_read,
+                            source,
+                        );
+                        let is_last_read = source_is_done || is_last_read;
 
                         match protected {
                             MaybeProtected::Protected { .. } if is_last_read => (true, true),
@@ -446,7 +480,7 @@ where
                     } => {
                         if let MaybeProtected::Protected { mut hasher } = protected {
                             // last read
-                            if buffer.remaining() < MDC_LEN {
+                            if dbg!(buffer.remaining()) < MDC_LEN {
                                 return Err(io::Error::new(
                                     io::ErrorKind::UnexpectedEof,
                                     "missing MDC",
@@ -487,11 +521,22 @@ where
     }
 }
 
+impl<M, R> FinalizingBufRead for StreamDecryptorInner<M, R>
+where
+    M: BlockDecrypt + BlockEncryptMut + BlockCipher + Send,
+    BufDecryptor<M>: KeyIvInit,
+    R: FinalizingBufRead,
+{
+    fn is_done(&self) -> bool {
+        matches!(self, Self::Done { .. })
+    }
+}
+
 impl<M, R> BufRead for StreamDecryptorInner<M, R>
 where
     M: BlockDecrypt + BlockEncryptMut + BlockCipher,
     BufDecryptor<M>: KeyIvInit,
-    R: BufRead,
+    R: FinalizingBufRead,
 {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
@@ -530,7 +575,7 @@ impl<M, R> Read for StreamDecryptorInner<M, R>
 where
     M: BlockDecrypt + BlockEncryptMut + BlockCipher,
     BufDecryptor<M>: KeyIvInit,
-    R: BufRead,
+    R: FinalizingBufRead,
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;

@@ -36,7 +36,7 @@ fn decode(s: &str) -> Result<Vec<u8>, hex::FromHexError> {
 fn gnupg_v5_skesk() {
     let skesk5 = decode(SKESK5).expect("hex");
 
-    let mut pp = PacketParser::new(BufReader::new(&*skesk5));
+    let mut pp = PacketParser::new(pgp::util::BufReader::new(BufReader::new(&*skesk5)));
     let p = match pp.next() {
         Some(Ok(p)) => p,
         Some(Err(e)) => panic!("could not parse skesk {e:?}"),
@@ -119,7 +119,7 @@ fn gnupg_v5_skesk() {
 fn gnupg_aead_roundtrip() {
     let ocb = decode(OCB).expect("hex");
 
-    let mut pp = PacketParser::new(BufReader::new(&*ocb));
+    let mut pp = PacketParser::new(pgp::util::BufReader::new(BufReader::new(&*ocb)));
     let packet = pp.next().expect("packet").expect("ok");
 
     assert!(matches!(packet, Packet::GnupgAeadData(_)));
@@ -138,7 +138,8 @@ fn gnupg_aead_message() {
     message.extend_from_slice(&decode(SKESK5).expect("hex"));
     message.extend_from_slice(&decode(OCB).expect("hex"));
 
-    let msg = Message::from_bytes(BufReader::new(&*message)).expect("message from bytes");
+    let msg = Message::from_bytes(pgp::util::BufReader::new(BufReader::new(&*message)))
+        .expect("message from bytes");
 
     eprintln!("msg {msg:#?}");
 

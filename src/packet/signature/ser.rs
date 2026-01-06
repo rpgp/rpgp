@@ -456,9 +456,9 @@ mod tests {
     use crate::packet::{Packet, PacketParser};
 
     fn test_roundtrip(name: &str) {
-        let f = BufReader::new(
+        let f = crate::util::BufReader::new(BufReader::new(
             std::fs::File::open(Path::new("./tests/openpgp/samplemsgs").join(name)).unwrap(),
-        );
+        ));
 
         let packets: Vec<Packet> = PacketParser::new(f).collect::<Result<_>>().unwrap();
         let mut serialized = Vec::new();

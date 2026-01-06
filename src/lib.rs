@@ -30,7 +30,8 @@ extern crate pretty_assertions;
 // Reexport as used in the public api
 pub use bytes;
 
-pub(crate) mod util;
+// TODO: hide again
+pub mod util;
 
 pub mod adapter;
 pub mod armor;

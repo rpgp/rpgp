@@ -7,14 +7,14 @@ use super::PacketBodyReader;
 use crate::{
     packet::{LiteralDataHeader, PacketHeader},
     types::Tag,
-    util::fill_buffer_bytes,
+    util::{fill_buffer_bytes, FinalizingBufRead},
 };
 
 const BUFFER_SIZE: usize = 8 * 1024;
 
 /// Read the underlying literal data.
 #[derive(derive_more::Debug)]
-pub enum LiteralDataReader<R: BufRead> {
+pub enum LiteralDataReader<R: FinalizingBufRead> {
     Body {
         header: LiteralDataHeader,
         source: PacketBodyReader<R>,
@@ -30,7 +30,7 @@ pub enum LiteralDataReader<R: BufRead> {
     Error,
 }
 
-impl<R: BufRead> LiteralDataReader<R> {
+impl<R: FinalizingBufRead> LiteralDataReader<R> {
     pub fn new(mut source: PacketBodyReader<R>) -> io::Result<Self> {
         debug_assert_eq!(source.packet_header().tag(), Tag::LiteralData);
         let header = LiteralDataHeader::try_from_reader(&mut source)?;
@@ -146,7 +146,17 @@ impl<R: BufRead> LiteralDataReader<R> {
     }
 }
 
-impl<R: BufRead> BufRead for LiteralDataReader<R> {
+impl<R: FinalizingBufRead> FinalizingBufRead for LiteralDataReader<R> {
+    fn is_done(&self) -> bool {
+        match self {
+            Self::Body { .. } => false,
+            Self::Done { buffer, .. } => !buffer.has_remaining(),
+            Self::Error => panic!("LiteralDataReader errored"),
+        }
+    }
+}
+
+impl<R: FinalizingBufRead> BufRead for LiteralDataReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
         match self {
@@ -165,7 +175,7 @@ impl<R: BufRead> BufRead for LiteralDataReader<R> {
     }
 }
 
-impl<R: BufRead> Read for LiteralDataReader<R> {
+impl<R: FinalizingBufRead> Read for LiteralDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
         match self {

@@ -851,7 +851,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
 
 fn test_parse_openpgp_key_bin(key: &str, verify: bool) {
     let f = read_file(Path::new("./tests/openpgp/").join(key));
-    let pk = PublicOrSecret::from_bytes_many(BufReader::new(f)).unwrap();
+    let pk = PublicOrSecret::from_bytes_many(pgp::util::BufReader::new(BufReader::new(f))).unwrap();
     for key in pk {
         let parsed = key.expect("failed to parse key");
         if verify {

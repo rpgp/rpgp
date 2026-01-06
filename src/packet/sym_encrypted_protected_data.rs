@@ -14,6 +14,7 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::Tag,
+    util::FinalizingBufRead,
 };
 
 /// Either a standard OpenPGP SEIPD config or a Gnupg-specific AEAD config
@@ -285,13 +286,13 @@ impl PacketTrait for SymEncryptedProtectedData {
 
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-pub enum StreamDecryptor<R: BufRead> {
+pub enum StreamDecryptor<R: FinalizingBufRead> {
     V1(crate::crypto::sym::StreamDecryptor<R>),
     GnupgAead(crate::crypto::aead::StreamDecryptor<R>),
     V2(crate::crypto::aead::StreamDecryptor<R>),
 }
 
-impl<R: BufRead> BufRead for StreamDecryptor<R> {
+impl<R: FinalizingBufRead> BufRead for StreamDecryptor<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         match self {
             Self::V1(r) => r.fill_buf(),
@@ -309,7 +310,17 @@ impl<R: BufRead> BufRead for StreamDecryptor<R> {
     }
 }
 
-impl<R: BufRead> Read for StreamDecryptor<R> {
+impl<R: FinalizingBufRead> FinalizingBufRead for StreamDecryptor<R> {
+    fn is_done(&self) -> bool {
+        match self {
+            Self::V1(r) => r.is_done(),
+            Self::GnupgAead(r) => r.is_done(),
+            Self::V2(r) => r.is_done(),
+        }
+    }
+}
+
+impl<R: FinalizingBufRead> Read for StreamDecryptor<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::V1(r) => r.read(buf),
@@ -319,7 +330,7 @@ impl<R: BufRead> Read for StreamDecryptor<R> {
     }
 }
 
-impl<R: BufRead> StreamDecryptor<R> {
+impl<R: FinalizingBufRead> StreamDecryptor<R> {
     pub fn v1(sym_alg: SymmetricKeyAlgorithm, key: &[u8], source: R) -> Result<Self> {
         let decryptor = sym_alg.stream_decryptor_protected(key, source)?;
         Ok(Self::V1(decryptor))

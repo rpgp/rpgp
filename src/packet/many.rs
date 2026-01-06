@@ -1,21 +1,20 @@
-use std::io::BufRead;
-
 use log::debug;
 
 use crate::{
     composed::PacketBodyReader,
     errors::{Error, Result},
     packet::{Packet, PacketHeader},
+    util::FinalizingBufRead,
 };
 
-pub struct PacketParser<R: BufRead> {
+pub struct PacketParser<R: FinalizingBufRead> {
     /// The reader that gets advanced through the original source
     reader: R,
     /// Are we done?
     is_done: bool,
 }
 
-impl<R: BufRead> PacketParser<R> {
+impl<R: FinalizingBufRead> PacketParser<R> {
     pub fn new(source: R) -> Self {
         PacketParser {
             reader: source,
@@ -28,7 +27,7 @@ impl<R: BufRead> PacketParser<R> {
     }
 }
 
-impl<R: BufRead> Iterator for PacketParser<R> {
+impl<R: FinalizingBufRead> Iterator for PacketParser<R> {
     type Item = Result<Packet>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -52,6 +51,7 @@ impl<R: BufRead> Iterator for PacketParser<R> {
         let res = PacketBodyReader::new(header, &mut self.reader)
             .map_err(Error::from)
             .and_then(|mut body| {
+                dbg!(&body, body.is_done());
                 match Packet::from_reader(header, &mut body) {
                     Ok(packet) => Ok(packet),
                     Err(Error::PacketParsing { source }) if source.is_incomplete() => {
@@ -66,7 +66,7 @@ impl<R: BufRead> Iterator for PacketParser<R> {
     }
 }
 
-impl<R: BufRead> PacketParser<R> {
+impl<R: FinalizingBufRead> PacketParser<R> {
     pub fn next_ref(&mut self) -> Option<Result<PacketBodyReader<&'_ mut R>>> {
         if self.is_done {
             return None;
@@ -178,7 +178,7 @@ mod tests {
 
         let path = format!("./tests/tests/sks-dump/{dump}.pgp");
         let p = Path::new(&path);
-        let mut file = BufReader::new(std::fs::File::open(p).unwrap());
+        let mut file = crate::util::BufReader::new(BufReader::new(std::fs::File::open(p).unwrap()));
         let mut bytes = File::open(p).unwrap();
 
         let packets = PacketParser::new(&mut file);
@@ -212,7 +212,7 @@ mod tests {
         let _ = pretty_env_logger::try_init();
 
         let p = Path::new("./tests/tests/sks-dump/0000.pgp");
-        let file = BufReader::new(std::fs::File::open(p).unwrap());
+        let file = crate::util::BufReader::new(BufReader::new(std::fs::File::open(p).unwrap()));
 
         // list of expected tags
         // this file is built by

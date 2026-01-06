@@ -48,6 +48,7 @@ pub trait BufReadParsing: BufRead + Sized {
             }
 
             let available = (arr.len() - read).min(buf.len());
+            dbg!(read, available, arr.len(), buf.len());
             arr[read..read + available].copy_from_slice(&buf[..available]);
             read += available;
             self.consume(available);
@@ -55,7 +56,10 @@ pub trait BufReadParsing: BufRead + Sized {
         if read != arr.len() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
-                "no more data available",
+                format!(
+                    "reading array {} of {} bytes: no more data available",
+                    read, C
+                ),
             ));
         }
 

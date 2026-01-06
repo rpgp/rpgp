@@ -1,4 +1,4 @@
-use std::{io, io::BufReader, iter};
+use std::{io, iter};
 
 use crate::{
     armor::{self, BlockType, DearmorOptions},
@@ -9,6 +9,7 @@ use crate::{
     errors::{bail, format_err, unimplemented_err, Result},
     packet::{Packet, PacketParser, PacketTrait},
     types::Tag,
+    util::{BufReader, FinalizingBufRead},
 };
 
 impl PublicOrSecret {
@@ -16,16 +17,16 @@ impl PublicOrSecret {
     ///
     /// Returns an iterator of public or secret keys and a BTreeMap containing armor headers
     /// (None, if the data was unarmored)
-    pub fn from_reader_many<'a, R: io::Read + 'a>(
+    pub fn from_reader_many<'a, R: io::Read + std::fmt::Debug + Send + 'a>(
         input: R,
     ) -> Result<(
         Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
         Option<armor::Headers>,
     )> {
-        Self::from_reader_many_buf(BufReader::new(input))
+        Self::from_reader_many_buf(BufReader::new(io::BufReader::new(input)))
     }
 
-    pub fn from_reader_many_buf<'a, R: io::BufRead + 'a>(
+    pub fn from_reader_many_buf<'a, R: FinalizingBufRead + 'a>(
         mut input: R,
     ) -> Result<(
         Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
@@ -40,17 +41,17 @@ impl PublicOrSecret {
     }
 
     /// Parses a list of secret and public keys from ascii armored text.
-    pub fn from_armor_many<'a, R: io::Read + 'a>(
+    pub fn from_armor_many<'a, R: io::Read + std::fmt::Debug + Send + 'a>(
         input: R,
     ) -> Result<(
         Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
         armor::Headers,
     )> {
-        Self::from_armor_many_buf(BufReader::new(input))
+        Self::from_armor_many_buf(BufReader::new(io::BufReader::new(input)))
     }
 
     /// Parses a list of secret and public keys from ascii armored text.
-    pub fn from_armor_many_buf<'a, R: io::BufRead + 'a>(
+    pub fn from_armor_many_buf<'a, R: FinalizingBufRead + 'a>(
         input: R,
     ) -> Result<(
         Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
@@ -61,7 +62,7 @@ impl PublicOrSecret {
 
     /// Parses a list of secret and public keys from ascii armored text, with explicit options
     /// for dearmoring.
-    pub fn from_armor_many_buf_with_options<'a, R: io::BufRead + 'a>(
+    pub fn from_armor_many_buf_with_options<'a, R: FinalizingBufRead + 'a>(
         input: R,
         opt: DearmorOptions,
     ) -> Result<(
@@ -81,7 +82,10 @@ impl PublicOrSecret {
             BlockType::PublicKey | BlockType::PrivateKey | BlockType::File => {
                 let headers = dearmor.headers.clone(); // FIXME: avoid clone
                                                        // TODO: check that the result is what it actually said.
-                Ok((Self::from_bytes_many(BufReader::new(dearmor))?, headers))
+                Ok((
+                    Self::from_bytes_many(BufReader::new(io::BufReader::new(dearmor)))?,
+                    headers,
+                ))
             }
             BlockType::Message
             | BlockType::MultiPartMessage(_, _)
@@ -102,7 +106,7 @@ impl PublicOrSecret {
 
     /// Parses a list of secret and public keys from raw bytes.
     pub fn from_bytes_many<'a>(
-        bytes: impl io::BufRead + 'a,
+        bytes: impl FinalizingBufRead + 'a,
     ) -> Result<Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>> {
         let packets = PacketParser::new(bytes)
             .filter_map(crate::composed::shared::filter_parsed_packet_results)

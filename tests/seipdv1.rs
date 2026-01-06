@@ -53,7 +53,8 @@ pub fn mdc_test() {
     let encrypted_data = make_seipdv1_msg(&mut rng);
 
     // Attempt decryption of this message with a series of (wrong) session keys
-    for _ in 0..1024 {
+    for i in 0..1024 {
+        println!("round {i}");
         let encrypted = Message::from_bytes(&*encrypted_data).expect("ok");
 
         // Assert that the message is v1 SEIPD encrypted

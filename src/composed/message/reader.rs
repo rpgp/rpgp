@@ -48,7 +48,7 @@ mod tests {
                 };
 
                 let reader = ChaosReader::new(rng.clone(), message.clone());
-                let mut reader = BufReader::new(reader);
+                let mut reader = crate::util::BufReader::new(BufReader::new(reader));
                 let mut msg = Message::from_bytes(&mut reader).unwrap();
 
                 let mut out = String::new();
@@ -111,7 +111,7 @@ mod tests {
                         let message = builder.to_vec(&mut rng)?;
 
                         let reader = ChaosReader::new(rng.clone(), message.clone());
-                        let mut reader = BufReader::new(reader);
+                        let mut reader = crate::util::BufReader::new(BufReader::new(reader));
                         let message = Message::from_bytes(&mut reader)?;
 
                         let mut decompressed_message = message.decompress()?;

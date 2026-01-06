@@ -2,7 +2,7 @@ use std::io::{self, BufRead, Read};
 
 use super::PacketBodyReader;
 use crate::{
-    composed::{DebugBufRead, PlainSessionKey},
+    composed::PlainSessionKey,
     crypto::sym::SymmetricKeyAlgorithm,
     errors::{bail, ensure, ensure_eq, unsupported_err, Result},
     packet::{
@@ -10,17 +10,18 @@ use crate::{
         SymEncryptedProtectedDataConfig,
     },
     types::Tag,
+    util::FinalizingBufRead,
 };
 
 #[derive(Debug)]
-pub struct SymEncryptedProtectedDataReader<R: DebugBufRead> {
+pub struct SymEncryptedProtectedDataReader<R: FinalizingBufRead> {
     config: ProtectedDataConfig,
     source: Source<R>,
 }
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
-enum Source<R: DebugBufRead> {
+enum Source<R: FinalizingBufRead> {
     Init(PacketBodyReader<R>),
     BodyRaw(PacketBodyReader<R>),
     BodyDecryptor(StreamDecryptor<PacketBodyReader<R>>),
@@ -28,7 +29,7 @@ enum Source<R: DebugBufRead> {
     Error,
 }
 
-impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
+impl<R: FinalizingBufRead> SymEncryptedProtectedDataReader<R> {
     pub fn new(mut source: PacketBodyReader<R>) -> Result<Self> {
         debug_assert_eq!(source.packet_header().tag(), Tag::SymEncryptedProtectedData);
 
@@ -201,10 +202,6 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
         &self.config
     }
 
-    pub fn is_done(&self) -> bool {
-        matches!(self.source, Source::Done { .. })
-    }
-
     pub fn into_inner(self) -> PacketBodyReader<R> {
         match self.source {
             Source::Init(source) => source,
@@ -249,7 +246,9 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                 }
                 Source::BodyDecryptor(decryptor) => {
                     let buf = decryptor.fill_buf()?;
-                    (buf.is_empty(), true)
+                    let len = buf.len();
+                    dbg!(buf.len(), decryptor.is_done());
+                    (len == 0, true)
                 }
                 Source::Done(_) => (false, true),
                 Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
@@ -275,7 +274,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
     }
 }
 
-impl<R: DebugBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
+impl<R: FinalizingBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
         match &mut self.source {
@@ -302,7 +301,19 @@ impl<R: DebugBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
     }
 }
 
-impl<R: DebugBufRead> Read for SymEncryptedProtectedDataReader<R> {
+impl<R: FinalizingBufRead> FinalizingBufRead for SymEncryptedProtectedDataReader<R> {
+    fn is_done(&self) -> bool {
+        match self.source {
+            Source::Init(..) => unreachable!("invalid state"),
+            Source::BodyDecryptor(_) => false,
+            Source::BodyRaw(_) => false,
+            Source::Done(_) => true,
+            Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
+        }
+    }
+}
+
+impl<R: FinalizingBufRead> Read for SymEncryptedProtectedDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
         match &mut self.source {

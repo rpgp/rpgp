@@ -1567,7 +1567,9 @@ mod tests {
             builder.to_file(&mut rng, &encrypted_file).unwrap();
 
             // decrypt it
-            let encrypted_file_data = BufReader::new(std::fs::File::open(&encrypted_file).unwrap());
+            let encrypted_file_data = crate::util::BufReader::new(BufReader::new(
+                std::fs::File::open(&encrypted_file).unwrap(),
+            ));
             let message = Message::from_bytes(encrypted_file_data).unwrap();
 
             let mut decrypted = message
