@@ -25,6 +25,10 @@ impl<R: FinalizingBufRead> PacketParser<R> {
     pub fn into_inner(self) -> R {
         self.reader
     }
+
+    pub fn get_ref(&self) -> &R {
+        &self.reader
+    }
 }
 
 impl<R: FinalizingBufRead> Iterator for PacketParser<R> {

@@ -36,6 +36,18 @@ impl<R: io::BufRead> BufReader<R> {
     pub fn new(reader: R) -> Self {
         Self { reader, eof: false }
     }
+
+    pub fn get_ref(&self) -> &R {
+        &self.reader
+    }
+
+    pub fn get_mut(&mut self) -> &mut R {
+        &mut self.reader
+    }
+
+    pub fn into_inner(self) -> R {
+        self.reader
+    }
 }
 
 impl<R: io::BufRead + std::fmt::Debug + Send> FinalizingBufRead for BufReader<R> {
@@ -60,7 +72,7 @@ impl<R: io::BufRead> io::Read for BufReader<R> {
 
 impl<R: io::BufRead> io::BufRead for BufReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        match self.reader.fill_buf() {
+        match dbg!(self.reader.fill_buf()) {
             Ok(s) => {
                 if s.is_empty() {
                     self.eof = true;
@@ -78,9 +90,10 @@ impl<R: io::BufRead> io::BufRead for BufReader<R> {
     }
 
     fn consume(&mut self, amount: usize) {
+        dbg!(amount);
         self.reader.consume(amount);
         // make sure to read to update EOF state
-        self.fill_buf().ok();
+        dbg!(self.fill_buf()).ok();
     }
 }
 

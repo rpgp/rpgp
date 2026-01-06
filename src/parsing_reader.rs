@@ -38,6 +38,7 @@ pub trait BufReadParsing: BufRead + Sized {
     }
 
     fn read_array<const C: usize>(&mut self) -> Result<[u8; C]> {
+        println!("reading array {C}");
         let mut arr = [0u8; C];
         let mut read = 0;
 
@@ -51,9 +52,11 @@ pub trait BufReadParsing: BufRead + Sized {
             dbg!(read, available, arr.len(), buf.len());
             arr[read..read + available].copy_from_slice(&buf[..available]);
             read += available;
+            dbg!(read);
             self.consume(available);
         }
         if read != arr.len() {
+            dbg!(arr.len(), C, read);
             return Err(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 format!(

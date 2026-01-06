@@ -112,8 +112,10 @@ impl<R: FinalizingBufRead> LiteralDataReader<R> {
 
                 debug!("literal packet: filling buffer");
                 let read = fill_buffer_bytes(&mut source, &mut buffer, BUFFER_SIZE)?;
+                let source_is_done = source.is_done();
+                dbg!(read, source_is_done);
 
-                if read < BUFFER_SIZE {
+                if read < BUFFER_SIZE || source_is_done {
                     // done reading the source
                     *self = Self::Done {
                         source,

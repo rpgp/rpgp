@@ -50,7 +50,7 @@ impl ModeData {
 }
 
 #[derive(derive_more::Debug)]
-pub struct StreamDecryptor<R: BufRead> {
+pub struct StreamDecryptor<R: FinalizingBufRead> {
     sym_alg: SymmetricKeyAlgorithm,
     aead: AeadAlgorithm,
     chunk_size_expanded: usize,
@@ -72,7 +72,7 @@ pub struct StreamDecryptor<R: BufRead> {
     out_buffer_start: usize,
 }
 
-impl<R: BufRead> StreamDecryptor<R> {
+impl<R: FinalizingBufRead> StreamDecryptor<R> {
     pub fn new_rfc9580(
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
@@ -275,7 +275,10 @@ impl<R: BufRead> StreamDecryptor<R> {
         // reset out buffer
         self.out_buffer_start = 0;
 
-        if read < to_read {
+        let source_is_done = self.source.is_done();
+        dbg!(source_is_done, read, to_read);
+
+        if read < to_read || source_is_done {
             debug!("source finished reading");
             // make sure we have as much as data as we need
             if self.buffer.remaining() < AEAD_TAG_SIZE {
@@ -309,12 +312,17 @@ impl<R: BufRead> StreamDecryptor<R> {
 
 impl<R: FinalizingBufRead> FinalizingBufRead for StreamDecryptor<R> {
     fn is_done(&self) -> bool {
-        dbg!(self.out_buffer(), self.out_buffer_remaining());
+        dbg!(
+            std::string::String::from_utf8_lossy(self.out_buffer()),
+            self.out_buffer(),
+            self.out_buffer_remaining(),
+            self.is_source_done
+        );
         self.out_buffer().is_empty()
     }
 }
 
-impl<R: BufRead> BufRead for StreamDecryptor<R> {
+impl<R: FinalizingBufRead> BufRead for StreamDecryptor<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
         Ok(self.out_buffer())
@@ -325,7 +333,7 @@ impl<R: BufRead> BufRead for StreamDecryptor<R> {
     }
 }
 
-impl<R: BufRead> Read for StreamDecryptor<R> {
+impl<R: FinalizingBufRead> Read for StreamDecryptor<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
         let to_write = self.out_buffer_remaining().min(buf.len());

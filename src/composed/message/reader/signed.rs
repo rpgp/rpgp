@@ -8,7 +8,7 @@ use crate::{
     composed::{Message, MessageReader, RingResult, TheRing},
     errors::{bail, ensure_eq, Result},
     packet::{Signature, SignatureType, SignatureVersionSpecific},
-    util::{fill_buffer_bytes, NormalizingHasher},
+    util::{fill_buffer_bytes, FinalizingBufRead, NormalizingHasher},
 };
 
 const BUFFER_SIZE: usize = 8 * 1024;
@@ -179,7 +179,9 @@ impl<'a> SignatureBodyReader<'a> {
                         hasher.hash_buf(&buffer);
                     }
 
-                    if read == 0 {
+                    let source_is_done = source.is_done();
+
+                    if read == 0 || source_is_done {
                         debug!("SignatureReader finish");
 
                         let hash = if let Some(norm_hasher) = norm_hasher {
@@ -238,10 +240,6 @@ impl<'a> SignatureBodyReader<'a> {
         }
     }
 
-    pub fn is_done(&self) -> bool {
-        matches!(self, Self::Done { .. })
-    }
-
     pub(crate) fn decompress(self) -> Result<Self> {
         match self {
             Self::Init {
@@ -287,6 +285,12 @@ impl<'a> SignatureBodyReader<'a> {
                 bail!("cannot decrypt message that has already been read from");
             }
         }
+    }
+}
+
+impl FinalizingBufRead for SignatureBodyReader<'_> {
+    fn is_done(&self) -> bool {
+        matches!(self, Self::Done { .. })
     }
 }
 

@@ -8,7 +8,7 @@ use crate::{
     composed::{Message, MessageReader, RingResult, TheRing},
     errors::{bail, ensure_eq, Error, Result},
     packet::{OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType},
-    util::{fill_buffer_bytes, NormalizingHasher},
+    util::{fill_buffer_bytes, FinalizingBufRead, NormalizingHasher},
 };
 
 const BUFFER_SIZE: usize = 8 * 1024;
@@ -176,8 +176,9 @@ impl<'a> SignatureOnePassReader<'a> {
                     if let Some(ref mut hasher) = norm_hasher {
                         hasher.hash_buf(&buffer[..read]);
                     }
+                    let source_is_done = source.is_done();
 
-                    if read == 0 {
+                    if read == 0 || source_is_done {
                         debug!("SignatureOnePassReader finish");
 
                         let hasher = norm_hasher.map(|h| h.done());
@@ -298,10 +299,6 @@ impl<'a> SignatureOnePassReader<'a> {
         }
     }
 
-    pub fn is_done(&self) -> bool {
-        matches!(self, Self::Done { .. })
-    }
-
     pub(crate) fn decompress(self) -> Result<Self> {
         match self {
             Self::Init {
@@ -347,6 +344,12 @@ impl<'a> SignatureOnePassReader<'a> {
                 bail!("cannot decrypt message that has already been read from");
             }
         }
+    }
+}
+
+impl FinalizingBufRead for SignatureOnePassReader<'_> {
+    fn is_done(&self) -> bool {
+        matches!(self, Self::Done { .. })
     }
 }
 

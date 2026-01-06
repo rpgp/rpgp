@@ -44,8 +44,8 @@ impl MessageReader<'_> {
     fn check_trailing_data(&mut self) -> io::Result<()> {
         fn check_next_packet<R: FinalizingBufRead>(
             mut parser: crate::packet::PacketParser<R>,
-        ) -> io::Result<()> {
-            match parser.next_ref() {
+        ) -> io::Result<bool> {
+            match dbg!(parser.next_ref()) {
                 Some(Ok(packet)) => {
                     let tag = packet.packet_header().tag();
                     match tag {
@@ -54,6 +54,7 @@ impl MessageReader<'_> {
                         | Tag::UnassignedNonCritical(_)
                         | Tag::Experimental(_) => {
                             debug!("ignoring trailing packet: {tag:?}");
+                            Ok(true)
                         }
                         _ => {
                             return Err(io::Error::new(
@@ -75,9 +76,15 @@ impl MessageReader<'_> {
                 }
                 None => {
                     // all good
+                    if !parser.get_ref().is_done() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "inner reader failed to process all data",
+                        ));
+                    }
+                    Ok(false)
                 }
             }
-            Ok(())
         }
 
         match self {
@@ -94,13 +101,18 @@ impl MessageReader<'_> {
                 message_reader.check_trailing_data()?;
             }
             MessageReader::Edata(e) => {
-                let mut inner_reader = e;
-                let parser = crate::packet::PacketParser::new(&mut inner_reader);
-                check_next_packet(parser)?;
-
-                let message_reader = inner_reader.get_mut().get_mut();
+                let parser = crate::packet::PacketParser::new(&mut *e);
+                let has_next_packet = check_next_packet(parser)?;
+                let message_reader = e.get_mut().get_mut();
                 message_reader.check_trailing_data()?;
-                debug_assert!(inner_reader.is_done(), "{inner_reader:?}");
+
+                dbg!(has_next_packet, e.is_done());
+                if has_next_packet && !e.is_done() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "inner reader failed to process all data",
+                    ));
+                }
             }
             MessageReader::Reader(r) => {
                 let parser = crate::packet::PacketParser::new(r);
@@ -1103,7 +1115,8 @@ impl Read for Message<'_> {
             Self::Encrypted { edata, .. } => edata.read(buf),
         }?;
 
-        if read == 0 {
+        let source_is_done = self.is_done();
+        if read == 0 || source_is_done {
             self.check_trailing_data()?;
         }
 
@@ -1125,6 +1138,17 @@ impl Read for Message<'_> {
     }
 }
 
+impl FinalizingBufRead for Message<'_> {
+    fn is_done(&self) -> bool {
+        match self {
+            Self::Literal { reader, .. } => reader.is_done(),
+            Self::Compressed { reader, .. } => reader.is_done(),
+            Self::Signed { reader, .. } => reader.is_done(),
+            Self::SignedOnePass { reader, .. } => reader.is_done(),
+            Self::Encrypted { edata, .. } => edata.is_done(),
+        }
+    }
+}
 impl BufRead for Message<'_> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         // sad workaround because of compiler lifetime limits
@@ -1486,6 +1510,8 @@ mod tests {
     }
 
     fn test_compression(alg: CompressionAlgorithm) {
+        pretty_env_logger::try_init().ok();
+
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let data = "hello world";
@@ -1883,7 +1909,6 @@ mod tests {
         // Before the fix message eventually decrypted to
         //   Literal(LiteralData { packet_version: New, mode: Binary, created: 1970-01-01T00:00:00Z, file_name: "", data: "48656c6c6f20776f726c6421" })
         // where "48656c6c6f20776f726c6421" is an encoded "Hello world!" string.
-        dbg!(&msg);
         let decrypted_err = msg
             .decrypt_with_password(&"foobarbaz".into())
             .err()

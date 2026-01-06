@@ -51,7 +51,6 @@ impl<R: FinalizingBufRead> BufRead for PacketBodyReader<R> {
             State::Body { ref mut buffer, .. } | State::Done { ref mut buffer, .. } => {
                 Ok(&buffer[..])
             }
-
             State::Error => Err(io::Error::other("PacketBodyReader errored")),
         }
     }

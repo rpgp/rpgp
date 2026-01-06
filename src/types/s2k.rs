@@ -752,11 +752,14 @@ mod tests {
         println!("reading {filename}");
         let (msg, _header) = Message::from_armor_file(filename).expect("parse");
 
+        dbg!(&msg);
+        println!("---------\n");
         let mut decrypted = msg
             .decrypt_with_password(&"password".into())
             .expect("decrypt");
 
         dbg!(&decrypted);
+        println!("--------------\n");
         let data = decrypted.as_data_vec().unwrap();
         assert_eq!(data, b"Hello, world!");
 

@@ -1,3 +1,4 @@
+use log::debug;
 use pgp::{
     composed::{Edata, Message, MessageBuilder, PlainSessionKey, RawSessionKey},
     crypto::sym::SymmetricKeyAlgorithm,
@@ -8,7 +9,7 @@ use rand_chacha::ChaCha8Rng;
 
 const SYM_ALG: SymmetricKeyAlgorithm = SymmetricKeyAlgorithm::AES256;
 
-fn make_seipdv1_msg<RAND>(mut rng: RAND) -> Vec<u8>
+fn make_seipdv1_msg<RAND>(mut rng: RAND) -> (RawSessionKey, Vec<u8>)
 where
     RAND: CryptoRng + Rng,
 {
@@ -18,19 +19,18 @@ where
 
     let raw = random_session_key(&mut rng);
 
-    eprintln!("encrypting to session key: {:02x?}", raw.as_ref());
-    eprintln!();
+    eprintln!("encrypting to session key: {:02x?}\n", raw.as_ref());
 
     let mut builder =
         MessageBuilder::from_bytes("plaintext.txt", input_data).seipd_v1(&mut rng, SYM_ALG);
-    builder.set_session_key(raw).expect("ok");
+    builder.set_session_key(raw.clone()).expect("ok");
 
     let mut encrypted_data = Vec::new();
     builder
         .to_writer(&mut rng, &mut encrypted_data)
         .expect("ok");
 
-    encrypted_data
+    (raw, encrypted_data)
 }
 
 fn random_session_key<RAND>(mut rng: RAND) -> RawSessionKey
@@ -47,10 +47,12 @@ where
 /// This should not lead to successful decryption.
 #[test]
 pub fn mdc_test() {
+    pretty_env_logger::try_init().ok();
+
     let mut rng = ChaCha8Rng::seed_from_u64(1);
 
     // Produce an encrypted message, once
-    let encrypted_data = make_seipdv1_msg(&mut rng);
+    let (og_key, encrypted_data) = make_seipdv1_msg(&mut rng);
 
     // Attempt decryption of this message with a series of (wrong) session keys
     for i in 0..1024 {
@@ -72,6 +74,7 @@ pub fn mdc_test() {
 
         // Try to decrypt with a random session key
         let raw = random_session_key(&mut rng);
+        assert_ne!(og_key, raw, "random key was identical");
 
         let sk = PlainSessionKey::V3_4 {
             key: raw.clone(),
@@ -80,19 +83,29 @@ pub fn mdc_test() {
 
         let res = encrypted.decrypt_with_session_key(sk.clone());
 
-        // We haven't read until the end of the stream yet
-        if let Ok(mut decrypted) = res {
-            // read to the end of the stream
-            let plain = decrypted.as_data_vec();
+        match res {
+            Ok(mut decrypted) => {
+                // read to the end of the stream
+                dbg!(&decrypted);
+                let plain = decrypted.as_data_vec();
 
-            if let Ok(data) = plain {
-                eprintln!(
-                    "Decrypted len: {}, session key: {:02x?}",
-                    data.len(),
-                    raw.as_ref()
-                );
+                match plain {
+                    Ok(data) => {
+                        eprintln!(
+                            "Decrypted len: {}, session key: {:02x?}",
+                            data.len(),
+                            raw.as_ref()
+                        );
 
-                panic!("No MDC error!");
+                        panic!("No MDC error!");
+                    }
+                    Err(err) => {
+                        debug!("failed with {err}");
+                    }
+                }
+            }
+            Err(_err) => {
+                // We haven't read until the end of the stream yet
             }
         }
     }

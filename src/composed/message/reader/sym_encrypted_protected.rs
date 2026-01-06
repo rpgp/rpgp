@@ -248,7 +248,7 @@ impl<R: FinalizingBufRead> SymEncryptedProtectedDataReader<R> {
                     let buf = decryptor.fill_buf()?;
                     let len = buf.len();
                     dbg!(buf.len(), decryptor.is_done());
-                    (len == 0, true)
+                    (len == 0 || decryptor.is_done(), true)
                 }
                 Source::Done(_) => (false, true),
                 Source::Error => panic!("SymEncryptedProtectedDataReader errored"),

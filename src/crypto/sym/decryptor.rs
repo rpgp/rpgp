@@ -528,7 +528,11 @@ where
     R: FinalizingBufRead,
 {
     fn is_done(&self) -> bool {
-        matches!(self, Self::Done { .. })
+        match self {
+            Self::Prefix { .. } | Self::Data { .. } => false,
+            Self::Done { buffer, .. } => !buffer.has_remaining(),
+            Self::Error => panic!("error state"),
+        }
     }
 }
 
