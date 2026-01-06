@@ -4,7 +4,7 @@ use camellia::{Camellia128, Camellia192, Camellia256};
 use cast5::Cast5;
 use cfb_mode::{
     cipher::{AsyncStreamCipher, KeyIvInit},
-    BufDecryptor, BufEncryptor, Decryptor, Encryptor,
+    BufEncryptor, Decryptor, Encryptor,
 };
 use cipher::{BlockCipher, BlockDecrypt, BlockEncryptMut};
 use des::TdesEde3;
@@ -17,7 +17,7 @@ use zeroize::Zeroizing;
 
 use crate::{
     composed::RawSessionKey,
-    errors::{bail, ensure, unimplemented_err, Error, Result},
+    errors::{bail, unimplemented_err, Result},
 };
 
 mod decryptor;
@@ -25,12 +25,13 @@ mod encryptor;
 
 pub use self::{decryptor::StreamDecryptor, encryptor::StreamEncryptor};
 
+#[cfg(test)]
 fn decrypt<MODE>(key: &[u8], iv: &[u8], prefix: &mut [u8], data: &mut [u8]) -> Result<()>
 where
     MODE: BlockDecrypt + BlockEncryptMut + BlockCipher,
-    BufDecryptor<MODE>: KeyIvInit,
+    cfb_mode::BufDecryptor<MODE>: KeyIvInit,
 {
-    let mut mode = BufDecryptor::<MODE>::new_from_slices(key, iv)?;
+    let mut mode = cfb_mode::BufDecryptor::<MODE>::new_from_slices(key, iv)?;
 
     // We do not do use "quick check" here.
     // See the "Security Considerations" section
@@ -45,12 +46,13 @@ where
 }
 
 /// Legacy format using custom resync
+#[cfg(test)]
 fn decrypt_resync<MODE>(key: &[u8], iv: &[u8], prefix: &mut [u8], data: &mut [u8]) -> Result<()>
 where
     MODE: BlockDecrypt + BlockEncryptMut + BlockCipher,
-    BufDecryptor<MODE>: KeyIvInit,
+    cfb_mode::BufDecryptor<MODE>: KeyIvInit,
 {
-    let mut mode = BufDecryptor::<MODE>::new_from_slices(key, iv)?;
+    let mut mode = cfb_mode::BufDecryptor::<MODE>::new_from_slices(key, iv)?;
 
     // We do not do use "quick check" here.
     // See the "Security Considerations" section
@@ -60,7 +62,7 @@ where
 
     let encrypted_prefix = prefix[2..].to_vec();
     mode.decrypt(prefix);
-    mode = BufDecryptor::<MODE>::new_from_slices(key, &encrypted_prefix)?;
+    mode = cfb_mode::BufDecryptor::<MODE>::new_from_slices(key, &encrypted_prefix)?;
 
     mode.decrypt(data);
     Ok(())
@@ -197,7 +199,8 @@ impl SymmetricKeyAlgorithm {
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode. Does
     /// resynchronization.
     ///
-    /// NOTE: This code is not used in rPGP anymore
+    /// NOTE: Only used in tests
+    #[cfg(test)]
     pub fn decrypt(self, key: &[u8], prefix: &mut [u8], ciphertext: &mut [u8]) -> Result<()> {
         debug!("unprotected decrypt");
         let iv_vec = vec![0u8; self.block_size()];
@@ -211,7 +214,8 @@ impl SymmetricKeyAlgorithm {
     ///
     /// The result will be in `ciphertext`.
     ///
-    /// NOTE: This code is not used in rPGP anymore
+    /// NOTE: Only used in tests
+    #[cfg(test)]
     pub fn decrypt_protected(
         self,
         key: &[u8],
@@ -233,7 +237,7 @@ impl SymmetricKeyAlgorithm {
            mdc[1] != 0x14 || // Invalid MDC length
             mdc[2..] != sha1[..]
         {
-            return Err(Error::MdcError);
+            return Err(crate::errors::Error::MdcError);
         }
 
         Ok(())
@@ -253,7 +257,8 @@ impl SymmetricKeyAlgorithm {
     /// octets 15 and 16.  Those extra two octets are an easy check for a
     /// correct key.
     ///
-    /// NOTE: This code is not used in rPGP anymore
+    /// NOTE: Only used in tests
+    #[cfg(test)]
     pub fn decrypt_with_iv(
         self,
         key: &[u8],
@@ -263,7 +268,7 @@ impl SymmetricKeyAlgorithm {
     ) -> Result<()> {
         let bs = self.block_size();
         let ciphertext_len = encrypted_prefix.len() + encrypted_data.len();
-        ensure!(bs + 2 < ciphertext_len, "invalid ciphertext");
+        crate::errors::ensure!(bs + 2 < ciphertext_len, "invalid ciphertext");
 
         match self {
             SymmetricKeyAlgorithm::Plaintext => {
@@ -312,7 +317,8 @@ impl SymmetricKeyAlgorithm {
 
     /// Applies the legacy resyncing
     ///
-    /// NOTE: This code is not used in rPGP anymore
+    /// NOTE: Only used in tests
+    #[cfg(test)]
     pub fn decrypt_with_iv_resync(
         self,
         key: &[u8],
@@ -322,7 +328,7 @@ impl SymmetricKeyAlgorithm {
     ) -> Result<()> {
         let bs = self.block_size();
         let ciphertext_len = encrypted_prefix.len() + encrypted_data.len();
-        ensure!(bs + 2 < ciphertext_len, "invalid ciphertext");
+        crate::errors::ensure!(bs + 2 < ciphertext_len, "invalid ciphertext");
 
         match self {
             SymmetricKeyAlgorithm::Plaintext => {
@@ -726,6 +732,7 @@ impl SymmetricKeyAlgorithm {
 }
 
 #[inline]
+#[cfg(test)]
 fn calculate_sha1_unchecked<I, T>(data: I) -> [u8; 20]
 where
     T: AsRef<[u8]>,
