@@ -56,23 +56,21 @@ impl MessageReader<'_> {
                             debug!("ignoring trailing packet: {tag:?}");
                             Ok(true)
                         }
-                        _ => {
-                            return Err(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                format!(
-                                    "unexpected trailing packet found: {:?}",
-                                    packet.packet_header()
-                                ),
-                            ));
-                        }
+                        _ => Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!(
+                                "unexpected trailing packet found: {:?}",
+                                packet.packet_header()
+                            ),
+                        )),
                     }
                 }
                 Some(Err(err)) => {
                     warn!("failed to parse trailing data: {err:?}");
-                    return Err(io::Error::new(
+                    Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "unexpected trailing bytes found",
-                    ));
+                    ))
                 }
                 None => {
                     // all good

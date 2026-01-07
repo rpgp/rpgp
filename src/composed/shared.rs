@@ -157,14 +157,14 @@ pub trait Deserializable: Sized {
         path: P,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>>>, armor::Headers)> {
         let file = std::fs::File::open(path)?;
-        // TODO: specialized file versoin
+        // TODO: specialized file version
         Self::from_armor_many_buf(BufReader::new(io::BufReader::new(file)))
     }
 
     /// Ready binary packets from the given file.
     fn from_file_many<P: AsRef<Path>>(path: P) -> Result<Box<dyn Iterator<Item = Result<Self>>>> {
         let file = std::fs::File::open(path)?;
-        // TODO: specialized file versoin
+        // TODO: specialized file version
         Self::from_bytes_many(BufReader::new(io::BufReader::new(file)))
     }
 
