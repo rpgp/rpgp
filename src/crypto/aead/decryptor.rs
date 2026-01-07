@@ -276,7 +276,6 @@ impl<R: FinalizingBufRead> StreamDecryptor<R> {
         self.out_buffer_start = 0;
 
         let source_is_done = self.source.is_done();
-        dbg!(source_is_done, read, to_read);
 
         if read < to_read || source_is_done {
             debug!("source finished reading");
@@ -312,12 +311,6 @@ impl<R: FinalizingBufRead> StreamDecryptor<R> {
 
 impl<R: FinalizingBufRead> FinalizingBufRead for StreamDecryptor<R> {
     fn is_done(&self) -> bool {
-        dbg!(
-            std::string::String::from_utf8_lossy(self.out_buffer()),
-            self.out_buffer(),
-            self.out_buffer_remaining(),
-            self.is_source_done
-        );
         self.out_buffer().is_empty()
     }
 }

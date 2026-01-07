@@ -362,7 +362,6 @@ where
                     // need to keep at least a full mdc len in the buffer, to make sure we process
                     // that at the end, and to return it
 
-                    dbg!(protected.is_protected(), buffer.remaining());
                     if protected.is_protected() && buffer.remaining() > MDC_LEN
                         || !protected.is_protected() && buffer.has_remaining()
                     {
@@ -377,15 +376,6 @@ where
                         let source_is_done = source.is_done();
                         decryptor.decrypt(&mut buffer[current_len..]);
 
-                        dbg!(
-                            is_last_read,
-                            source_is_done,
-                            buffer.remaining(),
-                            current_len,
-                            read,
-                            to_read,
-                            source,
-                        );
                         let is_last_read = source_is_done || is_last_read;
 
                         match protected {
@@ -480,7 +470,7 @@ where
                     } => {
                         if let MaybeProtected::Protected { mut hasher } = protected {
                             // last read
-                            if dbg!(buffer.remaining()) < MDC_LEN {
+                            if buffer.remaining() < MDC_LEN {
                                 return Err(io::Error::new(
                                     io::ErrorKind::UnexpectedEof,
                                     "missing MDC",

@@ -45,42 +45,49 @@ impl MessageReader<'_> {
         fn check_next_packet<R: FinalizingBufRead>(
             mut parser: crate::packet::PacketParser<R>,
         ) -> io::Result<bool> {
-            match dbg!(parser.next_ref()) {
-                Some(Ok(packet)) => {
-                    let tag = packet.packet_header().tag();
-                    match tag {
-                        Tag::Padding
-                        | Tag::Marker
-                        | Tag::UnassignedNonCritical(_)
-                        | Tag::Experimental(_) => {
-                            debug!("ignoring trailing packet: {tag:?}");
-                            Ok(true)
+            loop {
+                match dbg!(parser.next_ref()) {
+                    Some(Ok(mut packet)) => {
+                        let tag = packet.packet_header().tag();
+                        match tag {
+                            Tag::Padding
+                            | Tag::Marker
+                            | Tag::UnassignedNonCritical(_)
+                            | Tag::Experimental(_) => {
+                                debug!("ignoring trailing packet: {tag:?}");
+                                // consume the trailing packet, to ensure we fully process all data
+
+                                let mut out = Vec::new();
+                                packet.read_to_end(&mut out)?;
+                            }
+                            _ => {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    format!(
+                                        "unexpected trailing packet found: {:?}",
+                                        packet.packet_header()
+                                    ),
+                                ));
+                            }
                         }
-                        _ => Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!(
-                                "unexpected trailing packet found: {:?}",
-                                packet.packet_header()
-                            ),
-                        )),
                     }
-                }
-                Some(Err(err)) => {
-                    warn!("failed to parse trailing data: {err:?}");
-                    Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "unexpected trailing bytes found",
-                    ))
-                }
-                None => {
-                    // all good
-                    if !parser.get_ref().is_done() {
+                    Some(Err(err)) => {
+                        warn!("failed to parse trailing data: {err:?}");
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidInput,
-                            "inner reader failed to process all data",
+                            "unexpected trailing bytes found",
                         ));
                     }
-                    Ok(false)
+                    None => {
+                        // all good
+                        if !parser.get_ref().is_done() {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "inner reader failed to process all data",
+                            ));
+                        }
+                        return Ok(false);
+                    }
                 }
             }
         }
@@ -106,6 +113,7 @@ impl MessageReader<'_> {
 
                 dbg!(has_next_packet, e.is_done());
                 if has_next_packet && !e.is_done() {
+                    dbg!(&e);
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
                         "inner reader failed to process all data",
