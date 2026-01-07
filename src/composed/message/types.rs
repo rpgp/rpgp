@@ -726,11 +726,9 @@ impl<'a> Message<'a> {
         match self {
             Message::Signed { reader, .. } => {
                 let Some(calculated_hash) = reader.hash(index) else {
-                    dbg!(&reader);
                     bail!("cannot verify message before reading it to the end");
                 };
                 let Some(signature) = reader.signature(index) else {
-                    dbg!(&reader);
                     bail!("cannot verify message before reading the final signature packet");
                 };
                 let InnerSignature::Known {
