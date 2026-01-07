@@ -9,7 +9,7 @@ extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
-use std::{fs::File, io::BufReader};
+use std::{collections::VecDeque, fs::File, io::BufReader};
 
 use pgp::{
     composed::{
@@ -1144,15 +1144,15 @@ fn message_many_mixed_signatures() {
     for order in 0..=1 {
         let mut packets: Vec<Packet> = Vec::new();
 
-        let mut ops_sigs = 0;
-        let mut prefix_sigs = 0;
-
         const PLAIN: &str = "hello";
         let lit = LiteralData::from_bytes(&[][..], PLAIN.as_bytes().into()).expect("literal");
-        packets.push(lit.into());
 
+        let mut regular_sigs: VecDeque<Packet> = VecDeque::new();
+        let mut ops: VecDeque<Packet> = VecDeque::new();
+        let mut op_sigs: VecDeque<Packet> = VecDeque::new();
         for (i, k) in keys.iter().enumerate() {
             if i % 2 == order {
+                println!("prefixed sig: {i}");
                 // prefixed sig
                 let sig = DetachedSignature::sign_binary_data(
                     &mut rng,
@@ -1163,10 +1163,9 @@ fn message_many_mixed_signatures() {
                 )
                 .expect("sign");
 
-                packets.insert(0, sig.signature.into());
-
-                prefix_sigs += 1;
+                regular_sigs.push_back(sig.signature.into());
             } else {
+                println!("ops sig: {i}");
                 // make ops sig
 
                 let mut builder = MessageBuilder::from_bytes("", PLAIN.as_bytes());
@@ -1177,7 +1176,7 @@ fn message_many_mixed_signatures() {
 
                 let signed = builder.to_vec(&mut rng).expect("writing");
                 let mut pp = PacketParser::new(BufReader::new(signed.as_slice()));
-                let Ok(Packet::OnePassSignature(ops)) = pp.next().unwrap() else {
+                let Ok(Packet::OnePassSignature(op)) = pp.next().unwrap() else {
                     panic!("expected OPS");
                 };
                 let _ = pp.next().unwrap();
@@ -1185,11 +1184,42 @@ fn message_many_mixed_signatures() {
                     panic!("expected Signature");
                 };
 
-                packets.insert(0, ops.into());
-                packets.push(sig.into());
-
-                ops_sigs += 1;
+                ops.push_back(op.into());
+                op_sigs.push_back(sig.into());
             }
+        }
+
+        // build packet structure
+
+        // Sig
+        // OPS
+        // Sig
+        // OPS
+        // ..
+        // LIT
+        // Sig (from OPS)
+        // Sig (from OPS)
+        // ..
+
+        let ops_sigs = ops.len();
+        let prefix_sigs = regular_sigs.len();
+        assert_eq!(ops_sigs, op_sigs.len());
+
+        for i in 0..keys.len() {
+            if i % 2 == order {
+                // regular
+                println!("insert regular sig: {i}");
+                packets.push(regular_sigs.pop_front().unwrap());
+            } else {
+                println!("insert ops: {i}");
+                packets.push(ops.pop_front().unwrap());
+            }
+        }
+
+        packets.push(lit.into());
+        for (i, sig) in op_sigs.into_iter().enumerate().rev() {
+            println!("insert ops sig: {i}");
+            packets.push(sig);
         }
 
         let signed = packets.to_bytes().expect("bytes");
@@ -1209,8 +1239,6 @@ fn message_many_mixed_signatures() {
         warn!("parsing message");
         let mut message = Message::from_bytes(&signed[..]).expect("reading");
 
-        eprintln!("msg {:#?}", message);
-
         let plain = message.as_data_string().unwrap();
         assert_eq!(plain, PLAIN);
 
@@ -1226,6 +1254,7 @@ fn message_many_mixed_signatures() {
         assert_eq!(reader.num_regular_signatures(), prefix_sigs);
 
         for (i, key) in keys.iter().enumerate() {
+            println!("-- verifying key {i}");
             message
                 .verify_nested_explicit(i, key.primary_key.public_key())
                 .expect("signed");
