@@ -49,39 +49,45 @@ impl MessageReader<'_> {
         fn check_next_packet<R: DebugBufRead>(
             mut parser: crate::packet::PacketParser<R>,
         ) -> io::Result<()> {
-            match parser.next_ref() {
-                Some(Ok(packet)) => {
-                    let tag = packet.packet_header().tag();
-                    match tag {
-                        Tag::Padding
-                        | Tag::Marker
-                        | Tag::UnassignedNonCritical(_)
-                        | Tag::Experimental(_) => {
-                            debug!("ignoring trailing packet: {tag:?}");
-                        }
-                        _ => {
-                            return Err(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                format!(
-                                    "unexpected trailing packet found: {:?}",
-                                    packet.packet_header()
-                                ),
-                            ));
+            loop {
+                match parser.next_ref() {
+                    Some(Ok(mut packet)) => {
+                        let tag = packet.packet_header().tag();
+                        match tag {
+                            Tag::Padding
+                            | Tag::Marker
+                            | Tag::UnassignedNonCritical(_)
+                            | Tag::Experimental(_) => {
+                                debug!("ignoring trailing packet: {tag:?}");
+                                // consume the trailing packet, to ensure we fully process all data
+
+                                let mut out = Vec::new();
+                                packet.read_to_end(&mut out)?;
+                            }
+                            _ => {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    format!(
+                                        "unexpected trailing packet found: {:?}",
+                                        packet.packet_header()
+                                    ),
+                                ));
+                            }
                         }
                     }
-                }
-                Some(Err(err)) => {
-                    warn!("failed to parse trailing data: {err:?}");
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "unexpected trailing bytes found",
-                    ));
-                }
-                None => {
-                    // all good
+                    Some(Err(err)) => {
+                        warn!("failed to parse trailing data: {err:?}");
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "unexpected trailing bytes found",
+                        ));
+                    }
+                    None => {
+                        // all good
+                        return Ok(());
+                    }
                 }
             }
-            Ok(())
         }
 
         match self {
