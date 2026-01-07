@@ -120,7 +120,8 @@ fn main() -> pgp::errors::Result<()> {
 - `bzip2`: Enables bzip2 support
 - `asm`: Enables assembly based optimizations
 - `wasm`: Allows building for wasm
-- `malformed-artifact-compat`: Be lenient towards some types of malformed artifacts (erroneously formed ECDH PKESK; invalidly short first partial body segments), and allow use of very large RSA keys (>8192 bit). Most users will NOT need this feature, should be disabled by default!
+- `large-rsa`: Allow use of very large RSA keys (raises the limit from 8192 to 16384 bit)
+- `malformed-artifact-compat`: Be lenient towards some types of malformed artifacts (erroneously formed ECDH PKESK; invalidly short first partial body segments). Most users will NOT need this feature, should be disabled by default!
 - `draft-pqc`: Enables implementation of draft-ietf-openpgp-pqc-12 (This is unstable and can have breaking changes in patch releases. DO NOT USE IN PRODUCTION!)
 - `draft-wussler-openpgp-forwarding`: Enables support for the formats from [draft-wussler-openpgp-forwarding](https://datatracker.ietf.org/doc/draft-wussler-openpgp-forwarding/), and decryption of forwarded ECDH Curve25519 OpenPGP messages
 

@@ -136,6 +136,7 @@ bzip2 = ["dep:bzip2"]
 asm = ["dep:sha1-asm", "sha1/asm", "sha2/asm", "md-5/asm"]
 wasm = ["getrandom", "getrandom/js"]
 
+large-rsa = []
 malformed-artifact-compat = []
 
 draft-pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
