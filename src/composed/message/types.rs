@@ -867,9 +867,19 @@ impl<'a> Message<'a> {
     /// Decrypt the message using the given key.
     /// Returns a message decryptor.
     pub fn decrypt(self, key_pw: &Password, key: &SignedSecretKey) -> Result<Message<'a>> {
+        self.decrypt_with_keys(vec![key_pw], vec![key])
+    }
+
+    /// Decrypt the message using the given keys.
+    /// Returns a message decryptor.
+    pub fn decrypt_with_keys(
+        self,
+        key_passwords: Vec<&Password>,
+        secret_keys: Vec<&SignedSecretKey>,
+    ) -> Result<Message<'a>> {
         let ring = TheRing {
-            secret_keys: vec![key],
-            key_passwords: vec![key_pw],
+            secret_keys,
+            key_passwords,
             ..Default::default()
         };
         let (msg, _) = self.decrypt_the_ring(ring, true)?;
