@@ -19,7 +19,7 @@ pub use self::{
     duration::{Duration, DurationError},
     fingerprint::Fingerprint,
     key_id::KeyId,
-    key_traits::{EncryptionKey, Imprint, KeyDetails, SigningKey, VerifyingKey},
+    key_traits::{DecryptionKey, EncryptionKey, Imprint, KeyDetails, SigningKey, VerifyingKey},
     mpi::Mpi,
     packet::*,
     params::*,

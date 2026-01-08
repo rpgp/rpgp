@@ -6,6 +6,7 @@ use rand::{CryptoRng, Rng};
 
 use super::public::PubKeyInner;
 use crate::{
+    composed::PlainSessionKey,
     crypto::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
@@ -17,9 +18,9 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EddsaLegacyPublicParams, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Password,
-        PlainSecretParams, PublicParams, SecretParams, SignatureBytes, SigningKey, Tag, Timestamp,
-        VerifyingKey,
+        DecryptionKey, EddsaLegacyPublicParams, EskType, Fingerprint, Imprint, KeyDetails, KeyId,
+        KeyVersion, Password, PkeskBytes, PlainSecretParams, PublicParams, SecretParams,
+        SignatureBytes, SigningKey, Tag, Timestamp,
     },
 };
 
@@ -157,14 +158,14 @@ impl SecretSubkey {
     ///
     /// This signature is used in an embedded signature subpacket to show that the subkey is
     /// willing to be associated with the primary.
-    pub fn sign_primary_key_binding<R: CryptoRng + Rng, P>(
+    pub fn sign_primary_key_binding<R: CryptoRng + Rng, K>(
         &self,
         rng: R,
-        pub_key: &P,
+        pub_key: &K,
         key_pw: &Password,
     ) -> Result<Signature>
     where
-        P: VerifyingKey + Serialize,
+        K: KeyDetails + Serialize,
     {
         let mut config = SignatureConfig::from_key(rng, self, SignatureType::KeyBinding)?;
 
@@ -467,18 +468,18 @@ impl SecretSubkey {
     }
 
     /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
-    pub fn sign<R: CryptoRng + Rng, K, P>(
+    pub fn sign<R: CryptoRng + Rng, S, K>(
         &self,
         mut rng: R,
-        primary_sec_key: &K,
-        primary_pub_key: &P,
+        primary_sec_key: &S,
+        primary_pub_key: &K,
         key_pw: &Password,
         keyflags: KeyFlags,
         embedded: Option<Signature>,
     ) -> Result<Signature>
     where
-        K: SigningKey,
-        P: VerifyingKey + Serialize,
+        S: SigningKey,
+        K: KeyDetails + Serialize,
     {
         self.details.sign(
             &mut rng,
@@ -488,6 +489,32 @@ impl SecretSubkey {
             keyflags,
             embedded,
         )
+    }
+}
+
+impl DecryptionKey for SecretKey {
+    fn decrypt(
+        &self,
+        key_pw: &Password,
+        values: &PkeskBytes,
+        typ: EskType,
+    ) -> Result<Result<PlainSessionKey>> {
+        self.unlock(key_pw, |pub_params, priv_key| {
+            priv_key.decrypt(pub_params, values, typ, self.public_key())
+        })
+    }
+}
+
+impl DecryptionKey for SecretSubkey {
+    fn decrypt(
+        &self,
+        key_pw: &Password,
+        values: &PkeskBytes,
+        typ: EskType,
+    ) -> Result<Result<PlainSessionKey>> {
+        self.unlock(key_pw, |pub_params, priv_key| {
+            priv_key.decrypt(pub_params, values, typ, self.public_key())
+        })
     }
 }
 
@@ -609,16 +636,16 @@ fn create_signature(
 /// Signs a direct key signature or a revocation.
 #[allow(dead_code)]
 // TODO: Expose in public API
-fn sign<R: CryptoRng + Rng, K, P>(
+fn sign<R: CryptoRng + Rng, S, K>(
     mut rng: R,
-    key: &K,
+    key: &S,
     key_pw: &Password,
     sig_typ: SignatureType,
-    pub_key: &P,
+    pub_key: &K,
 ) -> Result<Signature>
 where
-    K: SigningKey,
-    P: VerifyingKey + Serialize,
+    S: SigningKey,
+    K: KeyDetails + Serialize,
 {
     let mut config = SignatureConfig::from_key(&mut rng, key, sig_typ)?;
     config.hashed_subpackets = vec![

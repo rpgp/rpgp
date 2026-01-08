@@ -803,7 +803,7 @@ mod tests {
 
         use crate::{
             composed::{Esk, PlainSessionKey},
-            types::EskType,
+            types::{DecryptionKey, EskType},
         };
 
         let _ = pretty_env_logger::try_init();
@@ -838,7 +838,7 @@ mod tests {
             };
 
             let psk = decrypt_key.secret_subkeys[0]
-                .decrypt_session_key(
+                .decrypt(
                     &Password::from(PASSPHRASE),
                     pkesk.values().unwrap(),
                     EskType::V3_4,

@@ -18,7 +18,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        EskType, KeyDetails, Password, PkeskVersion, SecretParams, SkeskVersion, Tag, VerifyingKey,
+        DecryptionKey, EskType, KeyDetails, Password, PkeskVersion, SecretParams, SkeskVersion,
+        Tag, VerifyingKey,
     },
     util::impl_try_from_into,
 };
@@ -48,39 +49,45 @@ impl MessageReader<'_> {
         fn check_next_packet<R: DebugBufRead>(
             mut parser: crate::packet::PacketParser<R>,
         ) -> io::Result<()> {
-            match parser.next_ref() {
-                Some(Ok(packet)) => {
-                    let tag = packet.packet_header().tag();
-                    match tag {
-                        Tag::Padding
-                        | Tag::Marker
-                        | Tag::UnassignedNonCritical(_)
-                        | Tag::Experimental(_) => {
-                            debug!("ignoring trailing packet: {tag:?}");
-                        }
-                        _ => {
-                            return Err(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                format!(
-                                    "unexpected trailing packet found: {:?}",
-                                    packet.packet_header()
-                                ),
-                            ));
+            loop {
+                match parser.next_ref() {
+                    Some(Ok(mut packet)) => {
+                        let tag = packet.packet_header().tag();
+                        match tag {
+                            Tag::Padding
+                            | Tag::Marker
+                            | Tag::UnassignedNonCritical(_)
+                            | Tag::Experimental(_) => {
+                                debug!("ignoring trailing packet: {tag:?}");
+                                // consume the trailing packet, to ensure we fully process all data
+
+                                let mut out = Vec::new();
+                                packet.read_to_end(&mut out)?;
+                            }
+                            _ => {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    format!(
+                                        "unexpected trailing packet found: {:?}",
+                                        packet.packet_header()
+                                    ),
+                                ));
+                            }
                         }
                     }
-                }
-                Some(Err(err)) => {
-                    warn!("failed to parse trailing data: {err:?}");
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "unexpected trailing bytes found",
-                    ));
-                }
-                None => {
-                    // all good
+                    Some(Err(err)) => {
+                        warn!("failed to parse trailing data: {err:?}");
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "unexpected trailing bytes found",
+                        ));
+                    }
+                    None => {
+                        // all good
+                        return Ok(());
+                    }
                 }
             }
-            Ok(())
         }
 
         match self {
@@ -1218,7 +1225,7 @@ impl TheRing<'_> {
                             SecretParams::Encrypted(_) => {
                                 // unlock
                                 for pw in &self.key_passwords {
-                                    match $skey.decrypt_session_key(pw, $values, typ) {
+                                    match $skey.decrypt(pw, $values, typ) {
                                         Ok(Ok(session_key)) => {
                                             debug!("decrypted session key");
                                             result.secret_keys[i] = InnerRingResult::Ok;
@@ -1264,14 +1271,14 @@ impl TheRing<'_> {
                 );
                 if esk.match_identity(key.primary_key.public_key()) {
                     let values = esk.values()?;
-                    try_key!(key, key.primary_key.public_key(), values);
+                    try_key!(&key.primary_key, key.primary_key.public_key(), values);
                 }
                 // search subkeys
                 for subkey in &key.secret_subkeys {
                     debug!("checking subkey: {:?}", subkey.legacy_key_id());
                     if esk.match_identity(&subkey.public_key()) {
                         let values = esk.values()?;
-                        try_key!(subkey, subkey.key.public_key(), values);
+                        try_key!(&subkey.key, subkey.key.public_key(), values);
                     }
                 }
             }
