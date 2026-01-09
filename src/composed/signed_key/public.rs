@@ -5,17 +5,18 @@ use rand::{CryptoRng, Rng};
 
 use crate::{
     armor,
-    composed::{signed_key::SignedKeyDetails, ArmorOptions},
+    composed::{self, signed_key::SignedKeyDetails, ArmorOptions},
     crypto::{
         hash::{HashAlgorithm, KnownDigest},
         public_key::PublicKeyAlgorithm,
     },
-    errors::{bail, ensure, Result},
+    errors::{bail, ensure, ensure_eq, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{
         EncryptionKey, EskType, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, PacketLength,
-        PkeskBytes, PublicParams, SignatureBytes, Tag, Timestamp, VerifyingKey,
+        Password, PkeskBytes, PublicParams, SignatureBytes, SigningKey, Tag, Timestamp,
+        VerifyingKey,
     },
 };
 
@@ -215,6 +216,43 @@ impl Serialize for SignedPublicKey {
         sum += self.details.write_len();
         sum += self.public_subkeys.write_len();
         sum
+    }
+}
+
+impl SignedPublicKey {
+    /// This uses a separately provided signing key to bind a set of components (public primary
+    /// and subkeys, and identities) into a `SignedPublicKey`.
+    ///
+    /// This is useful when the private key material of the primary key is HSM-backed.
+    ///
+    /// NOTE: When binding signing-capable subkeys to a primary, the caller must ensure that an
+    /// "Embedded primary key binding signature", is included.
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#sigtype-primary-binding>
+    pub fn bind_with_signing_key<R, K>(
+        mut rng: R,
+        primary_signer: &K,
+        primary_key: packet::PublicKey,
+        details: composed::KeyDetails,
+        key_pw: &Password,
+        public_subkeys: Vec<SignedPublicSubKey>,
+    ) -> Result<Self>
+    where
+        R: CryptoRng + Rng,
+        K: SigningKey,
+    {
+        // Prevent callers from accidentally using an unrelated signing key
+        ensure_eq!(
+            primary_signer.fingerprint(),
+            primary_key.fingerprint(),
+            "Signing key fingerprint must match primary public key fingerprint"
+        );
+
+        let details = details.sign(&mut rng, primary_signer, &primary_key, key_pw)?;
+        Ok(Self {
+            primary_key,
+            details,
+            public_subkeys,
+        })
     }
 }
 
