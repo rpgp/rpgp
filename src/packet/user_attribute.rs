@@ -3,7 +3,7 @@ use std::io::{self, BufRead};
 use byteorder::{LittleEndian, WriteBytesExt};
 use bytes::Bytes;
 use num_enum::{FromPrimitive, IntoPrimitive};
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 
 use crate::{
     errors::{ensure, ensure_eq, Result},
@@ -220,13 +220,13 @@ impl UserAttribute {
     /// Create a self-signature
     pub fn sign<R, P, K>(
         &self,
-        rng: R,
+        rng: &mut R,
         signer_sec_key: &P,
         signer_pub_key: &K,
         key_pw: &Password,
     ) -> Result<SignedUserAttribute>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + ?Sized,
         P: SigningKey,
         K: KeyDetails + Serialize,
     {
@@ -244,14 +244,14 @@ impl UserAttribute {
     /// Create a third-party signature
     pub fn sign_third_party<R, P, K>(
         &self,
-        mut rng: R,
+        rng: &mut R,
         signer: &P,
         signer_pw: &Password,
         signee: &K,
         typ: SignatureType,
     ) -> Result<SignedUserAttribute>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + ?Sized,
         P: SigningKey,
         K: KeyDetails + Serialize,
     {
@@ -265,7 +265,7 @@ impl UserAttribute {
             Subpacket::regular(SubpacketData::IssuerFingerprint(signer.fingerprint()))?,
         ];
 
-        let mut config = SignatureConfig::from_key(&mut rng, signer, typ)?;
+        let mut config = SignatureConfig::from_key(rng, signer, typ)?;
 
         config.hashed_subpackets = hashed_subpackets;
         if signer.version() <= KeyVersion::V4 {

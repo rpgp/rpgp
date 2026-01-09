@@ -47,7 +47,7 @@ impl Serialize for MlKem768X25519PublicParams {
 mod tests {
     use ml_kem::{KemCore, MlKem768};
     use proptest::prelude::*;
-    use rand::SeedableRng;
+    use rand::{RngCore, SeedableRng};
 
     use super::*;
     use crate::crypto::ecc_curve::ECCCurve;
@@ -58,7 +58,7 @@ mod tests {
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
             fn from_seed(seed: u64) -> MlKem768X25519PublicParams {
-                let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+                let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
                 let mut secret_key_bytes = [0u8; ECCCurve::Curve25519.secret_key_length()];
                 rng.fill_bytes(&mut secret_key_bytes);
 
