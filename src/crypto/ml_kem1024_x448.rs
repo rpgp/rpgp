@@ -133,7 +133,7 @@ pub struct EncryptionFields<'a> {
 impl Decryptor for SecretKey {
     type EncryptionFields<'a> = EncryptionFields<'a>;
 
-    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
+    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Zeroizing<Vec<u8>>> {
         debug!("ML KEM 1024 X448 decrypt");
 
         // Compute (ecdhKeyShare) := ECDH-KEM.Decaps(ecdhCipherText, ecdhSecretKey, ecdhPublicKey)

@@ -265,7 +265,7 @@ pub struct EncryptionFields<'a> {
 impl Decryptor for SecretKey {
     type EncryptionFields<'a> = EncryptionFields<'a>;
 
-    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
+    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Zeroizing<Vec<u8>>> {
         debug!("ECDH decrypt");
 
         let encrypted_key_len: usize = data.encrypted_session_key.len();
@@ -421,7 +421,7 @@ pub fn derive_session_key(
     hash: HashAlgorithm,
     alg_sym: SymmetricKeyAlgorithm,
     fingerprint: &[u8],
-) -> Result<Vec<u8>> {
+) -> Result<Zeroizing<Vec<u8>>> {
     let param = build_ecdh_param(&curve.oid(), alg_sym, hash, fingerprint);
 
     // Perform key derivation
