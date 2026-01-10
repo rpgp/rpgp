@@ -202,6 +202,8 @@ impl Deserializable for DetachedSignature {
     }
 }
 
+/// Consumes a series of [`Packet`]s and transforms them into a series of [`DetachedSignature`]
+/// objects.
 pub struct SignatureParser<I: Sized + Iterator<Item = Result<Packet>>> {
     source: Peekable<I>,
 }

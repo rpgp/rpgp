@@ -11,6 +11,7 @@ use crate::{
     types::Mpi,
 };
 
+/// Raw EdDSA public key material
 #[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum EddsaLegacyPublicParams {
