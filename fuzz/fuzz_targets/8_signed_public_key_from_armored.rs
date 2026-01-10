@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use pgp::composed::Deserializable;
+use pgp::{composed::Deserializable, types::KeyDetails};
 
 // build Public Key from single armor input
 fuzz_target!(|data: &[u8]| {
@@ -19,11 +19,12 @@ fuzz_target!(|data: &[u8]| {
             // let _ = key.verify();
 
             let _ = key.to_armored_bytes(None.into());
-            let _ = key.expires_at();
+            let _ = key.expiration();
 
-            // FUZZER RESULT this can panic on some inputs
-            // finding RPG-17 in ROS report 2024, fixed with 0.14.1
-            let _ = key.as_unsigned();
+            // removed from the API in e111ba1a
+            // // FUZZER RESULT this can panic on some inputs
+            // // finding RPG-17 in ROS report 2024, fixed with 0.14.1
+            // let _ = key.as_unsigned();
         }
     }
 });
