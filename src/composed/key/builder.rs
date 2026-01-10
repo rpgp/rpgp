@@ -39,11 +39,11 @@ pub enum EncryptionCaps {
 
 impl EncryptionCaps {
     fn is_communication(&self) -> bool {
-        *self == Self::Communication || *self == Self::All
+        matches!(self, Self::Communication | Self::All)
     }
 
     fn is_storage(&self) -> bool {
-        *self == Self::Storage || *self == Self::All
+        matches!(self, Self::Storage | Self::All)
     }
 }
 
