@@ -61,7 +61,7 @@ fn keygen(
     signkey
         .key_type(signing_key_type)
         .can_sign(true)
-        .can_encrypt(EncryptionCaps::All)
+        .can_encrypt(EncryptionCaps::None)
         .can_authenticate(false);
     let mut encryptkey = SubkeyParamsBuilder::default();
     encryptkey
@@ -73,7 +73,7 @@ fn keygen(
     authkey
         .key_type(auth_key_type)
         .can_sign(false)
-        .can_encrypt(EncryptionCaps::All)
+        .can_encrypt(EncryptionCaps::None)
         .can_authenticate(true);
 
     // Set up parameter builder for the full private key
@@ -82,7 +82,7 @@ fn keygen(
         .key_type(primary_key_type)
         .can_certify(true)
         .can_sign(false)
-        .can_encrypt(EncryptionCaps::All)
+        .can_encrypt(EncryptionCaps::None)
         .primary_user_id(uid.into())
         .subkeys(vec![
             signkey.build()?,
