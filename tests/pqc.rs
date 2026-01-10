@@ -1,7 +1,7 @@
 #![cfg(feature = "draft-pqc")]
 use pgp::{
     composed::{
-        Deserializable, DetachedSignature, KeyType, Message, MessageBuilder,
+        Deserializable, DetachedSignature, EncryptionCaps, KeyType, Message, MessageBuilder,
         SecretKeyParamsBuilder, SignedPublicKey, SignedSecretKey, SubkeyParamsBuilder,
     },
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
@@ -228,7 +228,7 @@ fn gen_key<R: RngCore + CryptoRng>(mut rng: R) -> TestResult<SignedSecretKey> {
             SubkeyParamsBuilder::default()
                 .version(KeyVersion::V6)
                 .key_type(KeyType::MlKem1024X448)
-                .can_encrypt(true)
+                .can_encrypt(EncryptionCaps::All)
                 .passphrase(None)
                 .build()
                 .unwrap(),
