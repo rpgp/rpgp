@@ -14,7 +14,7 @@
 
 use std::ops::Deref;
 
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use signature::{Signer as _, Verifier};
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
@@ -89,7 +89,7 @@ impl SecretKey {
     ///
     /// This SecretKey type can be used to form either a `EddsaLegacyPublicParams` or a
     /// `Ed25519PublicParams`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R, mode: Mode) -> Self {
+    pub fn generate<R: RngCore + CryptoRng + ?Sized>(rng: &mut R, mode: Mode) -> Self {
         let mut bytes = Zeroizing::new([0u8; ed25519_dalek::SECRET_KEY_LENGTH]);
         rng.fill_bytes(&mut *bytes);
         let secret = ed25519_dalek::SigningKey::from_bytes(&bytes);

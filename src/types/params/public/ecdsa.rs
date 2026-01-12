@@ -203,6 +203,7 @@ impl Serialize for EcdsaPublicParams {
 
 #[cfg(test)]
 mod tests {
+    use elliptic_curve::Generate;
     use proptest::prelude::*;
     use rand::SeedableRng;
 
@@ -210,29 +211,33 @@ mod tests {
 
     proptest::prop_compose! {
         pub fn p256_pub_gen()(seed: u64) -> p256::PublicKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            p256::SecretKey::random(&mut rng).public_key()
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
+            let key = p256::SecretKey::generate_from_rng(&mut rng);
+            key.public_key()
         }
     }
 
     proptest::prop_compose! {
         pub fn p384_pub_gen()(seed: u64) -> p384::PublicKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            p384::SecretKey::random(&mut rng).public_key()
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
+            let key = p384::SecretKey::generate_from_rng(&mut rng);
+            key.public_key()
         }
     }
 
     proptest::prop_compose! {
         pub fn p521_pub_gen()(seed: u64) -> p521::PublicKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            p521::SecretKey::random(&mut rng).public_key()
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
+            let key = p521::SecretKey::generate_from_rng(&mut rng);
+            key.public_key()
         }
     }
 
     proptest::prop_compose! {
         pub fn k256_pub_gen()(seed: u64) -> k256::PublicKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            k256::SecretKey::random(&mut rng).public_key()
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
+            let key = k256::SecretKey::generate_from_rng(&mut rng);
+            key.public_key()
         }
     }
 
