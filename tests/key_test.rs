@@ -349,7 +349,7 @@ fn test_parse_details() {
     }
 
     assert_eq!(pk.created_at(), Timestamp::from_secs(14_0207_0261));
-    assert_eq!(pk.expiration(), None);
+    assert_eq!(pk.v3_expiration_days(), None);
 
     // TODO: examine subkey details
     assert_eq!(key.public_subkeys.len(), 1, "missing subkey");
