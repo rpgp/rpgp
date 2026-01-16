@@ -742,4 +742,27 @@ mod tests {
 
         msg.verify(&cert).expect("verify");
     }
+
+    #[test]
+    fn test_cleartext_gpg_fail() {
+        // Test parsing of a cleartext message as described in https://gpg.fail/notdash
+        //
+        // GnuPG allows "NotDashEscaped" headers, this test checks that we reject them.
+
+        let _ = pretty_env_logger::try_init();
+
+        let data = std::fs::read_to_string("./tests/unit-tests/csf/gpg.fail-notdash").unwrap();
+
+        let Err(e) = CleartextSignedMessage::from_string(&data) else {
+            panic!("expected error")
+        };
+
+        assert!(e.to_string().contains("cleartext header Error"));
+
+        let Err(e) = Any::from_string(&data) else {
+            panic!("expected error")
+        };
+
+        assert!(e.to_string().contains("armor header Error"));
+    }
 }
