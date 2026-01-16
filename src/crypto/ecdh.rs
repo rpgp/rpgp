@@ -361,7 +361,7 @@ impl Decryptor for SecretKey {
             // 2. Try with stripped trailing zeroes (-> work around old OpenPGP.js bug)
             let mut strip_trailing = shared_secret.as_slice();
             while strip_trailing.ends_with(&[0]) {
-                strip_trailing = &strip_trailing[..shared_secret.len() - 1];
+                strip_trailing = &strip_trailing[..strip_trailing.len() - 1];
             }
 
             if let Ok(sk) = derive_session_key(
