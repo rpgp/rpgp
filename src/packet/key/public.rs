@@ -39,6 +39,7 @@ pub struct PublicSubkey {
 }
 
 impl PublicKey {
+    #[doc(hidden)] // must leak for proptest to work
     pub fn from_inner(inner: PubKeyInner) -> Result<Self> {
         let len = inner.write_len();
         let packet_header = PacketHeader::new_fixed(Tag::PublicKey, len.try_into()?);
@@ -56,6 +57,18 @@ impl PublicKey {
     }
 
     /// Create a new `PublicKey` packet from underlying parameters.
+    pub fn new(
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
+        created_at: Timestamp,
+        expiration: Option<u16>,
+        public_params: PublicParams,
+    ) -> Result<Self> {
+        let inner = PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?;
+        Self::from_inner(inner)
+    }
+
+    /// Create a new `PublicKey` packet from underlying parameters with a custom header.
     pub fn new_with_header(
         packet_header: PacketHeader,
         version: KeyVersion,
@@ -106,6 +119,7 @@ impl EncryptionKey for PublicKey {
 }
 
 impl PublicSubkey {
+    #[doc(hidden)] // must leak for proptest to work
     pub fn from_inner(inner: PubKeyInner) -> Result<Self> {
         let len = inner.write_len();
         let packet_header = PacketHeader::new_fixed(Tag::PublicSubkey, len.try_into()?);
@@ -116,7 +130,7 @@ impl PublicSubkey {
         })
     }
 
-    pub fn from_inner_with_header(packet_header: PacketHeader, inner: PubKeyInner) -> Result<Self> {
+    pub(super) fn from_inner_with_header(packet_header: PacketHeader, inner: PubKeyInner) -> Result<Self> {
         Ok(Self {
             packet_header,
             inner,
@@ -124,6 +138,18 @@ impl PublicSubkey {
     }
 
     /// Create a new `PublicSubkey` packet from underlying parameters.
+    pub fn new(
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
+        created_at: Timestamp,
+        expiration: Option<u16>,
+        public_params: PublicParams,
+    ) -> Result<Self> {
+        let inner = PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?;
+        Self::from_inner(inner)
+    }
+
+    /// Create a new `PublicSubkey` packet from underlying parameters with a custom header.
     pub fn new_with_header(
         packet_header: PacketHeader,
         version: KeyVersion,
