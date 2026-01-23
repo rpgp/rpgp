@@ -4,13 +4,13 @@ use std::{
 };
 
 use super::{
-    DebugBufRead, MessageReader, PacketBodyReader,
     reader::{CompressedDataReader, LiteralDataReader, SignatureManyReader},
+    DebugBufRead, MessageReader, PacketBodyReader,
 };
 use crate::{
     armor::{BlockType, DearmorOptions},
-    composed::{Edata, Esk, SignaturePacket, message::Message, shared::is_binary},
-    errors::{Result, bail, format_err, unimplemented_err},
+    composed::{message::Message, shared::is_binary, Edata, Esk, SignaturePacket},
+    errors::{bail, format_err, unimplemented_err, Result},
     packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
     parsing_reader::BufReadParsing,
     types::{PkeskVersion, SkeskVersion, Tag},
@@ -35,7 +35,6 @@ impl<'a> MessageParser<'a> {
         packets: crate::packet::PacketParser<MessageReader<'a>>,
         is_nested: bool,
     ) -> Self {
-        log::warn!("new");
         // non nested messages are considered "first"
         let is_first = !is_nested;
         Self {
@@ -64,22 +63,31 @@ impl<'a> MessageParser<'a> {
 
                     // Handle 1 OpenPGP Message per loop iteration
                     let tag = packet.packet_header().tag();
-                    log::warn!("next: {tag:?}, nesting?: {is_nested} first?: {is_first}");
 
-                    let is_nested_now = if is_first {
+                    // Calculate is_nested_now, but only consume is_first for "real" packets
+                    // (not for skipped packets)
+                    let is_nested_now = if is_first { is_nested } else { true };
+                    let consume_is_first = !matches!(
+                        tag,
+                        Tag::Marker
+                            | Tag::Padding
+                            | Tag::UnassignedNonCritical(_)
+                            | Tag::Experimental(_)
+                    );
+                    if consume_is_first {
                         is_first = false;
-                        is_nested
-                    } else {
-                        true
-                    };
-                    log::warn!("is_nested_now {is_nested_now}");
+                    }
                     match tag {
                         Tag::SymKeyEncryptedSessionKey
                         | Tag::PublicKeyEncryptedSessionKey
                         | Tag::SymEncryptedData
                         | Tag::SymEncryptedProtectedData
                         | Tag::GnupgAeadData => {
-                            return Self::visit_esk(tag, packet, is_nested);
+                            let message = Self::visit_esk(tag, packet, is_nested_now)?;
+                            return match message {
+                                Some(msg) => self.finish(msg, is_nested),
+                                None => Ok(None),
+                            };
                         }
                         Tag::Signature => {
                             // (b) Signed Message
@@ -173,7 +181,6 @@ impl<'a> MessageParser<'a> {
     }
 
     fn finish(self, message: Message<'a>, is_nested: bool) -> Result<Option<Message<'a>>> {
-        log::warn!("finish {}: is_nested {}", self.messages.len(), is_nested);
         if self.messages.is_empty() {
             return Ok(Some(message));
         }
