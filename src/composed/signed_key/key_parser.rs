@@ -76,13 +76,11 @@ where
 
                 if typ == Some(SignatureType::KeyRevocation) {
                     revocation_signatures.push(sig);
+                } else if primary_key.version() < KeyVersion::V4 {
+                    // no direct signatures on V2|V3 keys
+                    warn!("unexpected signature: {typ:?}");
                 } else {
-                    if primary_key.version() < KeyVersion::V4 {
-                        // no direct signatures on V2|V3 keys
-                        warn!("unexpected signature: {typ:?}");
-                    } else {
-                        direct_signatures.push(sig);
-                    }
+                    direct_signatures.push(sig);
                 }
             }
             Err(e) => return Some(Err(e)),
