@@ -4,13 +4,13 @@ use std::{
 };
 
 use super::{
-    reader::{CompressedDataReader, LiteralDataReader, SignatureManyReader},
     DebugBufRead, MessageReader, PacketBodyReader,
+    reader::{CompressedDataReader, LiteralDataReader, SignatureManyReader},
 };
 use crate::{
     armor::{BlockType, DearmorOptions},
-    composed::{message::Message, shared::is_binary, Edata, Esk, SignaturePacket},
-    errors::{bail, format_err, unimplemented_err, Result},
+    composed::{Edata, Esk, SignaturePacket, message::Message, shared::is_binary},
+    errors::{Result, bail, format_err, unimplemented_err},
     packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
     parsing_reader::BufReadParsing,
     types::{PkeskVersion, SkeskVersion, Tag},
@@ -24,7 +24,8 @@ struct MessageParser<'a> {
 enum MessageParserState<'a> {
     Start {
         packets: crate::packet::PacketParser<MessageReader<'a>>,
-        is_nested: usize,
+        is_nested: bool,
+        is_first: bool,
     },
     Error,
 }
@@ -32,11 +33,18 @@ enum MessageParserState<'a> {
 impl<'a> MessageParser<'a> {
     pub(super) fn new(
         packets: crate::packet::PacketParser<MessageReader<'a>>,
-        is_nested: usize,
+        is_nested: bool,
     ) -> Self {
+        log::warn!("new");
+        // non nested messages are considered "first"
+        let is_first = !is_nested;
         Self {
             messages: Vec::new(),
-            current: MessageParserState::Start { packets, is_nested },
+            current: MessageParserState::Start {
+                packets,
+                is_nested,
+                is_first,
+            },
         }
     }
 
@@ -44,8 +52,11 @@ impl<'a> MessageParser<'a> {
     pub(super) fn run(mut self) -> Result<Option<Message<'a>>> {
         loop {
             match std::mem::replace(&mut self.current, MessageParserState::Error) {
-                MessageParserState::Start { packets, is_nested } => {
-                    log::trace!("next: nesting: {is_nested}");
+                MessageParserState::Start {
+                    packets,
+                    is_nested,
+                    mut is_first,
+                } => {
                     let Some(packet) = packets.next_owned() else {
                         return Ok(None);
                     };
@@ -53,7 +64,15 @@ impl<'a> MessageParser<'a> {
 
                     // Handle 1 OpenPGP Message per loop iteration
                     let tag = packet.packet_header().tag();
-                    log::debug!("tag {:?}", tag);
+                    log::warn!("next: {tag:?}, nesting?: {is_nested} first?: {is_first}");
+
+                    let is_nested_now = if is_first {
+                        is_first = false;
+                        is_nested
+                    } else {
+                        true
+                    };
+                    log::warn!("is_nested_now {is_nested_now}");
                     match tag {
                         Tag::SymKeyEncryptedSessionKey
                         | Tag::PublicKeyEncryptedSessionKey
@@ -74,13 +93,14 @@ impl<'a> MessageParser<'a> {
                             self.messages.push(SignaturePacket::Signature { signature });
                             self.current = MessageParserState::Start {
                                 packets: crate::packet::PacketParser::new(packet.into_inner()),
-                                is_nested: is_nested + 1,
+                                is_nested: is_nested_now,
+                                is_first,
                             };
                         }
                         Tag::OnePassSignature => {
                             //   (2) One-Pass Signed Message.
                             //      - OPS
-                            //      - OpenPgp Message
+                            //      - OpenPGP Message
                             //      - Signature Packet
                             let signature = crate::packet::OnePassSignature::try_from_reader(
                                 packet.packet_header(),
@@ -89,7 +109,8 @@ impl<'a> MessageParser<'a> {
                             self.messages.push(SignaturePacket::Ops { signature });
                             self.current = MessageParserState::Start {
                                 packets: crate::packet::PacketParser::new(packet.into_inner()),
-                                is_nested: is_nested + 1,
+                                is_nested: is_nested_now,
+                                is_first,
                             };
                         }
                         Tag::CompressedData => {
@@ -98,7 +119,7 @@ impl<'a> MessageParser<'a> {
                             let reader = CompressedDataReader::new(packet, false)?;
                             let message = Message::Compressed {
                                 reader,
-                                is_nested: is_nested > 0,
+                                is_nested: is_nested_now,
                             };
                             return self.finish(message, is_nested);
                         }
@@ -108,7 +129,7 @@ impl<'a> MessageParser<'a> {
                             let reader = LiteralDataReader::new(packet)?;
                             let message = Message::Literal {
                                 reader,
-                                is_nested: is_nested > 0,
+                                is_nested: is_nested_now,
                             };
                             return self.finish(message, is_nested);
                         }
@@ -117,7 +138,8 @@ impl<'a> MessageParser<'a> {
                             packet.drain()?;
                             self.current = MessageParserState::Start {
                                 packets: crate::packet::PacketParser::new(packet.into_inner()),
-                                is_nested,
+                                is_nested: is_nested_now,
+                                is_first,
                             };
                         }
                         Tag::Marker => {
@@ -126,6 +148,7 @@ impl<'a> MessageParser<'a> {
                             self.current = MessageParserState::Start {
                                 packets: crate::packet::PacketParser::new(packet.into_inner()),
                                 is_nested,
+                                is_first,
                             };
                         }
                         Tag::UnassignedNonCritical(_) | Tag::Experimental(_) => {
@@ -136,6 +159,7 @@ impl<'a> MessageParser<'a> {
                             self.current = MessageParserState::Start {
                                 packets: crate::packet::PacketParser::new(packet.into_inner()),
                                 is_nested,
+                                is_first,
                             };
                         }
                         _ => {
@@ -148,22 +172,20 @@ impl<'a> MessageParser<'a> {
         }
     }
 
-    fn finish(self, message: Message<'a>, is_nested: usize) -> Result<Option<Message<'a>>> {
+    fn finish(self, message: Message<'a>, is_nested: bool) -> Result<Option<Message<'a>>> {
+        log::warn!("finish {}: is_nested {}", self.messages.len(), is_nested);
         if self.messages.is_empty() {
             return Ok(Some(message));
         }
 
         let reader = SignatureManyReader::new(self.messages, Box::new(message))?;
-        Ok(Some(Message::Signed {
-            reader,
-            is_nested: is_nested > 0,
-        }))
+        Ok(Some(Message::Signed { reader, is_nested }))
     }
 
     fn visit_esk(
         tag: Tag,
         mut packet: PacketBodyReader<MessageReader<'a>>,
-        is_nested: usize,
+        is_nested: bool,
     ) -> Result<Option<Message<'a>>> {
         // (a) Encrypted Message:
         //   - ESK Seq (may be empty)
@@ -181,7 +203,7 @@ impl<'a> MessageParser<'a> {
             return Ok(Some(Message::Encrypted {
                 esk: esks, // empty
                 edata,
-                is_nested: is_nested > 0,
+                is_nested,
             }));
         }
 
@@ -232,7 +254,7 @@ impl<'a> MessageParser<'a> {
                     return Ok(Some(Message::Encrypted {
                         esk,
                         edata,
-                        is_nested: is_nested > 0,
+                        is_nested,
                     }));
                 }
                 Tag::Padding => {
@@ -276,7 +298,7 @@ impl<'a> Message<'a> {
     /// Parse a composed message.
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages>
     fn from_packets(packets: crate::packet::PacketParser<MessageReader<'a>>) -> Result<Self> {
-        match MessageParser::new(packets, 0).run()? {
+        match MessageParser::new(packets, false).run()? {
             Some(message) => Ok(message),
             None => {
                 bail!("no valid OpenPGP message found");
@@ -312,7 +334,8 @@ impl<'a> Message<'a> {
 
     fn internal_from_bytes(source: MessageReader<'a>, is_nested: bool) -> Result<Self> {
         let packets = crate::packet::PacketParser::new(source);
-        match MessageParser::new(packets, if is_nested { 1 } else { 0 }).run()? {
+
+        match MessageParser::new(packets, is_nested).run()? {
             Some(message) => Ok(message),
             None => {
                 bail!("no valid OpenPGP message found");

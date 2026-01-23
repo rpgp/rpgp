@@ -527,7 +527,9 @@ NK2ay45cX1IVAQ==
 /// https://www.rfc-editor.org/rfc/rfc9580.html#name-sample-inline-signed-messag
 #[test]
 fn test_v6_annex_a_7() {
+    pretty_env_logger::try_init().ok();
     let (ssk, _) = SignedPublicKey::from_string(ANNEX_A_3).expect("SSK from armor");
+    assert_eq!(ssk.details.direct_signatures.len(), 1);
 
     let msg = "-----BEGIN PGP MESSAGE-----
 
@@ -541,7 +543,7 @@ FtCgazStmsuOXF9SFQE=
 -----END PGP MESSAGE-----";
 
     let (mut msg, _) = Message::from_string(msg).unwrap();
-
+    dbg!(&msg);
     msg.verify_read(&ssk).expect("verify");
 }
 
@@ -1279,4 +1281,24 @@ fn make_signing_keys(mut rng: &mut ChaCha8Rng, num: usize) -> Vec<SignedSecretKe
                 .expect("failed to generate secret key")
         })
         .collect()
+}
+
+#[test]
+fn test_two_signed_messages() {
+    pretty_env_logger::try_init().ok();
+
+    // let (psk, _headers) =
+    //     SignedPublicKey::from_armor_file("./tests/two_signed_cert.pub.asc").expect("psk");
+
+    let (mut message, _) = Message::from_armor_file("./tests/two_signed.asc").expect("ok");
+
+    dbg!(&message);
+    let err = message.as_data_string().unwrap_err();
+    dbg!(&err);
+    // let sig = message.verify(&psk).unwrap();
+
+    assert!(
+        err.to_string().contains("unexpected trailing"),
+        "found error: {err}"
+    );
 }

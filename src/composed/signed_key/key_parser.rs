@@ -77,11 +77,12 @@ where
                 if typ == Some(SignatureType::KeyRevocation) {
                     revocation_signatures.push(sig);
                 } else {
-                    if primary_key.version() != KeyVersion::V4 {
+                    if primary_key.version() < KeyVersion::V4 {
                         // no direct signatures on V2|V3 keys
                         warn!("unexpected signature: {typ:?}");
+                    } else {
+                        direct_signatures.push(sig);
                     }
-                    direct_signatures.push(sig);
                 }
             }
             Err(e) => return Some(Err(e)),
@@ -154,7 +155,7 @@ where
     }
 
     if users.is_empty() {
-        warn!("missing user ids");
+        debug!("missing user ids");
     }
 
     // -- Zero or more Subkey packets
@@ -170,7 +171,7 @@ where
         })
     }) {
         // -- V2/3 keys can not have sub keys
-        if primary_key.version() == KeyVersion::V2 || primary_key.version() == KeyVersion::V3 {
+        if primary_key.version() < KeyVersion::V4 {
             return Some(Err(format_err!("V2/3 keys can not have subkeys")));
         }
 
@@ -231,7 +232,7 @@ where
                 return Some(Err(format_err!(
                     "error while parsing composed key: {:?}",
                     e
-                )))
+                )));
             }
         }
     }

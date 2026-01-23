@@ -47,6 +47,8 @@ where
 /// This should not lead to successful decryption.
 #[test]
 pub fn mdc_test() {
+    pretty_env_logger::try_init().ok();
+
     let mut rng = ChaCha8Rng::seed_from_u64(1);
 
     // Produce an encrypted message, once
@@ -81,9 +83,11 @@ pub fn mdc_test() {
 
         // We haven't read until the end of the stream yet
         if let Ok(mut decrypted) = res {
+            println!("----\n");
             // read to the end of the stream
             let plain = decrypted.as_data_vec();
 
+            dbg!(&decrypted);
             if let Ok(data) = plain {
                 eprintln!(
                     "Decrypted len: {}, session key: {:02x?}",
