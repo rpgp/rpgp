@@ -53,7 +53,7 @@ impl DsaPublicParams {
     }
 
     pub(crate) fn try_from_mpi(p: Mpi, q: Mpi, g: Mpi, y: Mpi) -> Result<Self> {
-        let components = dsa::Components::from_components(p.into(), q.into(), g.into())?;
+        let components = dsa::Components::from_components_unchecked(p.into(), q.into(), g.into())?;
         let key = dsa::VerifyingKey::from_components(components, y.into())?;
 
         Ok(DsaPublicParams { key })
@@ -100,7 +100,7 @@ mod tests {
 
     prop_compose! {
         pub fn dsa_pub_gen()(seed: u64) -> dsa::VerifyingKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
             #[allow(deprecated)]
             let components = dsa::Components::generate(&mut rng, dsa::KeySize::DSA_1024_160);
             let signing_key = dsa::SigningKey::generate(&mut rng, components);

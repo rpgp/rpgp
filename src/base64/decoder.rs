@@ -139,13 +139,13 @@ mod tests {
         ]);
 
         for i in 0..n {
-            let data: Vec<u8> = (0..i).map(|_| rng.gen()).collect();
+            let data: Vec<u8> = (0..i).map(|_| rng.random()).collect();
             let mut encoded_data = ENGINE.encode(&data);
 
             if insert_lines {
                 for j in 0..i {
                     // insert line break with a 1/10 chance
-                    if rng.gen_ratio(1, 10) {
+                    if rng.random_ratio(1, 10) {
                         if j >= encoded_data.len() {
                             encoded_data.push('\n');
                         } else {

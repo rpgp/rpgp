@@ -1,7 +1,6 @@
 use std::{io::Read, iter::Peekable};
 
 use aead::rand_core::CryptoRng;
-use rand::Rng;
 
 use crate::{
     armor,
@@ -30,8 +29,8 @@ impl DetachedSignature {
     }
 
     /// Create a detached data signature over `data`, with [SignatureType::Binary].
-    pub fn sign_binary_data<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
+    pub fn sign_binary_data<RNG: CryptoRng + ?Sized, R: Read>(
+        rng: &mut RNG,
         key: &impl SigningKey,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
@@ -52,8 +51,8 @@ impl DetachedSignature {
     /// with explicit subpacket configuration.
     ///
     /// This gives callers full control of the hashed and unhashed subpacket areas.
-    pub fn sign_binary_data_with_subpackets<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
+    pub fn sign_binary_data_with_subpackets<RNG: CryptoRng + ?Sized, R: Read>(
+        rng: &mut RNG,
         key: &impl SigningKey,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
@@ -76,8 +75,8 @@ impl DetachedSignature {
     /// Using [SignatureType::Text] makes the signature stable against changes of line ending
     /// encodings. The signature is not invalidated if the plaintext is e.g. changed between using
     /// "LF" line endings or "CR+LF" line endings.
-    pub fn sign_text_data<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
+    pub fn sign_text_data<RNG: CryptoRng + ?Sized, R: Read>(
+        rng: &mut RNG,
         key: &impl SigningKey,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
@@ -102,8 +101,8 @@ impl DetachedSignature {
     /// Using [SignatureType::Text] makes the signature stable against changes of line ending
     /// encodings. The signature is not invalidated if the plaintext is e.g. changed between using
     /// "LF" line endings or "CR+LF" line endings.
-    pub fn sign_text_data_with_subpackets<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
+    pub fn sign_text_data_with_subpackets<RNG: CryptoRng + ?Sized, R: Read>(
+        rng: &mut RNG,
         key: &impl SigningKey,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
@@ -121,8 +120,8 @@ impl DetachedSignature {
         )
     }
 
-    fn sign_data<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
+    fn sign_data<RNG: CryptoRng + ?Sized, R: Read>(
+        rng: &mut RNG,
         typ: SignatureType,
         key: &impl SigningKey,
         key_pw: &Password,
@@ -229,8 +228,8 @@ fn next<I: Iterator<Item = Result<Packet>>>(
 
 #[cfg(test)]
 mod tests {
+    use chacha20::ChaCha20Rng;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
 
     use crate::{
         composed::{Deserializable, DetachedSignature, SignedSecretKey, SubpacketConfig},
@@ -244,14 +243,14 @@ mod tests {
 
     #[test]
     fn detached_signature_binary() {
-        let rng = ChaCha20Rng::seed_from_u64(1);
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
 
         let (alice, _) =
             SignedSecretKey::from_armor_file("./tests/autocrypt/alice@autocrypt.example.sec.asc")
                 .unwrap();
 
         let sig = DetachedSignature::sign_binary_data(
-            rng,
+            &mut rng,
             &alice.primary_key,
             &Password::empty(),
             HashAlgorithm::Sha256,
@@ -278,14 +277,14 @@ mod tests {
 
     #[test]
     fn detached_signature_text() {
-        let rng = ChaCha20Rng::seed_from_u64(1);
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
 
         let (alice, _) =
             SignedSecretKey::from_armor_file("./tests/autocrypt/alice@autocrypt.example.sec.asc")
                 .unwrap();
 
         let sig = DetachedSignature::sign_text_data(
-            rng,
+            &mut rng,
             &alice.primary_key,
             &Password::empty(),
             HashAlgorithm::Sha256,
@@ -312,7 +311,7 @@ mod tests {
 
     #[test]
     fn detached_signature_binary_with_subpackets() {
-        let rng = ChaCha20Rng::seed_from_u64(1);
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
 
         let (alice, _) =
             SignedSecretKey::from_armor_file("./tests/autocrypt/alice@autocrypt.example.sec.asc")
@@ -325,7 +324,7 @@ mod tests {
         ];
 
         let sig = DetachedSignature::sign_binary_data_with_subpackets(
-            rng,
+            &mut rng,
             &alice.primary_key,
             &Password::empty(),
             HashAlgorithm::Sha256,
@@ -353,7 +352,7 @@ mod tests {
 
     #[test]
     fn detached_signature_text_with_subpackets() {
-        let rng = ChaCha20Rng::seed_from_u64(1);
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
 
         let (alice, _) =
             SignedSecretKey::from_armor_file("./tests/autocrypt/alice@autocrypt.example.sec.asc")
@@ -366,7 +365,7 @@ mod tests {
         ];
 
         let sig = DetachedSignature::sign_text_data_with_subpackets(
-            rng,
+            &mut rng,
             &alice.primary_key,
             &Password::empty(),
             HashAlgorithm::Sha256,

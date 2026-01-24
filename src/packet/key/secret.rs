@@ -1,8 +1,8 @@
 use std::io::BufRead;
 
-use generic_array::GenericArray;
+use hybrid_array::Array;
 use log::debug;
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 
 use super::public::PubKeyInner;
 use crate::{
@@ -158,9 +158,9 @@ impl SecretSubkey {
     ///
     /// This signature is used in an embedded signature subpacket to show that the subkey is
     /// willing to be associated with the primary.
-    pub fn sign_primary_key_binding<R: CryptoRng + Rng, K>(
+    pub fn sign_primary_key_binding<R: CryptoRng + ?Sized, K>(
         &self,
-        rng: R,
+        rng: &mut R,
         pub_key: &K,
         key_pw: &Password,
     ) -> Result<Signature>
@@ -250,7 +250,7 @@ impl KeyDetails for SecretKey {
 }
 
 impl Imprint for SecretKey {
-    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+    fn imprint<D: KnownDigest>(&self) -> Result<Array<u8, D::OutputSize>> {
         self.details.imprint::<D>()
     }
 }
@@ -283,7 +283,7 @@ impl KeyDetails for SecretSubkey {
 }
 
 impl Imprint for SecretSubkey {
-    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+    fn imprint<D: KnownDigest>(&self) -> Result<Array<u8, D::OutputSize>> {
         self.details.imprint::<D>()
     }
 }
@@ -373,9 +373,9 @@ impl SecretKey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password<R>(&mut self, rng: R, password: &Password) -> Result<()>
+    pub fn set_password<R>(&mut self, rng: &mut R, password: &Password) -> Result<()>
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: rand::RngCore + rand::CryptoRng + ?Sized,
     {
         let s2k = crate::types::S2kParams::new_default(rng, self.version());
         Self::set_password_with_s2k(self, password, s2k)
@@ -432,9 +432,9 @@ impl SecretSubkey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password<R>(&mut self, rng: R, password: &Password) -> Result<()>
+    pub fn set_password<R>(&mut self, rng: &mut R, password: &Password) -> Result<()>
     where
-        R: rand::Rng + rand::CryptoRng,
+        R: rand::RngCore + rand::CryptoRng + ?Sized,
     {
         let s2k = crate::types::S2kParams::new_default(rng, self.version());
         Self::set_password_with_s2k(self, password, s2k)
@@ -468,9 +468,9 @@ impl SecretSubkey {
     }
 
     /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
-    pub fn sign<R: CryptoRng + Rng, S, K>(
+    pub fn sign<R: CryptoRng + ?Sized, S, K>(
         &self,
-        mut rng: R,
+        rng: &mut R,
         primary_sec_key: &S,
         primary_pub_key: &K,
         key_pw: &Password,
@@ -482,7 +482,7 @@ impl SecretSubkey {
         K: KeyDetails + Serialize,
     {
         self.details.sign(
-            &mut rng,
+            rng,
             primary_sec_key,
             primary_pub_key,
             key_pw,
@@ -636,8 +636,8 @@ fn create_signature(
 /// Signs a direct key signature or a revocation.
 #[allow(dead_code)]
 // TODO: Expose in public API
-fn sign<R: CryptoRng + Rng, S, K>(
-    mut rng: R,
+fn sign<R: CryptoRng + ?Sized, S, K>(
+    rng: &mut R,
     key: &S,
     key_pw: &Password,
     sig_typ: SignatureType,
@@ -647,7 +647,7 @@ where
     S: SigningKey,
     K: KeyDetails + Serialize,
 {
-    let mut config = SignatureConfig::from_key(&mut rng, key, sig_typ)?;
+    let mut config = SignatureConfig::from_key(rng, key, sig_typ)?;
     config.hashed_subpackets = vec![
         Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
         Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
@@ -663,8 +663,8 @@ where
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use chacha20::ChaCha8Rng;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use crate::{
         crypto::hash::HashAlgorithm,

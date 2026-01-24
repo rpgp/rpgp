@@ -392,8 +392,8 @@ impl Read for SignatureOnePassReader<'_> {
 #[cfg(test)]
 mod tests {
 
+    use chacha20::ChaCha20Rng;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
 
     use crate::{
         armor,
@@ -418,7 +418,7 @@ mod tests {
 
         let _ = pretty_env_logger::try_init();
 
-        let rng = ChaCha20Rng::seed_from_u64(1);
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
 
         let (bob, _) =
             SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
@@ -426,7 +426,7 @@ mod tests {
 
         // Make a binary signature over "PLAIN"
         let sig = DetachedSignature::sign_binary_data(
-            rng,
+            &mut rng,
             &bob.primary_key,
             &Password::empty(),
             HashAlgorithm::Sha256,

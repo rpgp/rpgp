@@ -5,7 +5,7 @@ use ml_kem::{
     kem::{Decapsulate, DecapsulationKey, Encapsulate, EncapsulationKey},
     KemCore, MlKem768, MlKem768Params,
 };
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use sha3::{Digest, Sha3_256};
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::{ZeroizeOnDrop, Zeroizing};
@@ -31,7 +31,7 @@ pub struct SecretKey {
     ml_kem: Box<DecapsulationKey<MlKem768Params>>,
     /// Seed `d` and `z`
     #[debug("..")]
-    ml_kem_seed: (Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>),
+    ml_kem_seed: Zeroizing<ml_kem::Seed>,
 }
 impl ZeroizeOnDrop for SecretKey {}
 
@@ -55,11 +55,10 @@ impl Eq for SecretKey {}
 
 impl Serialize for SecretKey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        let (a, b, c) = self.as_bytes();
+        let (a, b) = self.as_bytes();
 
         writer.write_all(a)?;
         writer.write_all(b)?;
-        writer.write_all(c)?;
         Ok(())
     }
 
@@ -70,22 +69,20 @@ impl Serialize for SecretKey {
 
 impl SecretKey {
     /// Generate a `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
+    pub fn generate<R: RngCore + CryptoRng + ?Sized>(rng: &mut R) -> Self {
         let mut secret_key_bytes = Zeroizing::new([0u8; 32]);
         rng.fill_bytes(&mut *secret_key_bytes);
         let x25519 = StaticSecret::from(*secret_key_bytes);
 
-        let mut d = Zeroizing::new([0u8; 32]);
-        let mut z = Zeroizing::new([0u8; 32]);
+        let mut seed = ml_kem::Seed::default();
 
-        rng.fill_bytes(&mut *d);
-        rng.fill_bytes(&mut *z);
+        rng.fill_bytes(&mut seed);
 
-        let (de, _) = MlKem768::generate_deterministic(&((*d).into()), &((*z).into()));
+        let (de, _) = MlKem768::from_seed(seed);
         Self {
             x25519,
             ml_kem: Box::new(de),
-            ml_kem_seed: (d, z),
+            ml_kem_seed: Zeroizing::new(seed),
         }
     }
 
@@ -94,27 +91,22 @@ impl SecretKey {
         x25519: [u8; X25519_KEY_LEN],
         ml_kem: [u8; ML_KEM768_KEY_LEN],
     ) -> Result<Self> {
-        let d: Zeroizing<[u8; 32]> = Zeroizing::new(ml_kem[..32].try_into().expect("fixed size"));
-        let z: Zeroizing<[u8; 32]> = Zeroizing::new(ml_kem[32..].try_into().expect("fixed size"));
+        let seed = ml_kem::Seed::from(ml_kem);
 
-        let (ml_kem, _) = MlKem768::generate_deterministic(&((*d).into()), &((*z).into()));
+        let (ml_kem, _) = MlKem768::from_seed(seed);
 
         let x = x25519_dalek::StaticSecret::from(x25519);
 
         Ok(Self {
             x25519: x,
             ml_kem: Box::new(ml_kem),
-            ml_kem_seed: (d, z),
+            ml_kem_seed: Zeroizing::new(seed),
         })
     }
 
     /// Returns the individual secret keys in their raw byte level representation.
-    pub fn as_bytes(&self) -> (&[u8; X25519_KEY_LEN], &[u8; 32], &[u8; 32]) {
-        (
-            self.x25519.as_bytes(),
-            &self.ml_kem_seed.0,
-            &self.ml_kem_seed.1,
-        )
+    pub fn as_bytes(&self) -> (&[u8; X25519_KEY_LEN], &[u8; ML_KEM768_KEY_LEN]) {
+        (self.x25519.as_bytes(), self.ml_kem_seed.as_ref())
     }
 }
 
@@ -224,8 +216,8 @@ fn multi_key_combine(
 /// - ecdh_ciphertext
 /// - ml_kem_ciphertext
 /// - encrypted data
-pub fn encrypt<R: CryptoRng + Rng>(
-    mut rng: R,
+pub fn encrypt<R: CryptoRng + RngCore + ?Sized>(
+    rng: &mut R,
     ecdh_public_key: &x25519_dalek::PublicKey,
     ml_kem_public_key: &EncapsulationKey<MlKem768Params>,
     plain: &[u8],
@@ -239,9 +231,9 @@ pub fn encrypt<R: CryptoRng + Rng>(
     );
 
     // Compute (ecdhCipherText, ecdhKeyShare) := ECDH-KEM.Encaps(ecdhPublicKey)
-    let (ecdh_ciphertext, ecdh_key_share) = x25519_kem_encaps(&mut rng, ecdh_public_key);
+    let (ecdh_ciphertext, ecdh_key_share) = x25519_kem_encaps(rng, ecdh_public_key);
     // Compute (mlkemCipherText, mlkemKeyShare) := ML-KEM.Encaps(mlkemPublicKey)
-    let (ml_kem_ciphertext, ml_kem_key_share) = ml_kem_encaps(&mut rng, ml_kem_public_key);
+    let (ml_kem_ciphertext, ml_kem_key_share) = ml_kem_encaps(rng, ml_kem_public_key);
     // Compute KEK := multiKeyCombine(mlkemKeyShare, mlkemCipherText, mlkemPublicKey, ecdhKeyShare,
     //                        ecdhCipherText, ecdhPublicKey, algId, 256)
 
@@ -260,8 +252,8 @@ pub fn encrypt<R: CryptoRng + Rng>(
 }
 
 /// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-x25519-kem>
-fn x25519_kem_encaps<R: CryptoRng + Rng>(
-    mut rng: R,
+fn x25519_kem_encaps<R: CryptoRng + ?Sized>(
+    rng: &mut R,
     public_key: &x25519_dalek::PublicKey,
 ) -> ([u8; 32], [u8; 32]) {
     // Generate an ephemeral key pair {v, V} via V = X25519(v,U(P)) where v is a randomly generated octet string with a length of 32 octets
@@ -276,25 +268,25 @@ fn x25519_kem_encaps<R: CryptoRng + Rng>(
     (ephemeral_public.to_bytes(), shared_secret.to_bytes())
 }
 
-fn ml_kem_encaps<R: CryptoRng + Rng>(
-    mut rng: R,
+fn ml_kem_encaps<R: CryptoRng + RngCore + ?Sized>(
+    rng: &mut R,
     public_key: &EncapsulationKey<MlKem768Params>,
 ) -> (Box<[u8; 1088]>, [u8; 32]) {
-    let (ciphertext, share) = public_key.encapsulate(&mut rng).expect("infallible");
+    let (ciphertext, share) = public_key.encapsulate_with_rng(rng).expect("Infallible");
     (Box::new(ciphertext.into()), share.into())
 }
 
 #[cfg(test)]
 mod tests {
+    use chacha20::{ChaCha20Rng, ChaCha8Rng};
     use proptest::prelude::*;
     use rand::{RngCore, SeedableRng};
-    use rand_chacha::{ChaCha8Rng, ChaChaRng};
 
     use super::*;
 
     #[test]
     fn test_encrypt_decrypt() {
-        let mut rng = ChaChaRng::seed_from_u64(0);
+        let mut rng = ChaCha20Rng::seed_from_u64(0);
         let skey = SecretKey::generate(&mut rng);
         let pub_params: MlKem768X25519PublicParams = (&skey).into();
 

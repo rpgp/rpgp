@@ -3,7 +3,7 @@ use std::io::Read;
 use byteorder::{BigEndian, ByteOrder};
 use digest::DynDigest;
 use log::debug;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 
 use crate::{
     crypto::{
@@ -61,14 +61,14 @@ impl From<&SignatureVersionSpecific> for SignatureVersion {
 }
 
 impl SignatureConfig {
-    pub fn from_key<R: CryptoRng + Rng, S: SigningKey>(
-        mut rng: R,
+    pub fn from_key<R: CryptoRng + ?Sized, S: SigningKey>(
+        rng: &mut R,
         key: &S,
         typ: SignatureType,
     ) -> Result<Self> {
         match key.version() {
             KeyVersion::V4 => Ok(SignatureConfig::v4(typ, key.algorithm(), key.hash_alg())),
-            KeyVersion::V6 => SignatureConfig::v6(&mut rng, typ, key.algorithm(), key.hash_alg()),
+            KeyVersion::V6 => SignatureConfig::v6(rng, typ, key.algorithm(), key.hash_alg()),
             v => unsupported_err!("unsupported key version: {:?}", v),
         }
     }
@@ -136,7 +136,10 @@ impl SignatureConfig {
 
     /// Generate v6 signature salt with the appropriate length for `hash_alg`
     /// https://www.rfc-editor.org/rfc/rfc9580.html#name-hash-algorithms
-    fn v6_salt_for<R: CryptoRng + Rng>(mut rng: R, hash_alg: HashAlgorithm) -> Result<Vec<u8>> {
+    fn v6_salt_for<R: CryptoRng + RngCore + ?Sized>(
+        rng: &mut R,
+        hash_alg: HashAlgorithm,
+    ) -> Result<Vec<u8>> {
         let Some(salt_len) = hash_alg.salt_len() else {
             bail!("Unknown v6 signature salt length for hash algorithm {hash_alg:?}");
         };
@@ -151,8 +154,8 @@ impl SignatureConfig {
     /// Generates a new salt via `rng`.
     ///
     /// OpenPGP v6 signatures are specified in RFC 9580, they are produced by OpenPGP v6 keys.
-    pub fn v6<R: CryptoRng + Rng>(
-        rng: R,
+    pub fn v6<R: CryptoRng + RngCore + ?Sized>(
+        rng: &mut R,
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
@@ -768,8 +771,8 @@ impl std::io::Write for SignatureHasher {
 
 #[cfg(test)]
 mod tests {
+    use chacha20::ChaCha8Rng;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use crate::{
         composed::{ArmorOptions, KeyType, SecretKeyParamsBuilder, SignedPublicKey},

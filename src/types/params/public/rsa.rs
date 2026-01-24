@@ -65,8 +65,8 @@ mod tests {
 
     prop_compose! {
         pub fn rsa_pub_gen()(seed: u64) -> rsa::RsaPublicKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            rsa::RsaPrivateKey::new(&mut rng, 512).unwrap().to_public_key()
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
+            rsa::RsaPrivateKey::new(&mut rng, 1024).unwrap().to_public_key()
         }
     }
 

@@ -1,7 +1,6 @@
-use cx448::x448;
 use hkdf::HkdfExtract;
 use log::debug;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use sha2::Sha512;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
@@ -18,7 +17,7 @@ pub const KEY_LEN: usize = 56;
 #[derive(Clone, derive_more::Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKey {
     #[debug("..")]
-    secret: x448::Secret,
+    secret: x448::StaticSecret,
 }
 
 impl PartialEq for SecretKey {
@@ -31,22 +30,22 @@ impl Eq for SecretKey {}
 
 impl From<&SecretKey> for X448PublicParams {
     fn from(value: &SecretKey) -> Self {
-        let secret = value.secret;
-        let public = x448::PublicKey::from(&secret);
+        let secret = &value.secret;
+        let public = x448::PublicKey::from(secret);
         X448PublicParams { key: public }
     }
 }
 
 impl SecretKey {
     /// Generate an X448 `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
-        let secret = x448::Secret::new(&mut rng);
+    pub fn generate<R: CryptoRng + ?Sized>(rng: &mut R) -> Self {
+        let secret = x448::StaticSecret::random_from_rng(rng);
 
         SecretKey { secret }
     }
 
     pub fn try_from_bytes(secret: [u8; KEY_LEN]) -> Result<Self> {
-        let secret = x448::Secret::from(secret);
+        let secret = x448::StaticSecret::from(secret);
 
         Ok(Self { secret })
     }
@@ -93,12 +92,9 @@ impl Decryptor for SecretKey {
             };
 
             // private key of the recipient.
-            let our_secret = self.secret;
+            let our_secret = &self.secret;
 
-            // derive shared secret (None for low order points)
-            let Some(shared_secret) = our_secret.as_diffie_hellman(&their_public) else {
-                bail!("x448 Secret::as_diffie_hellman returned None");
-            };
+            let shared_secret = our_secret.diffie_hellman(&their_public);
 
             *shared_secret.as_bytes()
         };
@@ -165,8 +161,8 @@ pub fn hkdf(
 /// X448 encryption.
 ///
 /// Returns (ephemeral, encrypted session key)
-pub fn encrypt<R: CryptoRng + Rng>(
-    mut rng: R,
+pub fn encrypt<R: CryptoRng + RngCore + ?Sized>(
+    rng: &mut R,
     recipient_public: &X448PublicParams,
     plain: &[u8],
 ) -> Result<([u8; 56], Vec<u8>)> {
@@ -186,12 +182,9 @@ pub fn encrypt<R: CryptoRng + Rng>(
 
         let mut ephemeral_secret_key_bytes = Zeroizing::new([0u8; 56]);
         rng.fill_bytes(&mut *ephemeral_secret_key_bytes);
-        let our_secret = x448::Secret::from(*ephemeral_secret_key_bytes);
+        let our_secret = x448::StaticSecret::from(*ephemeral_secret_key_bytes);
 
-        // derive shared secret (None for low order points)
-        let Some(shared_secret) = our_secret.as_diffie_hellman(their_public) else {
-            bail!("x448 Secret::as_diffie_hellman returned None");
-        };
+        let shared_secret = our_secret.diffie_hellman(their_public);
 
         // Encode public point
         let ephemeral_public = x448::PublicKey::from(&our_secret);
@@ -218,15 +211,15 @@ mod tests {
 
     use std::ops::Deref;
 
+    use chacha20::{ChaCha20Rng, ChaCha8Rng};
     use proptest::prelude::*;
     use rand::{RngCore, SeedableRng};
-    use rand_chacha::{ChaCha8Rng, ChaChaRng};
 
     use super::*;
 
     #[test]
     fn test_encrypt_decrypt() {
-        let mut rng = ChaChaRng::from_seed([0u8; 32]);
+        let mut rng = ChaCha20Rng::from_seed([0u8; 32]);
 
         let skey = SecretKey::generate(&mut rng);
         let pub_params: X448PublicParams = (&skey).into();

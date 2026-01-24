@@ -1,13 +1,13 @@
 use std::cmp::PartialEq;
 
-use cx448::x448::{PublicKey, Secret};
 use log::debug;
 use ml_kem::{
     kem::{Decapsulate, DecapsulationKey, Encapsulate, EncapsulationKey},
     KemCore, MlKem1024, MlKem1024Params,
 };
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use sha3::{Digest, Sha3_256};
+use x448::{PublicKey, StaticSecret};
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::{
@@ -26,12 +26,12 @@ pub const ML_KEM1024_KEY_LEN: usize = 64;
 #[derive(Clone, derive_more::Debug)]
 pub struct SecretKey {
     #[debug("..")]
-    x448: Secret,
+    x448: StaticSecret,
     #[debug("..")]
     ml_kem: Box<DecapsulationKey<MlKem1024Params>>,
     /// Seed `d` and `z`
     #[debug("..")]
-    ml_kem_seed: (Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>),
+    ml_kem_seed: Zeroizing<ml_kem::Seed>,
 }
 
 impl ZeroizeOnDrop for SecretKey {}
@@ -55,10 +55,9 @@ impl Eq for SecretKey {}
 
 impl Serialize for SecretKey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        let (a, b, c) = self.as_bytes();
+        let (a, b) = self.as_bytes();
         writer.write_all(a)?;
         writer.write_all(b)?;
-        writer.write_all(c)?;
         Ok(())
     }
 
@@ -69,21 +68,19 @@ impl Serialize for SecretKey {
 
 impl SecretKey {
     /// Generate a `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
-        let x448 = Secret::new(&mut rng);
+    pub fn generate<R: RngCore + CryptoRng + ?Sized>(rng: &mut R) -> Self {
+        let x448 = StaticSecret::random_from_rng(rng);
 
-        let mut d = Zeroizing::new([0u8; 32]);
-        let mut z = Zeroizing::new([0u8; 32]);
+        let mut seed = ml_kem::Seed::default();
 
-        rng.fill_bytes(&mut *d);
-        rng.fill_bytes(&mut *z);
+        rng.fill_bytes(&mut seed);
 
-        let (de, _) = MlKem1024::generate_deterministic(&((*d).into()), &((*z).into()));
+        let (de, _) = MlKem1024::from_seed(seed);
 
         Self {
             x448,
             ml_kem: Box::new(de),
-            ml_kem_seed: (d, z),
+            ml_kem_seed: Zeroizing::new(seed),
         }
     }
 
@@ -92,27 +89,22 @@ impl SecretKey {
         x448: [u8; X448_KEY_LEN],
         ml_kem: [u8; ML_KEM1024_KEY_LEN],
     ) -> Result<Self> {
-        let d: Zeroizing<[u8; 32]> = Zeroizing::new(ml_kem[..32].try_into().expect("fixed size"));
-        let z: Zeroizing<[u8; 32]> = Zeroizing::new(ml_kem[32..].try_into().expect("fixed size"));
+        let seed = ml_kem::Seed::from(ml_kem);
 
-        let (ml_kem, _) = MlKem1024::generate_deterministic(&((*d).into()), &((*z).into()));
+        let (ml_kem, _) = MlKem1024::from_seed(seed);
 
-        let x = Secret::from(x448);
+        let x = StaticSecret::from(x448);
 
         Ok(Self {
             x448: x,
             ml_kem: Box::new(ml_kem),
-            ml_kem_seed: (d, z),
+            ml_kem_seed: Zeroizing::new(seed),
         })
     }
 
     /// Returns the individual secret keys in their raw byte level representation.
-    pub fn as_bytes(&self) -> (&[u8; X448_KEY_LEN], &[u8; 32], &[u8; 32]) {
-        (
-            self.x448.as_bytes(),
-            &self.ml_kem_seed.0,
-            &self.ml_kem_seed.1,
-        )
+    pub fn as_bytes(&self) -> (&[u8; X448_KEY_LEN], &[u8; ML_KEM1024_KEY_LEN]) {
+        (self.x448.as_bytes(), self.ml_kem_seed.as_ref())
     }
 }
 
@@ -164,13 +156,11 @@ impl Decryptor for SecretKey {
 /// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-x448-kem>
 fn x448_kem_decaps(
     their_public: &PublicKey,
-    ecdh_secret_key: &Secret,
+    ecdh_secret_key: &StaticSecret,
     _ecdh_public_key: &PublicKey,
 ) -> [u8; 56] {
     // derive shared secret
-    let shared_secret = ecdh_secret_key
-        .as_diffie_hellman(their_public)
-        .expect("point checked before");
+    let shared_secret = ecdh_secret_key.diffie_hellman(their_public);
 
     *shared_secret.as_bytes()
 }
@@ -220,8 +210,8 @@ fn multi_key_combine(
 /// - ecdh_ciphertext
 /// - ml_kem_ciphertext
 /// - encrypted data
-pub fn encrypt<R: CryptoRng + Rng>(
-    mut rng: R,
+pub fn encrypt<R: CryptoRng + RngCore + ?Sized>(
+    rng: &mut R,
     ecdh_public_key: &PublicKey,
     ml_kem_public_key: &EncapsulationKey<MlKem1024Params>,
     plain: &[u8],
@@ -235,9 +225,9 @@ pub fn encrypt<R: CryptoRng + Rng>(
     );
 
     // Compute (ecdhCipherText, ecdhKeyShare) := ECDH-KEM.Encaps(ecdhPublicKey)
-    let (ecdh_ciphertext, ecdh_key_share) = x448_kem_encaps(&mut rng, ecdh_public_key);
+    let (ecdh_ciphertext, ecdh_key_share) = x448_kem_encaps(rng, ecdh_public_key);
     // Compute (mlkemCipherText, mlkemKeyShare) := ML-KEM.Encaps(mlkemPublicKey)
-    let (ml_kem_ciphertext, ml_kem_key_share) = ml_kem_encaps(&mut rng, ml_kem_public_key);
+    let (ml_kem_ciphertext, ml_kem_key_share) = ml_kem_encaps(rng, ml_kem_public_key);
     // Compute KEK := multiKeyCombine(mlkemKeyShare, mlkemCipherText, mlkemPublicKey, ecdhKeyShare,
     //                        ecdhCipherText, ecdhPublicKey, algId, 256)
 
@@ -256,39 +246,39 @@ pub fn encrypt<R: CryptoRng + Rng>(
 }
 
 /// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-x448-kem>
-fn x448_kem_encaps<R: CryptoRng + Rng>(
-    mut rng: R,
+fn x448_kem_encaps<R: CryptoRng + ?Sized>(
+    rng: &mut R,
     public_key: &PublicKey,
 ) -> (PublicKey, [u8; 56]) {
     // Generate an ephemeral key pair {v, V} via V = X448(v,U(P)) where v is a randomly generated octet string with a length of 56 octets
-    let our_secret = Secret::new(&mut rng);
+    let our_secret = StaticSecret::random_from_rng(rng);
 
     // Compute the shared coordinate X = X448(v, R) where R is the recipient's public key ecdhPublicKey
-    let shared_secret = our_secret.as_diffie_hellman(public_key).expect("checked");
+    let shared_secret = our_secret.diffie_hellman(public_key);
 
     let ephemeral_public = PublicKey::from(&our_secret);
     (ephemeral_public, *shared_secret.as_bytes())
 }
 
-fn ml_kem_encaps<R: CryptoRng + Rng>(
-    mut rng: R,
+fn ml_kem_encaps<R: CryptoRng + RngCore + ?Sized>(
+    rng: &mut R,
     public_key: &EncapsulationKey<MlKem1024Params>,
 ) -> (Box<[u8; 1568]>, [u8; 32]) {
-    let (ciphertext, share) = public_key.encapsulate(&mut rng).expect("infallible");
+    let (ciphertext, share) = public_key.encapsulate_with_rng(rng).expect("Infallible");
     (Box::new(ciphertext.into()), share.into())
 }
 
 #[cfg(test)]
 mod tests {
+    use chacha20::{ChaCha20Rng, ChaCha8Rng};
     use proptest::prelude::*;
     use rand::{RngCore, SeedableRng};
-    use rand_chacha::{ChaCha8Rng, ChaChaRng};
 
     use super::*;
 
     #[test]
     fn test_encrypt_decrypt() {
-        let mut rng = ChaChaRng::seed_from_u64(0);
+        let mut rng = ChaCha20Rng::seed_from_u64(0);
         let skey = SecretKey::generate(&mut rng);
         let pub_params: MlKem1024X448PublicParams = (&skey).into();
 
