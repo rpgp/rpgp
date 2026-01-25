@@ -99,9 +99,10 @@ impl<'a> MessageParser<'a> {
                                 &mut packet,
                             )?;
                             self.messages.push(SignaturePacket::Signature { signature });
+                            // Keep original is_nested - the outer Signed message inherits it.
                             self.current = MessageParserState::Start {
                                 packets: crate::packet::PacketParser::new(packet.into_inner()),
-                                is_nested: is_nested_now,
+                                is_nested,
                                 is_first,
                             };
                         }
@@ -115,9 +116,10 @@ impl<'a> MessageParser<'a> {
                                 &mut packet,
                             )?;
                             self.messages.push(SignaturePacket::Ops { signature });
+                            // Keep original is_nested - the outer Signed message inherits it.
                             self.current = MessageParserState::Start {
                                 packets: crate::packet::PacketParser::new(packet.into_inner()),
-                                is_nested: is_nested_now,
+                                is_nested,
                                 is_first,
                             };
                         }
@@ -144,9 +146,10 @@ impl<'a> MessageParser<'a> {
                         Tag::Padding => {
                             // drain reader
                             packet.drain()?;
+                            // Keep original is_nested since Padding is a skipped packet
                             self.current = MessageParserState::Start {
                                 packets: crate::packet::PacketParser::new(packet.into_inner()),
-                                is_nested: is_nested_now,
+                                is_nested,
                                 is_first,
                             };
                         }

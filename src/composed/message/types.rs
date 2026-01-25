@@ -977,7 +977,6 @@ impl<'a> Message<'a> {
 
         // drain the inner reader to ensure no trailing data is contained
         let inner = self.get_mut().get_mut();
-
         inner.check_trailing_data()
     }
 
