@@ -7,7 +7,7 @@ use proptest::prelude::*;
 
 use super::Mpi;
 use crate::{
-    crypto::{public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
+    crypto::{aead::AeadAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
     errors::{unsupported_err, InvalidInputSnafu, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -16,6 +16,13 @@ use crate::{
 /// Values comprising a Public Key Encrypted Session Key
 #[derive(Clone, derive_more::Debug, Eq, PartialEq)]
 pub enum PkeskBytes {
+    Aead {
+        aead: AeadAlgorithm,
+        salt: [u8; 32],
+        /// Set for v3 PKESK only (the sym_alg is not encrypted with the session key for Aead)
+        sym_alg: Option<SymmetricKeyAlgorithm>,
+        encrypted: Bytes,
+    },
     Rsa {
         mpi: Mpi,
     },
@@ -84,6 +91,27 @@ impl PkeskBytes {
         mut i: B,
     ) -> Result<Self> {
         match alg {
+            PublicKeyAlgorithm::AEAD => {
+                let aead = i.read_u8()?.into();
+                let salt = i.read_arr()?;
+
+                // The one-octet algorithm identifier, if it was passed (in the case of a v3 PKESK packet).
+                let sym_alg = if version == 3 {
+                    let alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
+                    Some(alg)
+                } else {
+                    None
+                };
+
+                let encrypted = i.rest()?.freeze();
+
+                Ok(PkeskBytes::Aead {
+                    aead,
+                    salt,
+                    sym_alg,
+                    encrypted,
+                })
+            }
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSASign
             | PublicKeyAlgorithm::RSAEncrypt => {
@@ -258,6 +286,19 @@ impl PkeskBytes {
 impl Serialize for PkeskBytes {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
+            PkeskBytes::Aead {
+                aead,
+                salt,
+                sym_alg,
+                encrypted,
+            } => {
+                writer.write_u8((*aead).into())?;
+                writer.write_all(salt)?;
+                if let Some(sym_alg) = sym_alg {
+                    writer.write_u8((*sym_alg).into())?;
+                }
+                writer.write_all(encrypted)?;
+            }
             PkeskBytes::Rsa { mpi } => {
                 mpi.to_writer(writer)?;
             }
@@ -390,6 +431,9 @@ impl Serialize for PkeskBytes {
     fn write_len(&self) -> usize {
         let mut sum = 0;
         match self {
+            PkeskBytes::Aead { encrypted, .. } => {
+                sum += 1 + 32 + encrypted.len();
+            }
             PkeskBytes::Rsa { mpi } => {
                 sum += mpi.write_len();
             }
