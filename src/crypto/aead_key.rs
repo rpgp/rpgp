@@ -38,8 +38,8 @@ pub struct EncryptionFields<'a> {
 pub(crate) struct InfoParameter {
     pub tag: Tag,
     pub version: u8,
-    pub aead: AeadAlgorithm,
     pub sym_alg: SymmetricKeyAlgorithm,
+    pub aead: AeadAlgorithm,
 }
 
 impl From<InfoParameter> for [u8; 4] {
@@ -47,8 +47,8 @@ impl From<InfoParameter> for [u8; 4] {
         [
             value.tag.encode(),
             value.version,
-            value.aead.into(),
             value.sym_alg.into(),
+            value.aead.into(),
         ]
     }
 }
@@ -64,8 +64,8 @@ impl SecretKey {
         let info = InfoParameter {
             tag: Tag::Signature,
             version: version.into(),
-            aead,
             sym_alg: self.sym_alg,
+            aead,
         };
 
         let (key, iv) = Self::derive(&self.key, salt, info);
@@ -157,8 +157,8 @@ impl Decryptor for SecretKey {
         let info = InfoParameter {
             tag: Tag::PublicKeyEncryptedSessionKey,
             version: data.version.into(),
-            aead: data.aead,
             sym_alg: self.sym_alg,
+            aead: data.aead,
         };
 
         let (key, iv) = Self::derive(&self.key, data.salt, info);
@@ -212,10 +212,6 @@ mod tests {
     /// - persistent key: 16 bytes of 0x00
     /// - salt: 32 bytes of 0xff
     /// - info: Signature, Version 6, OCB, AES128
-    ///
-    /// output:
-    /// - key: [e9, de, 26, 72, 2c, fb, 71, 2b, bf, 01, 15, a6, 06, 08, 08, b0]
-    /// - iv: [dc, 1f, 35, cc, 3c, 28, 74, 0f, f4, 37, 09, 9e, ad, c0, 17]
     #[test]
     fn psk_derive() {
         let (key, iv) = SecretKey::derive(
@@ -224,23 +220,23 @@ mod tests {
             InfoParameter {
                 tag: Tag::Signature,
                 version: 6,
-                aead: AeadAlgorithm::Ocb,
                 sym_alg: SymmetricKeyAlgorithm::AES128,
+                aead: AeadAlgorithm::Ocb,
             },
         );
 
         assert_eq!(
             &key,
             &[
-                0xe9, 0xde, 0x26, 0x72, 0x2c, 0xfb, 0x71, 0x2b, 0xbf, 0x01, 0x15, 0xa6, 0x06, 0x08,
-                0x08, 0xb0
+                0xa5, 0x5b, 0x20, 0x96, 0x4f, 0x59, 0x64, 0x55, 0xfc, 0x50, 0xf0, 0xc6, 0xcd, 0x6c,
+                0xc9, 0xf3
             ]
         );
         assert_eq!(
             &iv,
             &[
-                0xdc, 0x1f, 0x35, 0xcc, 0x3c, 0x28, 0x74, 0x0f, 0xf4, 0x37, 0x09, 0x9e, 0xad, 0xc0,
-                0x17
+                0x59, 0xe7, 0xcc, 0xe6, 0x85, 0xad, 0x4a, 0x10, 0xad, 0x18, 0xc9, 0xea, 0x1f, 0x43,
+                0xf5
             ]
         );
     }
