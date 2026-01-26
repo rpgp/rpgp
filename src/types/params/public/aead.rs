@@ -17,7 +17,7 @@ pub struct AeadPublicParams {
 impl AeadPublicParams {
     pub fn try_from_reader<B: BufRead>(mut i: B) -> crate::errors::Result<Self> {
         let sym_alg = i.read_u8()?.into();
-        let seed = i.read_array()?;
+        let seed = i.read_arr()?;
 
         let params = AeadPublicParams { sym_alg, seed };
         Ok(params)
