@@ -34,6 +34,7 @@ pub struct EncryptionFields<'a> {
     pub salt: &'a [u8; 32],
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) struct InfoParameter {
     pub tag: Tag,
     pub version: u8,
