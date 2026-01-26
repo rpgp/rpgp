@@ -134,6 +134,8 @@ pub enum Error {
     },
     #[snafu(transparent)]
     SigningError { source: cx448::SigningError },
+    #[snafu(display("Error while handling unauthenticated data"))]
+    InUnauthenticatedData,
 }
 
 impl From<crate::crypto::hash::Error> for Error {
