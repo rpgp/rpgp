@@ -153,7 +153,7 @@ impl PublicKeyEncryptedSessionKey {
 
         // If needed, appended a checksum of the session key
         match pp {
-            PublicParams::X25519(_) | PublicParams::X448(_) => {}
+            PublicParams::X25519(_) | PublicParams::X448(_) | PublicParams::AEAD(_) => {}
             #[cfg(feature = "draft-pqc")]
             PublicParams::MlKem768X25519(_) | PublicParams::MlKem1024X448(_) => {}
             _ => data.extend_from_slice(&checksum::calculate_simple(sk.as_ref()).to_be_bytes()),
