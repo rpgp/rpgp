@@ -5,7 +5,7 @@
 use bytes::{Bytes, BytesMut};
 use hkdf::Hkdf;
 use rand::{thread_rng, Rng};
-use sha2::Sha256;
+use sha2::Sha512;
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::{
@@ -91,7 +91,7 @@ impl SecretKey {
         salt: &[u8; 32],
         info: InfoParameter,
     ) -> (Vec<u8>, Vec<u8>) {
-        let hk = Hkdf::<Sha256>::new(Some(salt), persistent_key);
+        let hk = Hkdf::<Sha512>::new(Some(salt), persistent_key);
 
         let key_size = info.sym_alg.key_size();
         let nonce_size = info.aead.nonce_size();
