@@ -100,7 +100,7 @@ impl ImageHeader {
                 let header = match format {
                     0x01 => {
                         // Only known format is 1 = JPEG
-                        let data = data.read_array::<12>()?;
+                        let data = data.read_arr::<12>()?;
                         ImageHeaderV1::Jpeg { data }
                     }
                     _ => ImageHeaderV1::Unknown {

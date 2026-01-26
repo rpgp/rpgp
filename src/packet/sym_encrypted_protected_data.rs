@@ -57,7 +57,7 @@ impl Config {
                     .read_u8()?
                     .try_into()
                     .map_err(|_| InvalidInputSnafu.build())?;
-                let salt = data.read_array::<32>()?;
+                let salt = data.read_arr::<32>()?;
 
                 Ok(Self::V2 {
                     sym_alg,

@@ -24,9 +24,9 @@ impl Eq for MlKem1024X448PublicParams {}
 
 impl MlKem1024X448PublicParams {
     pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
-        let x448_public_raw = i.read_array::<{ X448_PUB_KEY_LENGTH }>()?;
+        let x448_public_raw = i.read_arr::<{ X448_PUB_KEY_LENGTH }>()?;
 
-        let ml_kem_raw = i.read_array::<ML_KEM_PUB_KEY_LENGTH>()?;
+        let ml_kem_raw = i.read_arr::<ML_KEM_PUB_KEY_LENGTH>()?;
         let ml_kem_key = EncapsulationKey::from_bytes(&ml_kem_raw.into());
 
         Ok(Self {

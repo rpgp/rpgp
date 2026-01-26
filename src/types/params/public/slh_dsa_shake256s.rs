@@ -14,7 +14,7 @@ impl Eq for SlhDsaShake256sPublicParams {}
 
 impl SlhDsaShake256sPublicParams {
     pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
-        let p = i.read_array::<64>()?;
+        let p = i.read_arr::<64>()?;
         let key = slh_dsa::VerifyingKey::try_from(&p[..])?;
 
         Ok(Self { key })

@@ -16,7 +16,7 @@ impl Ed25519PublicParams {
     /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ed2>
     pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         // 32 bytes of public key
-        let p = i.read_array::<32>()?;
+        let p = i.read_arr::<32>()?;
         let key = ed25519_dalek::VerifyingKey::from_bytes(&p)?;
         let params = Self { key };
 

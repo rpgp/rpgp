@@ -318,7 +318,7 @@ impl EcdhPublicParams {
                         );
 
                         EcdhKdfType::Replaced {
-                            replacement_fingerprint: i.read_array()?,
+                            replacement_fingerprint: i.read_arr()?,
                         }
                     }
 

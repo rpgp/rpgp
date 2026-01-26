@@ -1447,6 +1447,7 @@ dependencies = [
  "rand",
  "rand_chacha",
  "rand_xorshift",
+ "rayon",
  "regex",
  "replace_with",
  "ripemd",

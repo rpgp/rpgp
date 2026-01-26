@@ -16,7 +16,7 @@ pub struct X448PublicParams {
 impl X448PublicParams {
     /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-x4>
     pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
-        let key = i.read_array::<56>()?;
+        let key = i.read_arr::<56>()?;
 
         let params = X448PublicParams {
             key: x448::PublicKey::from_bytes(&key)
