@@ -6,7 +6,7 @@ use bytes::{Bytes, BytesMut};
 use hkdf::Hkdf;
 use rand::{thread_rng, Rng};
 use sha2::Sha256;
-use zeroize::ZeroizeOnDrop;
+use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::{
     crypto::{aead::AeadAlgorithm, sym::SymmetricKeyAlgorithm, Decryptor, HashAlgorithm, Signer},
@@ -152,7 +152,7 @@ impl Signer for SecretKey {
 impl Decryptor for SecretKey {
     type EncryptionFields<'a> = EncryptionFields<'a>;
 
-    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
+    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Zeroizing<Vec<u8>>> {
         let info = InfoParameter {
             tag: Tag::PublicKeyEncryptedSessionKey,
             version: data.version.into(),
@@ -167,7 +167,7 @@ impl Decryptor for SecretKey {
         data.aead
             .decrypt_in_place(&self.sym_alg, &key, &iv, &[], &mut buf)?;
 
-        Ok(buf.into())
+        Ok(buf.to_vec().into())
     }
 }
 
