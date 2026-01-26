@@ -12,17 +12,17 @@ use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 #[cfg(feature = "draft-pqc")]
 use crate::crypto::{
-    ml_dsa65_ed25519, ml_dsa87_ed448, ml_kem768_x25519, ml_kem1024_x448, slh_dsa_shake128f,
+    ml_dsa65_ed25519, ml_dsa87_ed448, ml_kem1024_x448, ml_kem768_x25519, slh_dsa_shake128f,
     slh_dsa_shake128s, slh_dsa_shake256s,
 };
 use crate::{
     composed::{PlainSessionKey, RawSessionKey},
     crypto::{
-        Decryptor, aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed448,
-        ed25519, elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x448,
-        x25519,
+        aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
+        elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, x448,
+        Decryptor,
     },
-    errors::{Result, bail, ensure, ensure_eq, unimplemented_err, unsupported_err},
+    errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{

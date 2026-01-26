@@ -6,10 +6,10 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 use rand::{CryptoRng, Rng};
 
 use crate::{
-    errors::{Result, ensure, ensure_eq},
+    errors::{ensure, ensure_eq, Result},
     packet::{
-        CERTIFICATION_SIGNATURE_TYPES, PacketHeader, PacketTrait, Signature, SignatureConfig,
-        SignatureType, Subpacket, SubpacketData, SubpacketLength,
+        PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
+        SubpacketData, SubpacketLength, CERTIFICATION_SIGNATURE_TYPES,
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,

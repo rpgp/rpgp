@@ -1,6 +1,6 @@
 use std::io::{self, BufRead};
 
-use ml_kem::{EncodedSizeUser, MlKem768Params, kem::EncapsulationKey};
+use ml_kem::{kem::EncapsulationKey, EncodedSizeUser, MlKem768Params};
 
 use crate::{errors::Result, parsing_reader::BufReadParsing, ser::Serialize};
 

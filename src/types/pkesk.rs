@@ -8,7 +8,7 @@ use proptest::prelude::*;
 use super::Mpi;
 use crate::{
     crypto::{public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
-    errors::{InvalidInputSnafu, Result, unsupported_err},
+    errors::{unsupported_err, InvalidInputSnafu, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
 };

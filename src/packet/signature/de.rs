@@ -10,7 +10,7 @@ use crate::{
         aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{Result, bail, ensure, format_err, unsupported_err},
+    errors::{bail, ensure, format_err, unsupported_err, Result},
     packet::{
         Notation, PacketHeader, RevocationCode, Subpacket, SubpacketData, SubpacketLength,
         SubpacketType,

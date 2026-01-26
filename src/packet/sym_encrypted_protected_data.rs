@@ -9,7 +9,7 @@ use crate::{
         aead::{AeadAlgorithm, ChunkSize, StreamEncryptor},
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{InvalidInputSnafu, Result, ensure_eq, format_err},
+    errors::{ensure_eq, format_err, InvalidInputSnafu, Result},
     packet::{GnupgAeadDataConfig, PacketHeader, PacketTrait, SymEncryptedProtectedDataConfig},
     parsing_reader::BufReadParsing,
     ser::Serialize,

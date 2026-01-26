@@ -3,7 +3,7 @@ use std::io::{self, BufRead};
 use cx448::x448;
 
 use crate::{
-    errors::{Result, format_err},
+    errors::{format_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
 };

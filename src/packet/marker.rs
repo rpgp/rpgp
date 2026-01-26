@@ -1,7 +1,7 @@
 use std::io::{self, BufRead};
 
 use crate::{
-    errors::{Result, ensure_eq},
+    errors::{ensure_eq, Result},
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,

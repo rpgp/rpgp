@@ -8,7 +8,7 @@ use zeroize::Zeroizing;
 use crate::{
     composed::RawSessionKey,
     crypto::{checksum, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
-    errors::{Result, bail, ensure_eq},
+    errors::{bail, ensure_eq, Result},
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,

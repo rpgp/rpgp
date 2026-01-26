@@ -5,11 +5,11 @@ use bytes::Bytes;
 
 use crate::{
     crypto::{
-        ecc_curve::{ECCCurve, ecc_curve_from_oid},
+        ecc_curve::{ecc_curve_from_oid, ECCCurve},
         hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{Result, bail, ensure_eq, format_err},
+    errors::{bail, ensure_eq, format_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::Mpi,

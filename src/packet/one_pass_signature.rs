@@ -8,10 +8,10 @@ use proptest::prelude::*;
 
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::{Result, bail},
+    errors::{bail, Result},
     packet::{
-        InnerSignature, PacketHeader, PacketTrait, Signature, SignatureVersionSpecific,
-        signature::SignatureType,
+        signature::SignatureType, InnerSignature, PacketHeader, PacketTrait, Signature,
+        SignatureVersionSpecific,
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,

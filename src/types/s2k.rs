@@ -8,7 +8,7 @@ use zeroize::Zeroizing;
 use crate::{
     composed::RawSessionKey,
     crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
-    errors::{Result, bail, ensure, unimplemented_err},
+    errors::{bail, ensure, unimplemented_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::KeyVersion,
@@ -570,8 +570,8 @@ impl Serialize for StringToKey {
 mod tests {
     use proptest::prelude::*;
     use rand::{
-        SeedableRng,
         distributions::{Alphanumeric, DistString},
+        SeedableRng,
     };
     use rand_chacha::ChaCha8Rng;
 
