@@ -16,6 +16,7 @@ use crate::{
 };
 
 /// ECDH KDF type
+///
 /// See <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-iana-considerations>
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 #[repr(u8)]
@@ -54,6 +55,7 @@ impl EcdhKdfType {
     }
 }
 
+/// Raw ECDH public key material
 #[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum EcdhPublicParams {

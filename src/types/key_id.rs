@@ -1,8 +1,18 @@
-/// Represents a Key ID.
+/// Represents a legacy OpenPGP Key ID.
 ///
-/// This ID is always 8 bytes long, but calculated differently, depending on the key version.
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#key-ids-fingerprints>
 ///
-/// <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.5.4>
+/// A Key ID is always 8 bytes long. However, the way it is calculated differs between key versions.
+///
+/// The short length of the Key ID type causes risk of collisions, both accidental and intentional.
+/// Therefore, Key IDs are considered a legacy data type in OpenPGP, which should be used as
+/// little as possible.
+/// The [`Fingerprint`](crate::types::Fingerprint) type serves the same type of purpose, but with
+/// a much larger size.
+///
+/// However, modern OpenPGP applications may still need to handle Key IDs to identify which key has
+/// been used to issue a [`Signature`](crate::packet::Signature), or to identify the recipient of
+/// a v3 [`PKESK`](crate::packet::PublicKeyEncryptedSessionKey).
 #[derive(Clone, Copy, Hash, Eq, PartialEq, derive_more::Debug, derive_more::Display)]
 #[display("{}", hex::encode(_0))]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]

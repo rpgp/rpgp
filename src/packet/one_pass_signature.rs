@@ -19,10 +19,11 @@ use crate::{
 };
 
 /// One-Pass Signature Packet
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-one-pass-signature-packet-t>
 ///
-/// A One-Pass Signature Packet acts as a companion to a Signature Packet. In modern OpenPGP
-/// messages, Ops and Signatures occur in pairs, bracketing the message payload.
+/// A One-Pass Signature (Ops) Packet acts as a companion to a [`Signature`] Packet.
+/// In modern OpenPGP messages, Ops and Signature packets occur in pairs, bracketing the message payload.
 ///
 /// The Ops packet contains all the information that a recipient needs to calculate the hash
 /// digest for the signature. This enables the recipient to process the message in "one pass",
@@ -40,11 +41,10 @@ pub struct OnePassSignature {
     version_specific: OpsVersionSpecific,
 }
 
-/// Version-specific elements of a One-Pass Signature Packet:
+/// Version-specific data of a [`OnePassSignature`] packet
 ///
 /// - A v3 OPS contains the `key_id` of the signer.
-/// - A v6 OPS contains the v6 `fingerprint` of the signer, and the `salt` used in the corresponding
-///   signature packet.
+/// - A v6 OPS contains the v6 `fingerprint` of the signer, and the `salt` used in the signature.
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum OpsVersionSpecific {

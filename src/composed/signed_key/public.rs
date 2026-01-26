@@ -20,10 +20,14 @@ use crate::{
     },
 };
 
-/// A Public OpenPGP key ("Transferable Public Key"), complete with self-signatures (and optionally
-/// third party signatures). This format can be used to transfer a public key to other OpenPGP users.
+/// An OpenPGP public key ("[Transferable Public Key]", also known as an "OpenPGP certificate").
 ///
-/// An OpenPGP Transferable Public Key is also known as an OpenPGP certificate.
+/// This object combines primary and subkey material, identity components, and a set of
+/// self-signatures (and optionally third party signatures).
+///
+/// This format can be used to transfer a public key to other OpenPGP users.
+///
+/// [Transferable Public Key]: https://www.rfc-editor.org/rfc/rfc9580.html#transferable-public-keys
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedPublicKey {
     pub primary_key: packet::PublicKey,
@@ -31,7 +35,8 @@ pub struct SignedPublicKey {
     pub public_subkeys: Vec<SignedPublicSubKey>,
 }
 
-/// Parse transferable public keys from the given packets.
+/// Parse a series of [`Packet`]s into a series of [`SignedPublicKey`] (Transferable Public Keys).
+///
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-transferable-public-keys>
 pub struct SignedPublicKeyParser<
     I: Sized + Iterator<Item = crate::errors::Result<crate::packet::Packet>>,
@@ -256,7 +261,9 @@ impl SignedPublicKey {
     }
 }
 
-/// Represents a Public PGP SubKey.
+/// Represents an OpenPGP public subkey, combined with signatures over it.
+///
+/// Usually used within a [`SignedPublicKey`].
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedPublicSubKey {
     pub key: packet::PublicSubkey,

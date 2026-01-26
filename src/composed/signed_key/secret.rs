@@ -16,7 +16,14 @@ use crate::{
     types::{Imprint, Tag, VerifyingKey},
 };
 
-/// Represents a secret signed PGP key.
+/// An OpenPGP secret key ("[Transferable Secret Key]"), complete with self-signatures.
+///
+/// This object combines primary and subkey secret key material, identity components, and a set of
+/// self-signatures (and optionally third party signatures).
+///
+/// This format can be used to transfer a secret key to other contexts, for the key holder to use.
+///
+/// [Transferable Secret Key]: https://www.rfc-editor.org/rfc/rfc9580.html#name-transferable-secret-keys
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedSecretKey {
     pub primary_key: packet::SecretKey,
@@ -25,7 +32,8 @@ pub struct SignedSecretKey {
     pub secret_subkeys: Vec<SignedSecretSubKey>,
 }
 
-/// Parse OpenPGP secret keys ("Transferable Secret Keys") from the given packets.
+/// Parse a series of [`Packet`]s into a series of [`SignedSecretKey`].
+///
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-transferable-secret-keys>
 pub struct SignedSecretKeyParser<
     I: Sized + Iterator<Item = crate::errors::Result<crate::packet::Packet>>,
@@ -206,7 +214,9 @@ impl Imprint for SignedSecretKey {
     }
 }
 
-/// Represents a composed secret PGP SubKey.
+/// Represents an OpenPGP secret subkey, combined with signatures over it.
+///
+/// Usually used within a [`SignedSecretKey`].
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedSecretSubKey {
     pub key: packet::SecretSubkey,

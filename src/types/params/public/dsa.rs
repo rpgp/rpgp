@@ -6,6 +6,7 @@ use crate::{
     types::Mpi,
 };
 
+/// Raw DSA public key material
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct DsaPublicParams {

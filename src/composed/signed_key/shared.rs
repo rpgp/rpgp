@@ -297,6 +297,7 @@ impl Serialize for SignedKeyDetails {
     }
 }
 
+/// A wrapper that contains either a [`SignedPublicKey`] or a [`SignedSecretKey`].
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[allow(clippy::large_enum_variant)] // FIXME
 pub enum PublicOrSecret {
@@ -370,7 +371,7 @@ impl PublicOrSecret {
     }
 }
 
-/// Error returned when trying to convert `PublicOrSecret` key
+/// Error returned when trying to convert [`PublicOrSecret`] key
 /// into the wrong type.
 #[derive(Debug, Clone, PartialEq, Eq, Snafu)]
 #[snafu(display("Attempt to convert PublicOrSecret key to the wrong type"))]
