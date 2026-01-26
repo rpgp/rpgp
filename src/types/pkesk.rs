@@ -91,7 +91,7 @@ impl PkeskBytes {
         match alg {
             PublicKeyAlgorithm::AEAD => {
                 let aead = i.read_u8()?.into();
-                let salt = i.read_array()?;
+                let salt = i.read_arr()?;
                 let encrypted = i.rest()?.freeze();
 
                 Ok(PkeskBytes::Aead {
