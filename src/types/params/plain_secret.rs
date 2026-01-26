@@ -424,6 +424,7 @@ impl PlainSecretParams {
                 PkeskBytes::Aead {
                     aead,
                     salt,
+                    sym_alg: _,
                     encrypted,
                 },
             ) => {
