@@ -1,9 +1,11 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use pgp::composed::Deserializable;
-use pgp::crypto::hash::HashAlgorithm;
-use pgp::types::{KeyDetails, PublicKeyTrait, SignatureBytes};
+use pgp::{
+    composed::Deserializable,
+    crypto::hash::HashAlgorithm,
+    types::{EncryptionKey, KeyDetails, SignatureBytes, VerifyingKey},
+};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
@@ -22,12 +24,13 @@ fuzz_target!(|data: &[u8]| {
             // let _ = key.verify();
 
             let _ = key.to_armored_bytes(None.into());
-            let _ = key.expires_at();
+            let _ = key.expiration();
             let _ = key.fingerprint();
 
-            // FUZZER RESULT this can panic on some inputs
-            // finding RPG-17 in ROS report 2024, fixed with 0.14.1
-            let _ = key.as_unsigned();
+            // removed from the API in e111ba1a
+            // // FUZZER RESULT this can panic on some inputs
+            // // finding RPG-17 in ROS report 2024, fixed with 0.14.1
+            // let _ = key.as_unsigned();
 
             // test the encryption
             let plaintext = vec![0u8; 128];
@@ -39,7 +42,7 @@ fuzz_target!(|data: &[u8]| {
             // test the verification
             let dummy_data = b"dummy";
 
-            let _ = key.verify_signature(
+            let _ = key.verify(
                 HashAlgorithm::Sha256,
                 dummy_data,
                 &SignatureBytes::Native(plaintext.into()),

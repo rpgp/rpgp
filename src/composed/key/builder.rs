@@ -1,3 +1,5 @@
+use std::cmp::PartialEq;
+
 use derive_builder::Builder;
 use rand::{CryptoRng, Rng};
 use smallvec::SmallVec;
@@ -22,6 +24,29 @@ use crate::{
     },
 };
 
+/// A type to specify a configuration for the two key flags
+/// "encrypt communications" and "encrypt storage".
+///
+/// <https://www.rfc-editor.org/rfc/rfc9580#name-key-flags>
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
+pub enum EncryptionCaps {
+    #[default]
+    None,
+    Communication,
+    Storage,
+    All,
+}
+
+impl EncryptionCaps {
+    fn is_communication(&self) -> bool {
+        matches!(self, Self::Communication | Self::All)
+    }
+
+    fn is_storage(&self) -> bool {
+        matches!(self, Self::Storage | Self::All)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Builder)]
 #[builder(build_fn(validate = "Self::validate"))]
 pub struct SecretKeyParams {
@@ -38,7 +63,7 @@ pub struct SecretKeyParams {
     #[builder(default)]
     can_certify: bool,
     #[builder(default)]
-    can_encrypt: bool,
+    can_encrypt: EncryptionCaps,
     #[builder(default)]
     can_authenticate: bool,
 
@@ -101,7 +126,7 @@ pub struct SubkeyParams {
     #[builder(default)]
     can_sign: bool,
     #[builder(default)]
-    can_encrypt: bool,
+    can_encrypt: EncryptionCaps,
     #[builder(default)]
     can_authenticate: bool,
 
@@ -126,7 +151,7 @@ impl SecretKeyParamsBuilder {
     fn validate_keytype(
         key_type: Option<&KeyType>,
         can_sign: Option<bool>,
-        can_encrypt: Option<bool>,
+        can_encrypt: EncryptionCaps,
         can_authenticate: Option<bool>,
     ) -> std::result::Result<(), String> {
         if let Some(key_type) = &key_type {
@@ -135,7 +160,11 @@ impl SecretKeyParamsBuilder {
                     "KeyType {key_type:?} can not be used for signing keys"
                 ));
             }
-            if can_encrypt == Some(true) && !key_type.can_encrypt() {
+            if (can_encrypt == EncryptionCaps::All
+                || can_encrypt == EncryptionCaps::Storage
+                || can_encrypt == EncryptionCaps::Communication)
+                && !key_type.can_encrypt()
+            {
                 return Err(format!(
                     "KeyType {key_type:?} can not be used for encryption keys"
                 ));
@@ -196,7 +225,7 @@ impl SecretKeyParamsBuilder {
         Self::validate_keytype(
             self.key_type.as_ref(),
             self.can_sign,
-            self.can_encrypt,
+            self.can_encrypt.unwrap_or_default(),
             self.can_authenticate,
         )?;
 
@@ -205,7 +234,7 @@ impl SecretKeyParamsBuilder {
                 Self::validate_keytype(
                     Some(&subkey.key_type),
                     Some(subkey.can_sign),
-                    Some(subkey.can_encrypt),
+                    subkey.can_encrypt,
                     Some(subkey.can_authenticate),
                 )?;
             }
@@ -268,8 +297,8 @@ impl SecretKeyParams {
 
         let mut keyflags = KeyFlags::default();
         keyflags.set_certify(self.can_certify);
-        keyflags.set_encrypt_comms(self.can_encrypt);
-        keyflags.set_encrypt_storage(self.can_encrypt);
+        keyflags.set_encrypt_comms(self.can_encrypt.is_communication());
+        keyflags.set_encrypt_storage(self.can_encrypt.is_storage());
         keyflags.set_sign(self.can_sign);
         keyflags.set_authentication(self.can_authenticate);
 
@@ -312,8 +341,8 @@ impl SecretKeyParams {
                         .unwrap_or_else(|| S2kParams::new_default(&mut rng, subkey.version));
                     let (public_params, secret_params) = subkey.key_type.generate(&mut rng)?;
                     let mut keyflags = KeyFlags::default();
-                    keyflags.set_encrypt_comms(subkey.can_encrypt);
-                    keyflags.set_encrypt_storage(subkey.can_encrypt);
+                    keyflags.set_encrypt_comms(subkey.can_encrypt.is_communication());
+                    keyflags.set_encrypt_storage(subkey.can_encrypt.is_storage());
                     keyflags.set_sign(subkey.can_sign);
                     keyflags.set_authentication(subkey.can_authenticate);
 
@@ -679,7 +708,7 @@ mod tests {
                     .version(version)
                     .key_type(KeyType::Rsa(2048))
                     .passphrase(Some("hello".into()))
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .build()
                     .unwrap(),
             )
@@ -695,7 +724,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(version)
                     .key_type(KeyType::Rsa(2048))
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .build()
                     .unwrap(),
             )
@@ -801,7 +830,7 @@ mod tests {
             .subkey(
                 SubkeyParamsBuilder::default()
                     .key_type(KeyType::ECDH(ECCCurve::Curve25519))
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -900,7 +929,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(version)
                     .key_type(KeyType::X25519)
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -974,7 +1003,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(version)
                     .key_type(KeyType::ECDH(ecdh.clone()))
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -1118,7 +1147,7 @@ mod tests {
             .subkey(
                 SubkeyParamsBuilder::default()
                     .key_type(KeyType::ECDH(ECCCurve::Curve25519))
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -1243,7 +1272,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(version)
                     .key_type(KeyType::X448)
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -1365,7 +1394,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(KeyVersion::V4)
                     .key_type(KeyType::X25519)
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .build()
                     .unwrap(),
             )
@@ -1413,7 +1442,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(KeyVersion::V4)
                     .key_type(KeyType::X25519)
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .build()
                     .unwrap(),
             )
@@ -1437,7 +1466,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(KeyVersion::V4)
                     .key_type(KeyType::X25519)
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .build()
                     .unwrap(),
             )
@@ -1461,7 +1490,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(KeyVersion::V6)
                     .key_type(KeyType::X25519)
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .build()
                     .unwrap(),
             )
@@ -1488,7 +1517,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(KeyVersion::V6)
                     .key_type(KeyType::X25519)
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .build()
                     .unwrap(),
             )
@@ -1551,7 +1580,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(KeyVersion::V6)
                     .key_type(KeyType::X25519)
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -1621,7 +1650,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(version)
                     .key_type(KeyType::MlKem768X25519)
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -1700,7 +1729,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(version)
                     .key_type(KeyType::MlKem1024X448)
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .passphrase(None)
                     .build()
                     .unwrap(),
@@ -1843,7 +1872,7 @@ mod tests {
                 SubkeyParamsBuilder::default()
                     .version(version)
                     .key_type(encrypt)
-                    .can_encrypt(true)
+                    .can_encrypt(EncryptionCaps::All)
                     .passphrase(None)
                     .build()
                     .unwrap(),

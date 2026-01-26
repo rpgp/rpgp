@@ -3,7 +3,7 @@
 use libfuzzer_sys::fuzz_target;
 use pgp::{
     composed::Deserializable,
-    types::{KeyDetails, Password, PublicKeyTrait, SecretKeyTrait},
+    types::{EncryptionKey, KeyDetails, Password, SigningKey, VerifyingKey},
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -22,7 +22,7 @@ fuzz_target!(|data: &[u8]| {
             // key verification is slow
             // let _ = key.verify();
             let _ = key.to_armored_bytes(None.into());
-            let _ = key.expires_at();
+            let _ = key.expiration();
             let _ = key.fingerprint();
             let _ = key.public_key();
 
@@ -36,7 +36,7 @@ fuzz_target!(|data: &[u8]| {
             // indirectly calls unlock()
             // FUZZER RESULT this can panic on some inputs
             // finding RPG-20 in ROS report 2024, fixed with 0.14.1
-            let signature_res = key.create_signature(
+            let signature_res = key.sign(
                 &Password::empty(),
                 pgp::crypto::hash::HashAlgorithm::Sha256,
                 &dummy_data,
@@ -47,7 +47,7 @@ fuzz_target!(|data: &[u8]| {
                 Ok(signature) => {
                     let _verify_res = key
                         .public_key()
-                        .verify_signature(
+                        .verify(
                             pgp::crypto::hash::HashAlgorithm::Sha256,
                             &dummy_data,
                             &signature,
@@ -65,11 +65,15 @@ fuzz_target!(|data: &[u8]| {
 
             // FUZZER RESULT this can panic on some inputs
             // finding RPG-21 in ROS report 2024, fixed with 0.14.1
-            let _ciphertext =
-                { key.encrypt(&mut rng, plaintext.as_slice(), pgp::types::EskType::V6) };
+            let _ciphertext = {
+                key.public_key()
+                    .encrypt(&mut rng, plaintext.as_slice(), pgp::types::EskType::V6)
+            };
             // behavior should be mostly identical to the above, test it anyway
-            let _ciphertext =
-                { key.encrypt(&mut rng, plaintext.as_slice(), pgp::types::EskType::V3_4) };
+            let _ciphertext = {
+                key.public_key()
+                    .encrypt(&mut rng, plaintext.as_slice(), pgp::types::EskType::V3_4)
+            };
             return;
         }
     }
