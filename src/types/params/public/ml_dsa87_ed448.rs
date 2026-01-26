@@ -17,11 +17,11 @@ impl Eq for MlDsa87Ed448PublicParams {}
 impl MlDsa87Ed448PublicParams {
     pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         // ed448 public key
-        let p = i.read_array::<57>()?;
+        let p = i.read_arr::<57>()?;
         let ed448 = cx448::VerifyingKey::from_bytes(&p)?;
 
         // ML DSA key
-        let p = i.read_array::<2592>()?;
+        let p = i.read_arr::<2592>()?;
         let ml_dsa = ml_dsa::VerifyingKey::decode(&(p.into()));
 
         Ok(Self {

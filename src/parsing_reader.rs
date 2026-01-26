@@ -9,25 +9,25 @@ use crate::types::{Duration, Timestamp};
 
 pub trait BufReadParsing: BufRead + Sized {
     fn read_u8(&mut self) -> Result<u8> {
-        let arr = self.read_array::<1>()?;
+        let arr = self.read_arr::<1>()?;
         Ok(arr[0])
     }
 
     fn read_be_u16(&mut self) -> Result<u16> {
-        let arr = self.read_array::<2>()?;
+        let arr = self.read_arr::<2>()?;
 
         Ok(u16::from_be_bytes(arr))
     }
 
     #[allow(dead_code)]
     fn read_le_u16(&mut self) -> Result<u16> {
-        let arr = self.read_array::<2>()?;
+        let arr = self.read_arr::<2>()?;
 
         Ok(u16::from_le_bytes(arr))
     }
 
     fn read_be_u32(&mut self) -> Result<u32> {
-        let arr = self.read_array::<4>()?;
+        let arr = self.read_arr::<4>()?;
 
         Ok(u32::from_be_bytes(arr))
     }
@@ -37,7 +37,7 @@ pub trait BufReadParsing: BufRead + Sized {
         Ok(has_remaining)
     }
 
-    fn read_array<const C: usize>(&mut self) -> Result<[u8; C]> {
+    fn read_arr<const C: usize>(&mut self) -> Result<[u8; C]> {
         let mut arr = [0u8; C];
         let mut read = 0;
 
@@ -63,7 +63,7 @@ pub trait BufReadParsing: BufRead + Sized {
     }
 
     #[cfg(feature = "draft-pqc")]
-    fn read_array_boxed<const C: usize>(&mut self) -> Result<Box<[u8; C]>> {
+    fn read_arr_boxed<const C: usize>(&mut self) -> Result<Box<[u8; C]>> {
         let mut arr = Box::new([0u8; C]);
         let mut read = 0;
 
@@ -140,7 +140,7 @@ pub trait BufReadParsing: BufRead + Sized {
     }
 
     fn read_tag<const C: usize>(&mut self, tag: &[u8; C]) -> Result<()> {
-        let found_tag = self.read_array::<C>()?;
+        let found_tag = self.read_arr::<C>()?;
         if tag != &found_tag {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,

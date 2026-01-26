@@ -8,7 +8,7 @@ use zeroize::Zeroizing;
 use crate::{
     composed::RawSessionKey,
     crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
-    errors::{bail, ensure, unimplemented_err, Result},
+    errors::{Result, bail, ensure, unimplemented_err},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::KeyVersion,
@@ -455,7 +455,7 @@ impl StringToKey {
             }
             1 => {
                 let hash_alg = i.read_u8().map(HashAlgorithm::from)?;
-                let salt = i.read_array::<8>()?;
+                let salt = i.read_arr::<8>()?;
 
                 Ok(StringToKey::Salted { hash_alg, salt })
             }
@@ -465,7 +465,7 @@ impl StringToKey {
             }
             3 => {
                 let hash_alg = i.read_u8().map(HashAlgorithm::from)?;
-                let salt = i.read_array::<8>()?;
+                let salt = i.read_arr::<8>()?;
                 let count = i.read_u8()?;
 
                 Ok(StringToKey::IteratedAndSalted {
@@ -475,7 +475,7 @@ impl StringToKey {
                 })
             }
             4 => {
-                let salt = i.read_array::<16>()?;
+                let salt = i.read_arr::<16>()?;
                 let t = i.read_u8()?;
                 let p = i.read_u8()?;
                 let m_enc = i.read_u8()?;
@@ -570,8 +570,8 @@ impl Serialize for StringToKey {
 mod tests {
     use proptest::prelude::*;
     use rand::{
-        distributions::{Alphanumeric, DistString},
         SeedableRng,
+        distributions::{Alphanumeric, DistString},
     };
     use rand_chacha::ChaCha8Rng;
 

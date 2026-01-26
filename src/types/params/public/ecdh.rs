@@ -5,11 +5,11 @@ use bytes::Bytes;
 
 use crate::{
     crypto::{
-        ecc_curve::{ecc_curve_from_oid, ECCCurve},
+        ecc_curve::{ECCCurve, ecc_curve_from_oid},
         hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{bail, ensure_eq, format_err, Result},
+    errors::{Result, bail, ensure_eq, format_err},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::Mpi,
@@ -318,7 +318,7 @@ impl EcdhPublicParams {
                         );
 
                         EcdhKdfType::Replaced {
-                            replacement_fingerprint: i.read_array()?,
+                            replacement_fingerprint: i.read_arr()?,
                         }
                     }
 

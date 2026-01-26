@@ -12,17 +12,17 @@ use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 #[cfg(feature = "draft-pqc")]
 use crate::crypto::{
-    ml_dsa65_ed25519, ml_dsa87_ed448, ml_kem1024_x448, ml_kem768_x25519, slh_dsa_shake128f,
+    ml_dsa65_ed25519, ml_dsa87_ed448, ml_kem768_x25519, ml_kem1024_x448, slh_dsa_shake128f,
     slh_dsa_shake128s, slh_dsa_shake256s,
 };
 use crate::{
     composed::{PlainSessionKey, RawSessionKey},
     crypto::{
-        aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
-        elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, x448,
-        Decryptor,
+        Decryptor, aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed448,
+        ed25519, elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x448,
+        x25519,
     },
-    errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
+    errors::{Result, bail, ensure, ensure_eq, unimplemented_err, unsupported_err},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
@@ -155,7 +155,7 @@ impl PlainSecretParams {
                 Self::Ed25519Legacy(key)
             }
             (PublicKeyAlgorithm::Ed25519, PublicParams::Ed25519(_pub_params)) => {
-                let secret = i.read_array::<32>()?;
+                let secret = i.read_arr::<32>()?;
                 let key = crate::crypto::ed25519::SecretKey::try_from_bytes(
                     secret,
                     crate::crypto::ed25519::Mode::Ed25519,
@@ -163,37 +163,37 @@ impl PlainSecretParams {
                 Self::Ed25519(key)
             }
             (PublicKeyAlgorithm::Ed448, PublicParams::Ed448(_pub_params)) => {
-                let secret = i.read_array::<57>()?;
+                let secret = i.read_arr::<57>()?;
                 let key = crate::crypto::ed448::SecretKey::try_from_bytes(secret)?;
                 Self::Ed448(key)
             }
             (PublicKeyAlgorithm::X25519, PublicParams::X25519(_)) => {
-                let secret = i.read_array::<32>()?;
+                let secret = i.read_arr::<32>()?;
                 let key = crate::crypto::x25519::SecretKey::try_from_bytes(secret)?;
                 Self::X25519(key)
             }
             (PublicKeyAlgorithm::X448, PublicParams::X448 { .. }) => {
-                let s = i.read_array::<56>()?;
+                let s = i.read_arr::<56>()?;
                 let key = crate::crypto::x448::SecretKey::try_from_bytes(s)?;
                 Self::X448(key)
             }
             #[cfg(feature = "draft-pqc")]
             (PublicKeyAlgorithm::MlKem768X25519, PublicParams::MlKem768X25519(_)) => {
                 // X25519
-                let x = i.read_array::<32>()?;
+                let x = i.read_arr::<32>()?;
 
                 // ML KEM
-                let ml_kem = i.read_array::<64>()?;
+                let ml_kem = i.read_arr::<64>()?;
                 let key = crate::crypto::ml_kem768_x25519::SecretKey::try_from_bytes(x, ml_kem)?;
                 Self::MlKem768X25519(key)
             }
             #[cfg(feature = "draft-pqc")]
             (PublicKeyAlgorithm::MlKem1024X448, PublicParams::MlKem1024X448(_)) => {
                 // X448
-                let x = i.read_array::<56>()?;
+                let x = i.read_arr::<56>()?;
 
                 // ML KEM
-                let ml_kem = i.read_array::<64>()?;
+                let ml_kem = i.read_arr::<64>()?;
                 let key = crate::crypto::ml_kem1024_x448::SecretKey::try_from_bytes(x, ml_kem)?;
                 Self::MlKem1024X448(key)
             }
@@ -213,39 +213,39 @@ impl PlainSecretParams {
             #[cfg(feature = "draft-pqc")]
             (PublicKeyAlgorithm::MlDsa65Ed25519, PublicParams::MlDsa65Ed25519(_)) => {
                 // ed25519
-                let ed = i.read_array::<32>()?;
+                let ed = i.read_arr::<32>()?;
 
                 // ML DSA
-                let ml_dsa = i.read_array::<32>()?;
+                let ml_dsa = i.read_arr::<32>()?;
                 let key = crate::crypto::ml_dsa65_ed25519::SecretKey::try_from_bytes(ed, ml_dsa)?;
                 Self::MlDsa65Ed25519(key)
             }
             #[cfg(feature = "draft-pqc")]
             (PublicKeyAlgorithm::MlDsa87Ed448, PublicParams::MlDsa87Ed448(_)) => {
                 // ed448
-                let ed = i.read_array::<57>()?;
+                let ed = i.read_arr::<57>()?;
 
                 // ML DSA
-                let ml_dsa_seed = i.read_array::<32>()?;
+                let ml_dsa_seed = i.read_arr::<32>()?;
                 let key =
                     crate::crypto::ml_dsa87_ed448::SecretKey::try_from_bytes(ed, ml_dsa_seed)?;
                 Self::MlDsa87Ed448(key)
             }
             #[cfg(feature = "draft-pqc")]
             (PublicKeyAlgorithm::SlhDsaShake128s, PublicParams::SlhDsaShake128s(_)) => {
-                let secret = i.read_array::<64>()?;
+                let secret = i.read_arr::<64>()?;
                 let key = crate::crypto::slh_dsa_shake128s::SecretKey::try_from_bytes(secret)?;
                 Self::SlhDsaShake128s(key)
             }
             #[cfg(feature = "draft-pqc")]
             (PublicKeyAlgorithm::SlhDsaShake128f, PublicParams::SlhDsaShake128f(_)) => {
-                let secret = i.read_array::<64>()?;
+                let secret = i.read_arr::<64>()?;
                 let key = crate::crypto::slh_dsa_shake128f::SecretKey::try_from_bytes(secret)?;
                 Self::SlhDsaShake128f(key)
             }
             #[cfg(feature = "draft-pqc")]
             (PublicKeyAlgorithm::SlhDsaShake256s, PublicParams::SlhDsaShake256s(_)) => {
-                let secret = i.read_array::<128>()?;
+                let secret = i.read_arr::<128>()?;
                 let key = crate::crypto::slh_dsa_shake256s::SecretKey::try_from_bytes(secret)?;
                 Self::SlhDsaShake256s(key)
             }
@@ -266,7 +266,7 @@ impl PlainSecretParams {
     ) -> Result<Self> {
         let params = Self::try_from_reader_inner(&mut i, alg, public_params)?;
         if version == KeyVersion::V3 || version == KeyVersion::V4 {
-            let checksum = i.read_array::<2>()?;
+            let checksum = i.read_arr::<2>()?;
             params.compare_checksum_simple(&checksum)?;
             ensure!(
                 !i.has_remaining()?,

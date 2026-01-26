@@ -6,10 +6,10 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 use rand::{CryptoRng, Rng};
 
 use crate::{
-    errors::{ensure, ensure_eq, Result},
+    errors::{Result, ensure, ensure_eq},
     packet::{
-        PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
-        SubpacketData, SubpacketLength, CERTIFICATION_SIGNATURE_TYPES,
+        CERTIFICATION_SIGNATURE_TYPES, PacketHeader, PacketTrait, Signature, SignatureConfig,
+        SignatureType, Subpacket, SubpacketData, SubpacketLength,
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -100,7 +100,7 @@ impl ImageHeader {
                 let header = match format {
                     0x01 => {
                         // Only known format is 1 = JPEG
-                        let data = data.read_array::<12>()?;
+                        let data = data.read_arr::<12>()?;
                         ImageHeaderV1::Jpeg { data }
                     }
                     _ => ImageHeaderV1::Unknown {

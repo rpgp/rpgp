@@ -8,10 +8,10 @@ use proptest::prelude::*;
 
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::{bail, Result},
+    errors::{Result, bail},
     packet::{
-        signature::SignatureType, InnerSignature, PacketHeader, PacketTrait, Signature,
-        SignatureVersionSpecific,
+        InnerSignature, PacketHeader, PacketTrait, Signature, SignatureVersionSpecific,
+        signature::SignatureType,
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -167,7 +167,9 @@ impl OnePassSignature {
                 SignatureVersionSpecific::V6 { salt: sig_salt, .. },
             ) => {
                 if ops_salt != sig_salt {
-                    debug!("Salt mismatch between Ops and Signature: {ops_salt:02x?} / {sig_salt:02x?}");
+                    debug!(
+                        "Salt mismatch between Ops and Signature: {ops_salt:02x?} / {sig_salt:02x?}"
+                    );
                     return false;
                 }
             }
@@ -191,7 +193,7 @@ impl OnePassSignature {
 
         let (version_specific, last) = match version {
             3 => {
-                let key_id_raw: [u8; 8] = i.read_array::<8>()?;
+                let key_id_raw: [u8; 8] = i.read_arr::<8>()?;
 
                 let last = i.read_u8()?;
                 (
@@ -204,7 +206,7 @@ impl OnePassSignature {
             6 => {
                 let salt_len = i.read_u8()?;
                 let salt = i.take_bytes(salt_len.into())?.freeze();
-                let fingerprint = i.read_array::<32>()?;
+                let fingerprint = i.read_arr::<32>()?;
                 let last = i.read_u8()?;
 
                 (OpsVersionSpecific::V6 { salt, fingerprint }, last)

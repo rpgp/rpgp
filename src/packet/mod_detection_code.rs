@@ -30,7 +30,7 @@ pub struct ModDetectionCode {
 impl ModDetectionCode {
     /// Parses a `ModDetectionCode` packet.
     pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
-        let hash = input.read_array::<20>()?;
+        let hash = input.read_arr::<20>()?;
 
         Ok(ModDetectionCode {
             packet_header,

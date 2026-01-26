@@ -8,7 +8,7 @@ use zeroize::Zeroizing;
 use crate::{
     composed::RawSessionKey,
     crypto::{checksum, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
-    errors::{bail, ensure_eq, Result},
+    errors::{Result, bail, ensure_eq},
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -67,7 +67,7 @@ impl PublicKeyEncryptedSessionKey {
         match version {
             3 => {
                 // the key id this maps to
-                let key_id_raw = i.read_array::<8>()?;
+                let key_id_raw = i.read_arr::<8>()?;
                 let key_id = KeyId::from(key_id_raw);
 
                 // the public key algorithm

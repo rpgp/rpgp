@@ -18,11 +18,11 @@ impl MlDsa65Ed25519PublicParams {
     /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ed2>
     pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         // ed25519 public key
-        let p = i.read_array::<32>()?;
+        let p = i.read_arr::<32>()?;
         let ed25519 = ed25519_dalek::VerifyingKey::from_bytes(&p)?;
 
         // ML DSA key
-        let p = i.read_array_boxed::<1952>()?;
+        let p = i.read_arr_boxed::<1952>()?;
         let mut boxed = Box::new(ml_dsa::EncodedVerifyingKey::<MlDsa65>::default());
         boxed.copy_from_slice(&p[..]);
         let ml_dsa = ml_dsa::VerifyingKey::decode(&boxed);

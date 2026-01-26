@@ -10,7 +10,7 @@ use crate::{
         aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{bail, ensure, format_err, unsupported_err, Result},
+    errors::{Result, bail, ensure, format_err, unsupported_err},
     packet::{
         Notation, PacketHeader, RevocationCode, Subpacket, SubpacketData, SubpacketLength,
         SubpacketType,
@@ -58,13 +58,13 @@ fn v3_parser<B: BufRead>(
     let created = i.read_timestamp()?;
 
     // Eight-octet Key ID of signer.
-    let issuer = i.read_array::<8>().map(KeyId::from)?;
+    let issuer = i.read_arr::<8>().map(KeyId::from)?;
     // One-octet public-key algorithm.
     let pub_alg = i.read_u8().map(PublicKeyAlgorithm::from)?;
     // One-octet hash algorithm.
     let hash_alg = i.read_u8().map(HashAlgorithm::from)?;
     // Two-octet field holding left 16 bits of signed hash value.
-    let ls_hash = i.read_array::<2>()?;
+    let ls_hash = i.read_arr::<2>()?;
 
     // The SignatureBytes comprising the signature.
     let sig = actual_signature(&pub_alg, &mut i)?;
@@ -133,7 +133,7 @@ fn v4_parser<B: BufRead>(
         usub_len
     );
     // Two-octet field holding the left 16 bits of the signed hash value.
-    let ls_hash = i.read_array::<2>()?;
+    let ls_hash = i.read_arr::<2>()?;
 
     // The SignatureBytes comprising the signature.
     let sig = actual_signature(&pub_alg, i)?;
@@ -184,7 +184,7 @@ fn v6_parser<B: BufRead>(packet_header: PacketHeader, mut i: B) -> Result<Signat
     );
 
     // Two-octet field holding the left 16 bits of the signed hash value.
-    let ls_hash = i.read_array::<2>()?;
+    let ls_hash = i.read_arr::<2>()?;
 
     // A variable-length field containing:
     // A one-octet salt size. The value MUST match the value defined for the hash algorithm as specified in Table 23.
@@ -367,7 +367,7 @@ fn signature_creation_time<B: BufRead>(mut i: B) -> Result<SubpacketData> {
 /// Parse an Issuer Key ID subpacket
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-issuer-key-id
 fn issuer<B: BufRead>(mut i: B) -> Result<SubpacketData> {
-    let key_id = i.read_array::<8>().map(KeyId::from)?;
+    let key_id = i.read_arr::<8>().map(KeyId::from)?;
 
     Ok(SubpacketData::IssuerKeyId(key_id))
 }
@@ -482,7 +482,7 @@ fn revocation_key<B: BufRead>(mut i: B) -> Result<SubpacketData> {
         .map_err(|e| format_err!("invalid revocation class: {:?}", e))?;
     let algorithm = i.read_u8().map(PublicKeyAlgorithm::from)?;
     // TODO: V5 Keys have 32 octets here
-    let fp = i.read_array::<20>()?;
+    let fp = i.read_arr::<20>()?;
     let key = RevocationKey::new(class, algorithm, &fp);
 
     Ok(SubpacketData::RevocationKey(key))

@@ -1,6 +1,6 @@
 use std::io::{self, BufRead};
 
-use ml_kem::{kem::EncapsulationKey, EncodedSizeUser, MlKem768Params};
+use ml_kem::{EncodedSizeUser, MlKem768Params, kem::EncapsulationKey};
 
 use crate::{errors::Result, parsing_reader::BufReadParsing, ser::Serialize};
 
@@ -19,9 +19,9 @@ impl Eq for MlKem768X25519PublicParams {}
 impl MlKem768X25519PublicParams {
     pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         // 32 bytes of x25519 public key
-        let x25519_public_raw = i.read_array::<32>()?;
+        let x25519_public_raw = i.read_arr::<32>()?;
 
-        let ml_kem_raw = i.read_array::<ML_KEM_PUB_KEY_LENGTH>()?;
+        let ml_kem_raw = i.read_arr::<ML_KEM_PUB_KEY_LENGTH>()?;
         let ml_kem_key = EncapsulationKey::from_bytes(&ml_kem_raw.into());
 
         Ok(Self {

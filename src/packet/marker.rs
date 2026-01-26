@@ -1,7 +1,7 @@
 use std::io::{self, BufRead};
 
 use crate::{
-    errors::{ensure_eq, Result},
+    errors::{Result, ensure_eq},
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -21,7 +21,7 @@ pub struct Marker {
 impl Marker {
     /// Parses a `Marker` packet from the given slice.
     pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
-        let marker = input.read_array::<3>()?;
+        let marker = input.read_arr::<3>()?;
         ensure_eq!(marker, PGP, "invalid input");
 
         Ok(Marker { packet_header })
