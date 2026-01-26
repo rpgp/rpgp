@@ -47,7 +47,7 @@ impl EncryptionCaps {
     }
 }
 
-/// Specification for creation of a [`SignedSecretKey`]
+/// Parameters for the creation of a [`SignedSecretKey`]
 #[derive(Debug, PartialEq, Eq, Builder)]
 #[builder(build_fn(validate = "Self::validate"))]
 pub struct SecretKeyParams {
@@ -114,7 +114,7 @@ pub struct SecretKeyParams {
     subkeys: Vec<SubkeyParams>,
 }
 
-/// Specification for creation of a subkey
+/// Parameters for the creation of a subkey
 #[derive(Debug, Clone, PartialEq, Eq, Builder)]
 pub struct SubkeyParams {
     // -- OpenPGP key version of this subkey
