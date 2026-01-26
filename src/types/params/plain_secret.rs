@@ -432,15 +432,26 @@ impl PlainSecretParams {
                     bail!("inconsistent key state");
                 };
 
-                priv_key.decrypt(aead_key::EncryptionFields {
-                    data: encrypted,
-                    aead: *aead,
-                    version: match typ {
-                        EskType::V3_4 => PkeskVersion::V3,
-                        EskType::V6 => PkeskVersion::V6,
-                    },
-                    salt,
-                })?
+                let key = priv_key
+                    .decrypt(aead_key::EncryptionFields {
+                        data: encrypted,
+                        aead: *aead,
+                        version: match typ {
+                            EskType::V3_4 => PkeskVersion::V3,
+                            EskType::V6 => PkeskVersion::V6,
+                        },
+                        salt,
+                    })?
+                    .into();
+
+                return match typ {
+                    // We expect `sym_alg` to be set for v3 PKESK, and unset for v6 PKESK
+                    EskType::V3_4 => Ok(PlainSessionKey::V3_4 {
+                        key,
+                        sym_alg: priv_key.sym_alg,
+                    }),
+                    EskType::V6 => Ok(PlainSessionKey::V6 { key }),
+                };
             }
             (PlainSecretParams::RSA(ref priv_key), PkeskBytes::Rsa { mpi }) => {
                 priv_key.decrypt(&mpi.to_owned())?
