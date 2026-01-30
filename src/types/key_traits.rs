@@ -13,6 +13,7 @@ use crate::{
     },
 };
 
+/// Metadata of a key packet
 pub trait KeyDetails: std::fmt::Debug {
     /// Returns the [`KeyVersion`] of this key.
     fn version(&self) -> KeyVersion;
@@ -34,20 +35,24 @@ pub trait KeyDetails: std::fmt::Debug {
     fn public_params(&self) -> &PublicParams;
 }
 
+/// An imprint is a shorthand identifier for a key.
+///
+/// The imprint is a generalization of the
+/// [OpenPGP fingerprint](https://www.rfc-editor.org/rfc/rfc9580.html#key-ids-fingerprints).
+/// It is calculated over the public key parameters and other non-secret inputs (depending on
+/// the key version), in the same way as the fingerprint.
+/// However, the imprint may use a digest algorithm other than the one specified for the
+/// fingerprint of the given key version.
+///
+/// See <https://www.ietf.org/archive/id/draft-ietf-openpgp-replacementkey-03.html#name-key-imprints>
+///
+/// NOTE: Imprints are a special purpose tool! For most use cases, the OpenPGP fingerprint is
+/// the most appropriate identifier for a certificate or a component key.
 pub trait Imprint {
-    /// An imprint is a shorthand identifier for a key.
+    /// Get the [`Imprint`] for a key.
     ///
-    /// The imprint is a generalization of the
-    /// [OpenPGP fingerprint](https://www.rfc-editor.org/rfc/rfc9580.html#key-ids-fingerprints).
-    /// It is calculated over the public key parameters and other non-secret inputs (depending on
-    /// the key version), in the same way as the fingerprint.
-    /// However, the imprint may use a digest algorithm other than the one specified for the
-    /// fingerprint of the given key version.
-    ///
-    /// See <https://www.ietf.org/archive/id/draft-ietf-openpgp-replacementkey-03.html#name-key-imprints>
-    ///
-    /// NOTE: Imprints are a special purpose tool! For most use cases, the OpenPGP fingerprint is
-    /// the most appropriate identifier for a certificate or a component key.
+    /// NOTE: Imprints are a special purpose tool! For most use cases, the OpenPGP [`Fingerprint`]
+    /// is the most appropriate identifier for a certificate or a component key.
     fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>>;
 }
 
@@ -128,6 +133,7 @@ impl KeyDetails for Box<&dyn SigningKey> {
 ///
 /// Contains private data.
 pub trait SigningKey: KeyDetails {
+    /// Create a raw cryptographic signature over `data`
     fn sign(
         &self,
         key_pw: &Password,
@@ -177,7 +183,7 @@ impl<T: EncryptionKey> EncryptionKey for &T {
     }
 }
 
-/// A key that can decrypt encrypted data (i.e. an encrypted session key) from a
+/// A key that can decrypt encrypted data (i.e. a session key) from a
 /// [PKESK](https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio).
 pub trait DecryptionKey: KeyDetails {
     fn decrypt(

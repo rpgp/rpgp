@@ -12,6 +12,9 @@ use crate::{
     types::*,
 };
 
+/// Secret key material, in a password-locked form.
+///
+/// The unlocked counterpart to this type is [`PlainSecretParams`].
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct EncryptedSecretParams {
     /// The encrypted data, including the checksum.

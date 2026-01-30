@@ -150,7 +150,17 @@ impl BufRead for MessageReader<'_> {
 }
 
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
-/// Encrypted Message | Signed Message | Compressed Message | Literal Message.
+///
+/// Represents one of:
+///
+/// - Encrypted Message,
+/// - Signed Message (either one-pass signed or prefixed-signed),
+/// - Compressed Message,
+/// - Literal Message.
+///
+/// OpenPGP message may consist of multiple layers wrapped around each other (such as for example:
+/// an encrypted message, containing a compressed message, containing a one-pass signed message,
+/// containing a literal message).
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Message<'a> {
@@ -374,8 +384,10 @@ impl MessageParts {
 
 /// Encrypted Session Key
 ///
-/// Public-Key Encrypted Session Key Packet |
-/// Symmetric-Key Encrypted Session Key Packet.
+/// Contains one of:
+///
+/// - [`PublicKeyEncryptedSessionKey`] (Public-Key Encrypted Session Key Packet)
+/// - [`SymKeyEncryptedSessionKey`] (Symmetric-Key Encrypted Session Key Packet)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Esk {
     PublicKeyEncryptedSessionKey(PublicKeyEncryptedSessionKey),
@@ -451,9 +463,12 @@ impl Serialize for Esk {
     }
 }
 
-/// Encrypted Data:
-/// Symmetrically Encrypted Data Packet |
-/// Symmetrically Encrypted Integrity Protected Data Packet
+/// Represents encrypted data
+///
+/// Encapsulates one of
+/// - [`SymEncryptedProtectedData`](crate::packet::SymEncryptedProtectedData)
+/// - [`SymEncryptedData`](crate::packet::SymEncryptedData)
+/// - [`GnupgAeadData`](crate::packet::GnupgAeadData)
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Edata<'a> {

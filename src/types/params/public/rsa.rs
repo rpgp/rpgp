@@ -4,6 +4,7 @@ use rsa::traits::PublicKeyParts;
 
 use crate::{errors::Result, ser::Serialize, types::Mpi};
 
+/// Raw RSA public key material
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct RsaPublicParams {

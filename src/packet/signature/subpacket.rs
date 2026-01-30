@@ -18,6 +18,12 @@ use crate::{
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 /// Available signature subpacket types
+///
+/// [Signature subpackets](https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-subpacket-specifi)
+/// are part of the [`SignatureConfig`](crate::packet::SignatureConfig) metadata of a [`Signature`]
+/// packet
+///
+/// Signature subpackets specify additional information that the issuer of a signature attests to.
 pub enum SubpacketType {
     SignatureCreationTime,
     SignatureExpirationTime,
@@ -233,6 +239,11 @@ impl Serialize for SubpacketLength {
     }
 }
 
+/// A subpacket encodes metadata that is included in an OpenPGP [`Signature`] packet.
+///
+/// Signature subpackets are stored in the [`SignatureConfig`](crate::packet::signature::SignatureConfig).
+///
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-subpacket-specifi>
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Subpacket {
     pub is_critical: bool,
@@ -264,6 +275,10 @@ impl Subpacket {
     }
 }
 
+/// Data field for one
+/// [subpacket](https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-subpacket-specifi)
+/// that occurs in a [`SignatureConfig`](crate::packet::SignatureConfig)
+/// as part of the metadata in a  [`Signature`] packet.
 #[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 pub enum SubpacketData {
     /// The time the signature was made.

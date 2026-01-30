@@ -9,7 +9,15 @@ use crate::{
     errors::{ensure, unimplemented_err, Result},
 };
 
-/// A flexible representation of what can be represented in an armor file.
+/// A flexible representation of armored OpenPGP data.
+///
+/// Contains one of:
+///
+/// - A regular OpenPGP [`Message`]
+/// - A [`CleartextSignedMessage`]
+/// - A [`DetachedSignature`]
+/// - A [`SignedPublicKey`]
+/// - A [`SignedSecretKey`]
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Any<'a> {

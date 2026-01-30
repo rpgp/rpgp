@@ -50,7 +50,7 @@ pub use self::{
 };
 use super::PlainSecretParams;
 
-/// Represent the public parameters for the different algorithms.
+/// Raw public key material for any algorithm.
 #[derive(PartialEq, Eq, Clone, derive_more::Debug)]
 pub enum PublicParams {
     RSA(RsaPublicParams),

@@ -17,7 +17,7 @@ use crate::{
 
 const GNUPG_AEAD_VERSION_1: u8 = 0x01;
 
-/// Config for a [GnupgAeadData] encryption container.
+/// Configuration of a [GnupgAeadData] encryption container.
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct Config {
     pub sym_alg: SymmetricKeyAlgorithm,
@@ -87,7 +87,11 @@ impl Serialize for Config {
 }
 
 /// GnuPG's proprietary AEAD format "OCB Encrypted Data Packet" (packet type 20).
+///
 /// <https://www.ietf.org/archive/id/draft-koch-librepgp-03.html#name-ocb-encrypted-data-packet-t>
+///
+/// (Note: The standardized OpenPGP packet type that serves the same purpose as [`GnupgAeadData`]
+/// is [`SymEncryptedProtectedData`](crate::packet::SymEncryptedProtectedData) version 2)
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct GnupgAeadData {
     packet_header: PacketHeader,

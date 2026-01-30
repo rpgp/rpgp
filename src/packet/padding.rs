@@ -15,6 +15,9 @@ use crate::{
 
 /// Padding Packet
 ///
+/// This is a new packet in RFC 9580, its purpose is defense against traffic analysis, by adding
+/// random data to OpenPGP objects. Padding packets must be ignored by the receiving party.
+///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-padding-packet-type-id-21>
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]

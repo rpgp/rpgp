@@ -9,8 +9,10 @@ use crate::{
     types::*,
 };
 
-/// A list of params that are used to represent the values of possibly encrypted key,
-/// from imports and exports.
+/// Representation of the secret parameters in a key packet.
+///
+/// Can either contain a password-locked [`EncryptedSecretParams`] or an unprotected
+/// [`PlainSecretParams`].
 #[derive(Debug, Clone, PartialEq, Eq, ZeroizeOnDrop)]
 #[allow(clippy::large_enum_variant)]
 pub enum SecretParams {
@@ -19,6 +21,7 @@ pub enum SecretParams {
 }
 
 impl SecretParams {
+    /// `true`, if the secret key material is password-locked
     pub fn is_encrypted(&self) -> bool {
         match self {
             SecretParams::Plain(_) => false,

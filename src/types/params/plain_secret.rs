@@ -32,6 +32,7 @@ use crate::{
     util::TeeWriter,
 };
 
+/// Raw secret key material in unlocked/unencrypted form
 #[derive(Clone, PartialEq, Eq, derive_more::Debug, ZeroizeOnDrop)]
 pub enum PlainSecretParams {
     RSA(rsa::SecretKey),
