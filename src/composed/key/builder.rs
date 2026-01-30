@@ -24,7 +24,7 @@ use crate::{
     },
 };
 
-/// A type to specify a configuration for the two key flags
+/// A type to set a configuration for the two key flags
 /// "encrypt communications" and "encrypt storage".
 ///
 /// <https://www.rfc-editor.org/rfc/rfc9580#name-key-flags>
@@ -382,7 +382,7 @@ impl SecretKeyParams {
     }
 }
 
-/// Specifies the cipher of a key packet
+/// Parameter to set the cipher of a key packet
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KeyType {
     /// Encryption & Signing with RSA and the given bitsize.
@@ -426,7 +426,7 @@ pub enum KeyType {
     SlhDsaShake256s,
 }
 
-/// DSA key size specification
+/// DSA key size
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum DsaKeySize {
