@@ -10,7 +10,7 @@ use super::{
 use crate::{
     armor::{BlockType, DearmorOptions},
     composed::{message::Message, shared::is_binary, Edata, Esk, SignaturePacket},
-    errors::{bail, format_err, unimplemented_err, Result},
+    errors::{bail, format_err, unimplemented_err, Error, Result},
     packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
     parsing_reader::BufReadParsing,
     types::{PkeskVersion, SkeskVersion, Tag},
@@ -326,9 +326,14 @@ impl<'a> Message<'a> {
     /// Construct a message from the decrypted edata.
     ///
     /// `is_nested` must be passed through from the source `Message`.
-    pub(super) fn from_edata(edata: Edata<'a>, is_nested: bool) -> Result<Self> {
+    pub(super) fn from_edata(
+        edata: Edata<'a>,
+        is_nested: bool,
+        maybe_unauthenticated: bool,
+    ) -> Result<Self> {
         let source = MessageReader::Edata(Box::new(edata));
-        Message::internal_from_bytes(source, is_nested)
+
+        Message::internal_from_bytes(source, is_nested, maybe_unauthenticated)
     }
 
     /// Construct a message from a compressed data reader.
@@ -339,15 +344,30 @@ impl<'a> Message<'a> {
         is_nested: bool,
     ) -> Result<Self> {
         let source = MessageReader::Compressed(Box::new(reader));
-        Message::internal_from_bytes(source, is_nested)
+        Message::internal_from_bytes(source, is_nested, false)
     }
 
-    fn internal_from_bytes(source: MessageReader<'a>, is_nested: bool) -> Result<Self> {
+    fn internal_from_bytes(
+        source: MessageReader<'a>,
+        is_nested: bool,
+        hide_errors: bool,
+    ) -> Result<Self> {
         let packets = crate::packet::PacketParser::new(source);
 
-        match MessageParser::new(packets, is_nested).run()? {
-            Some(message) => Ok(message),
-            None => {
+        match MessageParser::new(packets, is_nested).run()  {
+            Err(e) => {
+                if !hide_errors {
+                    Err(e)
+                } else {
+                    log::info!(
+                        "Error while parsing in Message::internal_from_bytes: {:?}",
+                        e
+                    );
+                    Err(Error::InUnauthenticatedData)
+                }
+            }
+            Ok(Some(message)) => Ok(message),
+            Ok(None) => {
                 bail!("no valid OpenPGP message found");
             }
         }
