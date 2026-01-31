@@ -425,7 +425,6 @@ impl PlainSecretParams {
                 PkeskBytes::Aead {
                     aead,
                     salt,
-                    sym_alg: _,
                     encrypted,
                 },
             ) => {
@@ -433,25 +432,32 @@ impl PlainSecretParams {
                     bail!("inconsistent key state");
                 };
 
-                let key = priv_key
-                    .decrypt(aead_key::EncryptionFields {
-                        data: encrypted,
-                        aead: *aead,
-                        version: match typ {
-                            EskType::V3_4 => PkeskVersion::V3,
-                            EskType::V6 => PkeskVersion::V6,
-                        },
-                        salt,
-                    })?
-                    .into();
+                let decrypted = priv_key.decrypt(aead_key::EncryptionFields {
+                    data: encrypted,
+                    aead: *aead,
+                    version: match typ {
+                        EskType::V3_4 => PkeskVersion::V3,
+                        EskType::V6 => PkeskVersion::V6,
+                    },
+                    salt,
+                })?;
 
                 return match typ {
-                    // We expect `sym_alg` to be set for v3 PKESK, and unset for v6 PKESK
-                    EskType::V3_4 => Ok(PlainSessionKey::V3_4 {
-                        key,
-                        sym_alg: priv_key.sym_alg,
+                    EskType::V3_4 => {
+                        // For v3/4 the cleartext is: "symmetric algorithm + session key"
+                        ensure!(
+                            decrypted.len() > 1,
+                            "Decrypted PKESK plaintext is implausibly short"
+                        );
+
+                        let sym_alg = (*decrypted)[0].into();
+                        let key = (*decrypted)[1..].into();
+
+                        Ok(PlainSessionKey::V3_4 { key, sym_alg })
+                    }
+                    EskType::V6 => Ok(PlainSessionKey::V6 {
+                        key: decrypted.into(),
                     }),
-                    EskType::V6 => Ok(PlainSessionKey::V6 { key }),
                 };
             }
             (PlainSecretParams::RSA(ref priv_key), PkeskBytes::Rsa { mpi }) => {
