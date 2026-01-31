@@ -540,6 +540,9 @@ fn create_signature(
 
     debug!("unlocked key");
     match *priv_key {
+        PlainSecretParams::AEAD(_) => {
+            bail!("AEAD can not be used for signing operations with asymmetric keys")
+        }
         PlainSecretParams::RSA(ref priv_key) => {
             let PublicParams::RSA(_) = pub_params else {
                 bail!("inconsistent key");

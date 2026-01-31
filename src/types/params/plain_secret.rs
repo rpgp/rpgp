@@ -18,16 +18,16 @@ use crate::crypto::{
 use crate::{
     composed::{PlainSessionKey, RawSessionKey},
     crypto::{
-        aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
-        elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, x448,
-        Decryptor,
+        aead::AeadAlgorithm, aead_key, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519,
+        ed448, elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519,
+        x448, Decryptor,
     },
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
         EcdhPublicParams, EncryptedSecretParams, EskType, KeyDetails, KeyVersion, Mpi, PkeskBytes,
-        PublicParams, S2kParams, StringToKey, Tag,
+        PkeskVersion, PublicParams, S2kParams, StringToKey, Tag,
     },
     util::TeeWriter,
 };
@@ -35,6 +35,7 @@ use crate::{
 /// Raw secret key material in unlocked/unencrypted form
 #[derive(Clone, PartialEq, Eq, derive_more::Debug, ZeroizeOnDrop)]
 pub enum PlainSecretParams {
+    AEAD(aead_key::SecretKey),
     RSA(rsa::SecretKey),
     DSA(dsa::SecretKey),
     ECDSA(ecdsa::SecretKey),
@@ -100,6 +101,16 @@ impl PlainSecretParams {
         public_params: &PublicParams,
     ) -> Result<Self> {
         let params = match (alg, public_params) {
+            (PublicKeyAlgorithm::AEAD, PublicParams::AEAD(pub_params)) => {
+                let key_size = pub_params.sym_alg.key_size();
+                let key = i.take_bytes(key_size)?;
+
+                let key = aead_key::SecretKey {
+                    key: key.to_vec().into(),
+                    sym_alg: pub_params.sym_alg,
+                };
+                Self::AEAD(key)
+            }
             (
                 PublicKeyAlgorithm::RSA
                 | PublicKeyAlgorithm::RSAEncrypt
@@ -409,6 +420,46 @@ impl PlainSecretParams {
         K: KeyDetails,
     {
         let decrypted_key = match (self, values) {
+            (
+                PlainSecretParams::AEAD(ref priv_key),
+                PkeskBytes::Aead {
+                    aead,
+                    salt,
+                    encrypted,
+                },
+            ) => {
+                let PublicParams::AEAD(_pub_param) = pub_params else {
+                    bail!("inconsistent key state");
+                };
+
+                let decrypted = priv_key.decrypt(aead_key::EncryptionFields {
+                    data: encrypted,
+                    aead: *aead,
+                    version: match typ {
+                        EskType::V3_4 => PkeskVersion::V3,
+                        EskType::V6 => PkeskVersion::V6,
+                    },
+                    salt,
+                })?;
+
+                return match typ {
+                    EskType::V3_4 => {
+                        // For v3/4 the cleartext is: "symmetric algorithm + session key"
+                        ensure!(
+                            decrypted.len() > 1,
+                            "Decrypted PKESK plaintext is implausibly short"
+                        );
+
+                        let sym_alg = (*decrypted)[0].into();
+                        let key = (*decrypted)[1..].into();
+
+                        Ok(PlainSessionKey::V3_4 { key, sym_alg })
+                    }
+                    EskType::V6 => Ok(PlainSessionKey::V6 {
+                        key: decrypted.into(),
+                    }),
+                };
+            }
             (PlainSecretParams::RSA(ref priv_key), PkeskBytes::Rsa { mpi }) => {
                 priv_key.decrypt(&mpi.to_owned())?
             }
@@ -699,6 +750,9 @@ impl PlainSecretParams {
 
     fn to_writer_raw<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
+            PlainSecretParams::AEAD(key) => {
+                key.to_writer(writer)?;
+            }
             PlainSecretParams::RSA(key) => {
                 key.to_writer(writer)?;
             }
@@ -765,6 +819,7 @@ impl PlainSecretParams {
 
     fn write_len_raw(&self) -> usize {
         match self {
+            PlainSecretParams::AEAD(key) => key.write_len(),
             PlainSecretParams::RSA(key) => key.write_len(),
             PlainSecretParams::DSA(key) => key.write_len(),
             PlainSecretParams::Elgamal(key) => key.write_len(),
@@ -849,6 +904,9 @@ mod tests {
 
         fn arbitrary_with(alg: Self::Parameters) -> Self::Strategy {
             match alg {
+                PublicKeyAlgorithm::AEAD => any::<aead_key::SecretKey>()
+                    .prop_map(PlainSecretParams::AEAD)
+                    .boxed(),
                 PublicKeyAlgorithm::RSA
                 | PublicKeyAlgorithm::RSAEncrypt
                 | PublicKeyAlgorithm::RSASign => any::<rsa::SecretKey>()

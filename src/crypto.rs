@@ -13,6 +13,7 @@ pub mod sym;
 
 // Encryption & Signing
 
+pub mod aead_key;
 pub mod dsa;
 pub mod ecdh;
 pub mod ecdsa;

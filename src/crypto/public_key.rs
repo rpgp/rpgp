@@ -5,6 +5,13 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 #[repr(u8)]
 #[non_exhaustive]
 pub enum PublicKeyAlgorithm {
+    /// AEAD (only for use in a "Persistent Symmetric Key Packet"!)
+    /// Ref <https://twisstle.gitlab.io/openpgp-persistent-symmetric-keys/#name-persistent-symmetric-key-al>
+    ///
+    /// CAUTION: This is not a public key algorithm, it may not be used with regular key packets.
+    /// Instead, this algorithm may be used with [`PersistentSymmetricKey`] packets.
+    AEAD = 0,
+
     /// RSA (Encrypt and Sign)
     RSA = 1,
     /// DEPRECATED: RSA (Encrypt-Only)
