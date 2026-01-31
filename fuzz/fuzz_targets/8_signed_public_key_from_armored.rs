@@ -19,7 +19,7 @@ fuzz_target!(|data: &[u8]| {
             // let _ = key.verify();
 
             let _ = key.to_armored_bytes(None.into());
-            let _ = key.expiration();
+            let _ = key.legacy_v3_expiration_days();
 
             // removed from the API in e111ba1a
             // // FUZZER RESULT this can panic on some inputs
