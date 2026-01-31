@@ -107,7 +107,7 @@ x25519-dalek = { version = "2.0.1", default-features = false, features = [
 
 # PQC
 ml-kem = { version = "0.2.1", features = ["zeroize", "deterministic"], optional = true }
-ml-dsa = { version = "0.0.4", features = ["zeroize"], optional = true }
+ml-dsa = { version = "0.1.0-rc.3", features = ["zeroize"], optional = true }
 slh-dsa = { version = "0.0.3", optional = true }
 replace_with = "0.1.8"
 
