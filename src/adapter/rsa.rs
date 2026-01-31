@@ -157,8 +157,8 @@ impl<D, T> KeyDetails for RsaSigner<T, D> {
         self.public_key.created_at()
     }
 
-    fn expiration(&self) -> Option<u16> {
-        self.public_key.expiration()
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        self.public_key.legacy_v3_expiration_days()
     }
 
     fn public_params(&self) -> &PublicParams {

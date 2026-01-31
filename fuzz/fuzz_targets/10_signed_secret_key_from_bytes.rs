@@ -22,7 +22,7 @@ fuzz_target!(|data: &[u8]| {
             // key verification is slow
             // let _ = key.verify();
             let _ = key.to_armored_bytes(None.into());
-            let _ = key.expiration();
+            let _ = key.legacy_v3_expiration_days();
             let _ = key.fingerprint();
             let _ = key.public_key();
 

@@ -29,7 +29,11 @@ pub trait KeyDetails: std::fmt::Debug {
     /// Returns the algorithm for this key.
     fn algorithm(&self) -> PublicKeyAlgorithm;
     fn created_at(&self) -> Timestamp;
-    fn expiration(&self) -> Option<u16>;
+
+    /// Expiration in days after key creation (only applicable to v3 keys!)
+    ///
+    /// <https://www.rfc-editor.org/rfc/rfc2440.html#section-5.5.2>
+    fn legacy_v3_expiration_days(&self) -> Option<u16>;
 
     /// Returns the parameters for the public portion of this key.
     fn public_params(&self) -> &PublicParams;
@@ -80,8 +84,8 @@ impl<T: KeyDetails> KeyDetails for &T {
         (*self).algorithm()
     }
 
-    fn expiration(&self) -> Option<u16> {
-        (*self).expiration()
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        (*self).legacy_v3_expiration_days()
     }
 
     fn created_at(&self) -> Timestamp {
@@ -116,8 +120,8 @@ impl KeyDetails for Box<&dyn SigningKey> {
         (**self).algorithm()
     }
 
-    fn expiration(&self) -> Option<u16> {
-        (**self).expiration()
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        (**self).legacy_v3_expiration_days()
     }
 
     fn created_at(&self) -> Timestamp {
