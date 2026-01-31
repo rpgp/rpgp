@@ -19,8 +19,6 @@ pub enum PkeskBytes {
     Aead {
         aead: AeadAlgorithm,
         salt: [u8; 32],
-        /// Set for v3 PKESK only (the sym_alg is not encrypted with the session key for Aead)
-        sym_alg: Option<SymmetricKeyAlgorithm>,
         encrypted: Bytes,
     },
     Rsa {
@@ -95,20 +93,11 @@ impl PkeskBytes {
                 let aead = i.read_u8()?.into();
                 let salt = i.read_arr()?;
 
-                // The one-octet algorithm identifier, if it was passed (in the case of a v3 PKESK packet).
-                let sym_alg = if version == 3 {
-                    let alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
-                    Some(alg)
-                } else {
-                    None
-                };
-
                 let encrypted = i.rest()?.freeze();
 
                 Ok(PkeskBytes::Aead {
                     aead,
                     salt,
-                    sym_alg,
                     encrypted,
                 })
             }
@@ -289,14 +278,10 @@ impl Serialize for PkeskBytes {
             PkeskBytes::Aead {
                 aead,
                 salt,
-                sym_alg,
                 encrypted,
             } => {
                 writer.write_u8((*aead).into())?;
                 writer.write_all(salt)?;
-                if let Some(sym_alg) = sym_alg {
-                    writer.write_u8((*sym_alg).into())?;
-                }
                 writer.write_all(encrypted)?;
             }
             PkeskBytes::Rsa { mpi } => {
