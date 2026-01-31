@@ -185,18 +185,11 @@ impl EncryptionKey for UnlockablePersistentSymmetricKey<'_> {
 
             aead.encrypt_in_place(&public_params.sym_alg, &key, &iv, &[], &mut buf)?;
 
-            let sym_alg = if matches!(typ, EskType::V6) {
-                Some(public_params.sym_alg)
-            } else {
-                None
-            };
-
             let encrypted: Bytes = buf.into();
 
             Ok(PkeskBytes::Aead {
                 aead,
                 salt,
-                sym_alg,
                 encrypted,
             })
         })?
