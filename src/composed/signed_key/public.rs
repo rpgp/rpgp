@@ -182,8 +182,8 @@ impl KeyDetails for SignedPublicKey {
         self.primary_key.created_at()
     }
 
-    fn v3_expiration_days(&self) -> Option<u16> {
-        self.primary_key.v3_expiration_days()
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        self.primary_key.legacy_v3_expiration_days()
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -351,8 +351,8 @@ impl KeyDetails for SignedPublicSubKey {
         self.key.created_at()
     }
 
-    fn v3_expiration_days(&self) -> Option<u16> {
-        self.key.v3_expiration_days()
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        self.key.legacy_v3_expiration_days()
     }
 
     fn public_params(&self) -> &PublicParams {
