@@ -73,10 +73,16 @@ impl PublicKey {
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
         created_at: Timestamp,
-        expiration: Option<u16>,
+        legacy_v3_expiration_days: Option<u16>,
         public_params: PublicParams,
     ) -> Result<Self> {
-        let inner = PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?;
+        let inner = PubKeyInner::new(
+            version,
+            algorithm,
+            created_at,
+            legacy_v3_expiration_days,
+            public_params,
+        )?;
 
         if let Some(len) = packet_header.packet_length().maybe_len() {
             ensure_eq!(
@@ -141,10 +147,16 @@ impl PublicSubkey {
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
         created_at: Timestamp,
-        expiration: Option<u16>,
+        legacy_v3_expiration_days: Option<u16>,
         public_params: PublicParams,
     ) -> Result<Self> {
-        let inner = PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?;
+        let inner = PubKeyInner::new(
+            version,
+            algorithm,
+            created_at,
+            legacy_v3_expiration_days,
+            public_params,
+        )?;
 
         if let Some(len) = packet_header.packet_length().maybe_len() {
             ensure_eq!(
@@ -233,7 +245,7 @@ pub struct PubKeyInner {
     version: KeyVersion,
     algorithm: PublicKeyAlgorithm,
     created_at: Timestamp,
-    expiration: Option<u16>,
+    legacy_v3_expiration_days: Option<u16>,
     public_params: PublicParams,
 }
 
@@ -249,7 +261,7 @@ impl PubKeyInner {
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
         created_at: Timestamp,
-        expiration: Option<u16>,
+        legacy_v3_expiration_days: Option<u16>,
         public_params: PublicParams,
     ) -> Result<Self> {
         // None of the ECC methods described in this document are allowed with deprecated version 3 keys.
@@ -350,7 +362,7 @@ impl PubKeyInner {
             version,
             algorithm,
             created_at,
-            expiration,
+            legacy_v3_expiration_days,
             public_params,
         })
     }
@@ -360,7 +372,7 @@ impl PubKeyInner {
 
         self.created_at.to_writer(writer)?;
         writer.write_u16::<BigEndian>(
-            self.expiration
+            self.legacy_v3_expiration_days
                 .expect("old key versions have an expiration"),
         )?;
         writer.write_u8(self.algorithm.into())?;
@@ -794,8 +806,8 @@ impl KeyDetails for PubKeyInner {
         self.algorithm
     }
 
-    fn expiration(&self) -> Option<u16> {
-        self.expiration
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        self.legacy_v3_expiration_days
     }
 
     fn created_at(&self) -> Timestamp {
@@ -952,8 +964,8 @@ impl KeyDetails for PublicKey {
         self.inner.created_at
     }
 
-    fn expiration(&self) -> Option<u16> {
-        self.inner.expiration
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        self.inner.legacy_v3_expiration_days
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -994,8 +1006,8 @@ impl KeyDetails for PublicSubkey {
         self.inner.created_at()
     }
 
-    fn expiration(&self) -> Option<u16> {
-        self.inner.expiration()
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        self.inner.legacy_v3_expiration_days()
     }
 
     fn public_params(&self) -> &PublicParams {

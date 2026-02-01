@@ -349,7 +349,7 @@ fn test_parse_details() {
     }
 
     assert_eq!(pk.created_at(), Timestamp::from_secs(14_0207_0261));
-    assert_eq!(pk.expiration(), None);
+    assert_eq!(pk.legacy_v3_expiration_days(), None);
 
     // TODO: examine subkey details
     assert_eq!(key.public_subkeys.len(), 1, "missing subkey");
@@ -1467,4 +1467,15 @@ fn test_locked_v6_sq() {
     })
     .unwrap()
     .unwrap();
+}
+
+#[test]
+fn test_expiring_v3() {
+    let _ = pretty_env_logger::try_init();
+
+    let (pkey, _) =
+        SignedPublicKey::from_armor_single(File::open("./tests/pgp6/expiring.pgp").unwrap())
+            .unwrap();
+
+    assert_eq!(pkey.primary_key.legacy_v3_expiration_days(), Some(365));
 }

@@ -248,8 +248,8 @@ impl KeyDetails for SecretKey {
         self.details.algorithm()
     }
 
-    fn expiration(&self) -> Option<u16> {
-        self.details.expiration()
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        self.details.legacy_v3_expiration_days()
     }
 
     fn created_at(&self) -> Timestamp {
@@ -281,8 +281,8 @@ impl KeyDetails for SecretSubkey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.details.algorithm()
     }
-    fn expiration(&self) -> Option<u16> {
-        self.details.expiration()
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        self.details.legacy_v3_expiration_days()
     }
 
     fn created_at(&self) -> Timestamp {

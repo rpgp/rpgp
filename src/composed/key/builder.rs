@@ -19,8 +19,7 @@ use crate::{
     errors::Result,
     packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
     types::{
-        self, CompressionAlgorithm, Duration, Password, PlainSecretParams, PublicParams, S2kParams,
-        Timestamp,
+        self, CompressionAlgorithm, Password, PlainSecretParams, PublicParams, S2kParams, Timestamp,
     },
 };
 
@@ -71,8 +70,6 @@ pub struct SecretKeyParams {
     // -- Metadata for the primary key
     #[builder(default = "Timestamp::now()")]
     created_at: Timestamp,
-    #[builder(default)]
-    expiration: Option<Duration>,
     #[builder(default = "true")]
     feature_seipd_v1: bool,
     #[builder(default)]
@@ -135,8 +132,6 @@ pub struct SubkeyParams {
     // -- Metadata for the primary key
     #[builder(default = "Timestamp::now()")]
     created_at: Timestamp,
-    #[builder(default)]
-    expiration: Option<Duration>,
 
     // -- Password-locking of this subkey
     #[builder(default)]
@@ -284,7 +279,7 @@ impl SecretKeyParams {
             self.version,
             self.key_type.to_alg(),
             self.created_at,
-            self.expiration.map(|v| v.as_secs() as u16),
+            None,
             public_params,
         )?;
         let primary_pub_key = crate::packet::PublicKey::from_inner(pub_key)?;
@@ -352,7 +347,7 @@ impl SecretKeyParams {
                         subkey.version,
                         subkey.key_type.to_alg(),
                         subkey.created_at,
-                        subkey.expiration.map(|v| v.as_secs() as u16),
+                        None,
                         public_params,
                     )?;
                     let pub_key = packet::PublicSubkey::from_inner(pub_key)?;
