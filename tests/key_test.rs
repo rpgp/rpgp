@@ -1468,3 +1468,14 @@ fn test_locked_v6_sq() {
     .unwrap()
     .unwrap();
 }
+
+#[test]
+fn test_expiring_v3() {
+    let _ = pretty_env_logger::try_init();
+
+    let (pkey, _) =
+        SignedPublicKey::from_armor_single(File::open("./tests/pgp6/expiring.pgp").unwrap())
+            .unwrap();
+
+    assert_eq!(pkey.primary_key.legacy_v3_expiration_days(), Some(365));
+}
