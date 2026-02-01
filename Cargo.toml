@@ -32,7 +32,7 @@ derive_builder = "0.20.0"
 hex = "0.4"
 nom = "8.0"
 log = "0.4.22"
-smallvec = "1.10.0"
+smallvec = "1.15.1"
 derive_more = { version = "2.0.1", features = ["debug", "display"] }
 regex = "1.7"
 snafu = { version = "0.8.5", features = ["rust_1_81"] }
