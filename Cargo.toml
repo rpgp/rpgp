@@ -62,7 +62,7 @@ des = "0.8"
 digest = "0.10.7"
 dsa = "0.6.3"
 ecdsa = "0.16.9"
-ed25519-dalek = { version = "2.1.1", default-features = false, features = ["std", "zeroize", "fast", "rand_core"] }
+ed25519-dalek = { version = "2.2.0", default-features = false, features = ["std", "zeroize", "fast", "rand_core"] }
 elliptic-curve = "0.13"
 generic-array = "0.14.6"
 idea = "0.5"
