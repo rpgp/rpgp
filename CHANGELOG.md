@@ -2,6 +2,55 @@
 
 All notable changes to rpgp will be documented in this file.
 
+## [0.19.0](https://github.com/rpgp/rpgp/compare/v0.18.0..0.19.0) - 2026-02-02
+
+### ⛰️  Features
+
+- Add helper to use multiple secret keys for decryption - ([4176c07](https://github.com/rpgp/rpgp/commit/4176c073484941ec971d94e7e87fc62909205d76))
+- Add back capability to build a SignedPublicKey from a key held externally ([#678](https://github.com/rpgp/rpgp/issues/678)) - ([066d0c5](https://github.com/rpgp/rpgp/commit/066d0c54dc77a60a4527cb55802947d866c14766))
+- Expand zeroizing of secret values - ([4db0b6d](https://github.com/rpgp/rpgp/commit/4db0b6d8a15171de9b5cd8df36aa66cb09f3c908))
+
+### 🐛 Bug Fixes
+
+- Support RSA keys up to 8k by default ([#664](https://github.com/rpgp/rpgp/issues/664)) - ([4c42ec1](https://github.com/rpgp/rpgp/commit/4c42ec1105aa1596fcc161f30a1081d943edab09))
+- Loosen trait requirements to KeyDetails, where appropriate ([#680](https://github.com/rpgp/rpgp/issues/680)) - ([9221ea1](https://github.com/rpgp/rpgp/commit/9221ea1361c9ef8e899a7f613a294b9da0d8f3ec))
+- Adds CertCasual ([#691](https://github.com/rpgp/rpgp/issues/691)) - ([a3e387c](https://github.com/rpgp/rpgp/commit/a3e387cd57474810ed33cd502a8ce98415788d6a))
+- Ensure trailing packets are consumed - ([16c2457](https://github.com/rpgp/rpgp/commit/16c2457867476bcb9942c0a13d70d46ef9e350b8))
+- Recursion issues in deeply nested messages - ([e82f2c7](https://github.com/rpgp/rpgp/commit/e82f2c7494ba277d62fd372d69b2c008473bbef8))
+- Handling of multiple trailing zeros in ecdh for malformed-artifact-compat - ([7eb0682](https://github.com/rpgp/rpgp/commit/7eb0682f43b3079c2d556a69d33c9bf62e2cc602))
+
+### 🚜 Refactor
+
+- [**breaking**] Drop encrypt methods from secret key types ([#670](https://github.com/rpgp/rpgp/issues/670)) - ([cf8a770](https://github.com/rpgp/rpgp/commit/cf8a77005e64ccd853b8afeb4977bc368434202f))
+- [**breaking**] Simplify key generation by always signing immediately - ([e111ba1](https://github.com/rpgp/rpgp/commit/e111ba1ac0ed0cda666f191bd2555d6056ba737b))
+- [**breaking**] Introduce EncryptionKey trait ([#668](https://github.com/rpgp/rpgp/issues/668)) - ([4a85df9](https://github.com/rpgp/rpgp/commit/4a85df903e89f8041ead910690c40ffccadf111c))
+- [**breaking**] New structure for key traits ([#672](https://github.com/rpgp/rpgp/issues/672)) - ([90999d9](https://github.com/rpgp/rpgp/commit/90999d9c0f1ffcb6771222a01c7d5cf9cea34983))
+- [**breaking**] Adjust subpacket name "Issuer Key ID", to align with RFC 9580 ([#674](https://github.com/rpgp/rpgp/issues/674)) - ([23214a8](https://github.com/rpgp/rpgp/commit/23214a8af54dda061e719fa8a3587af641f2d504))
+- [**breaking**] Replace chrono::DateTime with custom Timestamp ([#673](https://github.com/rpgp/rpgp/issues/673)) - ([2435971](https://github.com/rpgp/rpgp/commit/2435971151a7bdd51a4e72df77f6bbdade823168))
+- [**breaking**] Verify -> verify_bindings ([#675](https://github.com/rpgp/rpgp/issues/675)) - ([7ac79b7](https://github.com/rpgp/rpgp/commit/7ac79b72a0bacc8644f1f206bcebdd272d05a5a7))
+- [**breaking**] Introduce DecryptionKey ([#679](https://github.com/rpgp/rpgp/issues/679)) - ([86881b3](https://github.com/rpgp/rpgp/commit/86881b329268fe1359a835dd8026b519eb0066e3))
+- [**breaking**] Don't export symbols in duplicate  - ([96d94e3](https://github.com/rpgp/rpgp/commit/96d94e310feffaaf2ce65e8c7689f5ba259f4d6e))
+- Move support for large rsa keys into a separate feature ([#696](https://github.com/rpgp/rpgp/issues/696)) - ([135017f](https://github.com/rpgp/rpgp/commit/135017f030fbda2e01c8e550e27b7396db51cc68))
+- Move some unused decryption code behind cfg(test) - ([73cb9d1](https://github.com/rpgp/rpgp/commit/73cb9d1c737629f49a5920136a50b1bb2a1ced83))
+- [**breaking**] Distinguish can_encrypt_comms and can_encrypt_storage in key builder ([#685](https://github.com/rpgp/rpgp/issues/685)) - ([7e3b6c0](https://github.com/rpgp/rpgp/commit/7e3b6c0af21e4a45c2a2dcba67f0b649e0b6e456))
+- [**breaking**] Clearly mark v3 key expiration fields as legacy ([#695](https://github.com/rpgp/rpgp/issues/695)) - ([f2aefc8](https://github.com/rpgp/rpgp/commit/f2aefc8914b3f00d00b3618c102fa6563107e185))
+
+### 📚 Documentation
+
+- Reorganize some module-level documentation ([#677](https://github.com/rpgp/rpgp/issues/677)) - ([e2242d6](https://github.com/rpgp/rpgp/commit/e2242d617f284db69c38e9f3f27dff9a92b672ec))
+- Add some more API docs ([#640](https://github.com/rpgp/rpgp/issues/640)) - ([29a668e](https://github.com/rpgp/rpgp/commit/29a668e3e6ae10cd1759933e5c9c7466299d271c))
+
+### 🧪 Testing
+
+- *(fuzz)* Port to current API ([#701](https://github.com/rpgp/rpgp/issues/701)) - ([5fd74d0](https://github.com/rpgp/rpgp/commit/5fd74d059dd9fa567afa35679b2484c602f73056))
+- Armor with very long line ([#704](https://github.com/rpgp/rpgp/issues/704)) - ([36125a5](https://github.com/rpgp/rpgp/commit/36125a57088a943e30ef7d9147d35f136921e690))
+- Cleartext message with "NotDashEscaped" header - ([21b56ad](https://github.com/rpgp/rpgp/commit/21b56ad934330ae063be9d084c613ff252c6058c))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(cargo-deny)* Ignore ml-dsa advisory for now ([#710](https://github.com/rpgp/rpgp/issues/710)) - ([19e469b](https://github.com/rpgp/rpgp/commit/19e469b31eb45a003013db284f3dc5ecd23e8a39))
+- Update zeroize_derive to 1.4.3 - ([d155807](https://github.com/rpgp/rpgp/commit/d1558076aa9cc1b17344d677baacbe51b0422905))
+
 ## [0.18.0](https://github.com/rpgp/rpgp/compare/v0.17.0..0.18.0) - 2025-11-16
 
 ### ⛰️  Features
