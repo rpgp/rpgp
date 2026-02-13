@@ -8,7 +8,7 @@ extern crate smallvec;
 use std::{fs::File, io::Read, path::Path};
 
 use buffer_redux::BufReader;
-use num_traits::ToPrimitive;
+use chacha20::ChaCha20Rng;
 use pgp::{
     armor,
     composed::{
@@ -31,7 +31,6 @@ use pgp::{
     },
 };
 use rand::SeedableRng;
-use rand_chacha::ChaChaRng;
 use rsa::traits::PublicKeyParts;
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
@@ -152,31 +151,31 @@ parse_dumps!(
     (
         test_parse_dumps_0,
         0,
-        17_711,
+        17_710,
         // Hash::Other(4)
         0,
-        3282,
+        3283,
         20_993
     ),
     (
         test_parse_dumps_1,
         1,
-        17_561,
+        17_560,
         // - Hash::Other(4)
         // - Elgamal verify
         6,
-        3429,
+        3430,
         20_996
     ),
     (
         test_parse_dumps_2,
         2,
-        17_586,
+        17_585,
         // - Hash::Other(4)
         // - Hash::Other(5)
         // - Elgamal verify
         3,
-        3402,
+        3403,
         20_991
     ),
     (
@@ -211,19 +210,19 @@ parse_dumps!(
     (
         test_parse_dumps_6,
         6,
-        17_696,
+        17_695,
         // - Elgamal verify
         1,
-        3300,
+        3301,
         20_997
     ),
     (
         test_parse_dumps_7,
         7,
-        17_716,
+        17_715,
         // - Elgamal verify
         3,
-        3287,
+        3288,
         21_006
     ),
     (
@@ -343,7 +342,7 @@ fn test_parse_details() {
     match pk.public_params() {
         PublicParams::RSA(public_params) => {
             assert_eq!(Mpi::from(public_params.key.n().clone()), primary_n);
-            assert_eq!(public_params.key.e().to_u64().unwrap(), 0x0001_0001);
+            assert_eq!(public_params.key.e(), &rsa::BoxedUint::from(0x0001_0001u64));
         }
         _ => panic!("wrong public params: {:?}", pk.public_params()),
     }
@@ -1285,7 +1284,7 @@ fn test_invalid() {
 fn test_locked_key() {
     let p = Path::new("./tests/key-with-password-123.asc");
     let mut file = read_file(p.to_path_buf());
-    let mut rng = ChaChaRng::from_seed([0u8; 32]);
+    let mut rng = ChaCha20Rng::from_seed([0u8; 32]);
 
     let mut buf = vec![];
     file.read_to_end(&mut buf).unwrap();

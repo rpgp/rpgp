@@ -447,9 +447,9 @@ impl<R: io::Read> io::Read for CompressedDataPartialGenerator<R> {
 
 #[cfg(test)]
 mod tests {
+    use chacha20::ChaCha8Rng;
     use proptest::prelude::*;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
+    use rand::{RngExt, SeedableRng};
 
     use super::*;
     use crate::packet::Packet;
