@@ -4,11 +4,12 @@
 
 use curve25519_dalek::{MontgomeryPoint, Scalar};
 use pgp::{
-    composed::{Deserializable, Message, SignedSecretKey},
+    composed::{Deserializable, Esk, Message, SignedSecretKey},
     crypto::ecdh::SecretKey,
+    packet::PublicKeyEncryptedSessionKey,
     types::{
-        EcdhKdfType, EcdhPublicParams, KeyDetails, Password, PlainSecretParams, PublicParams,
-        SecretParams,
+        EcdhKdfType, EcdhPublicParams, KeyDetails, KeyId, Mpi, Password, PkeskBytes,
+        PlainSecretParams, PublicParams, SecretParams,
     },
 };
 
@@ -43,7 +44,7 @@ zWBsBR8VnoOVfEE+VQk6YAi7cTSjcMjfsIez9FYtAQDKo9aCMhUohYyqvhZjn8aS
 =lESj
 -----END PGP PRIVATE KEY BLOCK-----";
 
-const _ENCYPTED_MESSAGE: &str = "-----BEGIN PGP MESSAGE-----
+const ENCYPTED_MESSAGE: &str = "-----BEGIN PGP MESSAGE-----
 
 wV4DFVflUJOTBRASAQdAdvFLPtXcvwSkEwbwmnjOrL6eZLh5ysnVpbPlgZbZwjgw
 yGZuVVMAK/ypFfebDf4D/rlEw3cysv213m8aoK8nAUO8xQX3XQq3Sg+EGm0BNV8E
@@ -52,7 +53,7 @@ yGZuVVMAK/ypFfebDf4D/rlEw3cysv213m8aoK8nAUO8xQX3XQq3Sg+EGm0BNV8E
 =uOPV
 -----END PGP MESSAGE-----";
 
-const _PROXY_PARAMETER_K: &[u8] = &[
+const PROXY_PARAMETER_K: &[u8] = &[
     0x04, 0xb6, 0x57, 0x04, 0x5f, 0xc9, 0xc0, 0x75, 0x9c, 0x5f, 0xd1, 0x1d, 0x8c, 0xa7, 0x5a, 0x2b,
     0x1a, 0xa1, 0x01, 0xc9, 0xc8, 0x96, 0x49, 0x0b, 0xce, 0xc1, 0x00, 0xf9, 0x41, 0xe9, 0x7e, 0x0e,
 ];
@@ -121,11 +122,62 @@ fn compute_proxy_from_pgp(recipient: &SecretParams, forwardee: &SecretParams) ->
     compute_proxy_parameter(&r.to_bytes_rev(), &f.to_bytes_rev())
 }
 
+/// Transform PKESK
+fn transform_pkesk(
+    pkesk: PublicKeyEncryptedSessionKey,
+    forwardee_key_id: KeyId,
+    k: &[u8; 32],
+) -> PublicKeyEncryptedSessionKey {
+    let PublicKeyEncryptedSessionKey::V3 {
+        packet_header,
+        mut id,
+        pk_algo,
+        values,
+    } = pkesk
+    else {
+        unimplemented!()
+    };
+
+    if id != KeyId::WILDCARD {
+        id = forwardee_key_id;
+    }
+
+    let PkeskBytes::Ecdh {
+        public_point,
+        encrypted_session_key,
+    } = values
+    else {
+        unimplemented!()
+    };
+
+    assert_eq!(public_point.len(), 33);
+    assert_eq!(public_point.as_ref().first(), Some(&0x40));
+
+    let public = public_point.as_ref()[1..33].to_vec();
+
+    let mut transformed = transform_ecdh_ephemeral(&public.try_into().unwrap(), k)
+        .expect("FIXME")
+        .to_vec();
+    transformed.insert(0, 0x40);
+
+    let values = PkeskBytes::Ecdh {
+        public_point: Mpi::from_slice(&transformed),
+        encrypted_session_key,
+    };
+
+    PublicKeyEncryptedSessionKey::V3 {
+        packet_header,
+        id,
+        pk_algo,
+        values,
+    }
+}
+
 /// Implements TransformMessage( eB, k );
 ///   Input:
 ///   eB - the ECDH ephemeral public key decoded from the PKESK
 ///   k - the proxy transformation parameter retrieved from storage
-fn transform_message(eb: &[u8; 32], k: &[u8; 32]) -> Option<[u8; 32]> {
+fn transform_ecdh_ephemeral(eb: &[u8; 32], k: &[u8; 32]) -> Option<[u8; 32]> {
     let ephemeral = MontgomeryPoint(*eb);
 
     // if 0x08 * eB == 0 then abort
@@ -183,7 +235,7 @@ fn forward_transform_success_a_2() {
         .expect("decode");
 
     let Some(transf) =
-        transform_message(&eph.try_into().unwrap(), &proxy_param.try_into().unwrap())
+        transform_ecdh_ephemeral(&eph.try_into().unwrap(), &proxy_param.try_into().unwrap())
     else {
         unimplemented!()
     };
@@ -202,7 +254,7 @@ fn forward_transform_small_subgroup_a_2() {
     let small =
         hex::decode("ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f").unwrap();
 
-    let res = transform_message(&small.try_into().unwrap(), &[0; 32]);
+    let res = transform_ecdh_ephemeral(&small.try_into().unwrap(), &[0; 32]);
 
     assert_eq!(res, None);
 }
@@ -280,4 +332,42 @@ fn forward_test_v4() {
     assert_eq!(plain, PLAINTEXT.as_bytes());
 
     // TODO: implement transformation?
+}
+
+#[test]
+fn forward_transform_pkesk() {
+    let _ = pretty_env_logger::try_init();
+
+    let (forwardee, _) = SignedSecretKey::from_string(FORWARDEE_KEY).expect("FORWARDEE_KEY");
+
+    let (msg, _) = Message::from_string(ENCYPTED_MESSAGE).unwrap();
+
+    let Message::Encrypted { esk, .. } = msg else {
+        unimplemented!()
+    };
+
+    assert_eq!(esk.len(), 1);
+
+    let Esk::PublicKeyEncryptedSessionKey(pkesk) = &esk[0] else {
+        unimplemented!();
+    };
+
+    let key_id = forwardee.secret_subkeys[0].key.legacy_key_id();
+
+    let transformed_pkesk =
+        transform_pkesk(pkesk.clone(), key_id, PROXY_PARAMETER_K.try_into().unwrap());
+
+    eprintln!("transformed pkesk {:#02x?}", transformed_pkesk);
+
+    // -- compare with transformed expectation
+
+    let (msg, _) = Message::from_string(TRANSFORMED_MESSAGE).unwrap();
+    let Message::Encrypted { esk, .. } = msg else {
+        unimplemented!()
+    };
+    let Esk::PublicKeyEncryptedSessionKey(expected) = &esk[0] else {
+        unimplemented!();
+    };
+
+    assert_eq!(&transformed_pkesk, expected);
 }
