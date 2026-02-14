@@ -1,9 +1,15 @@
 #![cfg(feature = "draft-wussler-openpgp-forwarding")]
 
 //! Tests from https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-end-to-end-tests
+
+use curve25519_dalek::Scalar;
 use pgp::{
     composed::{Deserializable, Message, SignedSecretKey},
-    types::{EcdhKdfType, EcdhPublicParams, KeyDetails, Password, PublicParams},
+    crypto::ecdh::SecretKey,
+    types::{
+        EcdhKdfType, EcdhPublicParams, KeyDetails, Password, PlainSecretParams, PublicParams,
+        SecretParams,
+    },
 };
 
 const RECIPIENT_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
@@ -61,6 +67,105 @@ yGZuVVMAK/ypFfebDf4D/rlEw3cysv213m8aoK8nAUO8xQX3XQq3Sg+EGm0BNV8E
 7lM8r1DumNnO8srssko2qIja
 =pVRa
 -----END PGP MESSAGE-----";
+
+/// Computing the proxy parameter
+///
+/// Given the recipient and forwardee private key material, compute the proxy transformation parameter.
+///
+/// See <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-computing-the-proxy-paramet>
+///
+///   Implements ComputeProxyParameter( dB, dC );
+///    Input:
+///     dB - the recipient's private key integer
+///     dC - the forwardee's private key integer
+///     n - the size of the field of Curve25519
+///
+/// k = dB/dC mod n
+/// return k
+///
+/// FIXME: what byte ordering should this fn take?
+fn compute_proxy_parameter(db: &[u8; 32], dc: &[u8; 32]) -> [u8; 32] {
+    let rec = Scalar::from_bytes_mod_order(
+        db.into_iter()
+            .copied()
+            .rev() // FIXME ?
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap(),
+    );
+    let forw = Scalar::from_bytes_mod_order(
+        dc.into_iter()
+            .copied()
+            .rev() // FIXME ?
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap(),
+    );
+
+    // k is implicitly reduced to the group order
+    let k = rec * (forw.invert());
+
+    k.to_bytes()
+}
+
+/// Given the recipient and forwardee encryption subkeys parameters, compute the proxy transformation parameter.
+fn compute_proxy_from_pgp(recipient: &SecretParams, forwardee: &SecretParams) -> [u8; 32] {
+    let SecretParams::Plain(PlainSecretParams::ECDH(SecretKey::Curve25519(r))) = recipient else {
+        unimplemented!()
+    };
+
+    let SecretParams::Plain(PlainSecretParams::ECDH(SecretKey::Curve25519(f))) = forwardee else {
+        unimplemented!()
+    };
+
+    compute_proxy_parameter(&r.to_bytes_rev(), &f.to_bytes_rev())
+}
+
+#[test]
+fn proxy_param_a_1() {
+    // Test vectors from
+    // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-proxy-parameter>
+
+    let rec_integer =
+        hex::decode("5989216365053dcf9e35a04b2a1fc19b83328426be6bb7d0a2ae78105e2e3188")
+            .expect("decode");
+    let forw_integer =
+        hex::decode("684da6225bcd44d880168fc5bec7d2f746217f014c8019005f144cc148f16a00")
+            .expect("decode");
+
+    let k = compute_proxy_parameter(
+        &rec_integer.try_into().unwrap(),
+        &forw_integer.try_into().unwrap(),
+    );
+
+    assert_eq!(
+        &k[..],
+        hex::decode("e89786987c3a3ec761a679bc372cd11a425eda72bd5265d78ad0f5f32ee64f02").unwrap()
+    );
+}
+
+#[test]
+fn proxy_param_end_to_end() {
+    // calculate proxy param for end-to-end test
+    //
+    // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-end-to-end-tests>
+
+    let _ = pretty_env_logger::try_init();
+
+    let (recipient, _) = SignedSecretKey::from_string(RECIPIENT_KEY).expect("RECIPIENT_KEY");
+
+    let recipient_key = &recipient.secret_subkeys[0].key;
+
+    let (forwardee, _) = SignedSecretKey::from_string(FORWARDEE_KEY).expect("FORWARDEE_KEY");
+    let forwardee_key = &forwardee.secret_subkeys[0].key;
+
+    let k = compute_proxy_from_pgp(recipient_key.secret_params(), forwardee_key.secret_params());
+
+    assert_eq!(
+        &k[..],
+        hex::decode("04b657045fc9c0759c5fd11d8ca75a2b1aa101c9c896490bcec100f941e97e0e").unwrap()
+    );
+}
 
 #[test]
 fn test_forwarding_v4() {

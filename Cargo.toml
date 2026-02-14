@@ -130,7 +130,7 @@ escape_string = "0.1.2"
 testresult = "0.4.1"
 
 [features]
-default = ["bzip2"]
+default = ["bzip2", "draft-wussler-openpgp-forwarding"] # XX: remove "draft-wussler-openpgp-forwarding" again
 
 # See README.md for features documentation
 bzip2 = ["dep:bzip2"]
