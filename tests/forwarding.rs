@@ -2,7 +2,7 @@
 
 //! Tests from https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-end-to-end-tests
 
-use curve25519_dalek::Scalar;
+use curve25519_dalek::{MontgomeryPoint, Scalar};
 use pgp::{
     composed::{Deserializable, Message, SignedSecretKey},
     crypto::ecdh::SecretKey,
@@ -121,8 +121,34 @@ fn compute_proxy_from_pgp(recipient: &SecretParams, forwardee: &SecretParams) ->
     compute_proxy_parameter(&r.to_bytes_rev(), &f.to_bytes_rev())
 }
 
+/// Implements TransformMessage( eB, k );
+///   Input:
+///   eB - the ECDH ephemeral public key decoded from the PKESK
+///   k - the proxy transformation parameter retrieved from storage
+fn transform_message(eb: &[u8; 32], k: &[u8; 32]) -> Option<[u8; 32]> {
+    let ephemeral = MontgomeryPoint(*eb);
+
+    // if 0x08 * eB == 0 then abort
+    if (Scalar::from(8u8) * ephemeral).as_bytes() == &[0; 32] {
+        return None;
+    }
+
+    // eC = k * eB
+    // return eC
+
+    let k = Scalar::from_bytes_mod_order(*k);
+
+    eprintln!("k {:02x?}", k.as_bytes());
+
+    let ec = (k * ephemeral).to_bytes();
+
+    eprintln!("ec {:02x?}", ec.as_slice());
+
+    Some(ec)
+}
+
 #[test]
-fn proxy_param_a_1() {
+fn forward_proxy_param_a_1() {
     // Test vectors from
     // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-proxy-parameter>
 
@@ -145,7 +171,44 @@ fn proxy_param_a_1() {
 }
 
 #[test]
-fn proxy_param_end_to_end() {
+fn forward_transform_success_a_2() {
+    // Successful transformation test from
+    // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-message-transformation>
+
+    let proxy_param =
+        hex::decode("83c57cbe645a132477af55d5020281305860201608e81a1de43ff83f245fb302")
+            .expect("decode");
+
+    let eph = hex::decode("aaea7b3bb92f5f545d023ccb15b50f84ba1bdd53be7f5cfadcfb0106859bf77e")
+        .expect("decode");
+
+    let Some(transf) =
+        transform_message(&eph.try_into().unwrap(), &proxy_param.try_into().unwrap())
+    else {
+        unimplemented!()
+    };
+
+    let expect_transformed =
+        hex::decode("ec31bb937d7ef08c451d516be1d7976179aa7171eea598370661d1152b85005a").unwrap();
+
+    assert_eq!(transf.as_slice(), expect_transformed.as_slice())
+}
+
+#[test]
+fn forward_transform_small_subgroup_a_2() {
+    // Small subgroup detection test from
+    // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-message-transformation>
+
+    let small =
+        hex::decode("ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f").unwrap();
+
+    let res = transform_message(&small.try_into().unwrap(), &[0; 32]);
+
+    assert_eq!(res, None);
+}
+
+#[test]
+fn forward_proxy_param_end_to_end() {
     // calculate proxy param for end-to-end test
     //
     // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-end-to-end-tests>
@@ -168,7 +231,7 @@ fn proxy_param_end_to_end() {
 }
 
 #[test]
-fn test_forwarding_v4() {
+fn forward_test_v4() {
     let _ = pretty_env_logger::try_init();
 
     let (_recipient, _) = SignedSecretKey::from_string(RECIPIENT_KEY).expect("RECIPIENT_KEY");
