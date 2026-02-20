@@ -2,14 +2,13 @@
 
 //! Tests from https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-end-to-end-tests
 
-use curve25519_dalek::{MontgomeryPoint, Scalar};
+use curve25519_dalek::Scalar;
 use pgp::{
     composed::{Deserializable, Esk, Message, SignedSecretKey},
     crypto::ecdh::SecretKey,
-    packet::PublicKeyEncryptedSessionKey,
     types::{
-        EcdhKdfType, EcdhPublicParams, KeyDetails, KeyId, Mpi, Password, PkeskBytes,
-        PlainSecretParams, PublicParams, SecretParams,
+        EcdhKdfType, EcdhPublicParams, KeyDetails, Password, PlainSecretParams, PublicParams,
+        SecretParams,
     },
 };
 
@@ -87,7 +86,7 @@ yGZuVVMAK/ypFfebDf4D/rlEw3cysv213m8aoK8nAUO8xQX3XQq3Sg+EGm0BNV8E
 /// FIXME: what byte ordering should this fn take?
 fn compute_proxy_parameter(db: &[u8; 32], dc: &[u8; 32]) -> [u8; 32] {
     let rec = Scalar::from_bytes_mod_order(
-        db.into_iter()
+        db.iter()
             .copied()
             .rev() // FIXME ?
             .collect::<Vec<_>>()
@@ -95,7 +94,7 @@ fn compute_proxy_parameter(db: &[u8; 32], dc: &[u8; 32]) -> [u8; 32] {
             .unwrap(),
     );
     let forw = Scalar::from_bytes_mod_order(
-        dc.into_iter()
+        dc.iter()
             .copied()
             .rev() // FIXME ?
             .collect::<Vec<_>>()
@@ -122,83 +121,6 @@ fn compute_proxy_from_pgp(recipient: &SecretParams, forwardee: &SecretParams) ->
     compute_proxy_parameter(&r.to_bytes_rev(), &f.to_bytes_rev())
 }
 
-/// Transform PKESK
-fn transform_pkesk(
-    pkesk: PublicKeyEncryptedSessionKey,
-    forwardee_key_id: KeyId,
-    k: &[u8; 32],
-) -> PublicKeyEncryptedSessionKey {
-    let PublicKeyEncryptedSessionKey::V3 {
-        packet_header,
-        mut id,
-        pk_algo,
-        values,
-    } = pkesk
-    else {
-        unimplemented!()
-    };
-
-    if id != KeyId::WILDCARD {
-        id = forwardee_key_id;
-    }
-
-    let PkeskBytes::Ecdh {
-        public_point,
-        encrypted_session_key,
-    } = values
-    else {
-        unimplemented!()
-    };
-
-    assert_eq!(public_point.len(), 33);
-    assert_eq!(public_point.as_ref().first(), Some(&0x40));
-
-    let public = public_point.as_ref()[1..33].to_vec();
-
-    let mut transformed = transform_ecdh_ephemeral(&public.try_into().unwrap(), k)
-        .expect("FIXME")
-        .to_vec();
-    transformed.insert(0, 0x40);
-
-    let values = PkeskBytes::Ecdh {
-        public_point: Mpi::from_slice(&transformed),
-        encrypted_session_key,
-    };
-
-    PublicKeyEncryptedSessionKey::V3 {
-        packet_header,
-        id,
-        pk_algo,
-        values,
-    }
-}
-
-/// Implements TransformMessage( eB, k );
-///   Input:
-///   eB - the ECDH ephemeral public key decoded from the PKESK
-///   k - the proxy transformation parameter retrieved from storage
-fn transform_ecdh_ephemeral(eb: &[u8; 32], k: &[u8; 32]) -> Option<[u8; 32]> {
-    let ephemeral = MontgomeryPoint(*eb);
-
-    // if 0x08 * eB == 0 then abort
-    if (Scalar::from(8u8) * ephemeral).as_bytes() == &[0; 32] {
-        return None;
-    }
-
-    // eC = k * eB
-    // return eC
-
-    let k = Scalar::from_bytes_mod_order(*k);
-
-    eprintln!("k {:02x?}", k.as_bytes());
-
-    let ec = (k * ephemeral).to_bytes();
-
-    eprintln!("ec {:02x?}", ec.as_slice());
-
-    Some(ec)
-}
-
 #[test]
 fn forward_proxy_param_a_1() {
     // Test vectors from
@@ -220,43 +142,6 @@ fn forward_proxy_param_a_1() {
         &k[..],
         hex::decode("e89786987c3a3ec761a679bc372cd11a425eda72bd5265d78ad0f5f32ee64f02").unwrap()
     );
-}
-
-#[test]
-fn forward_transform_success_a_2() {
-    // Successful transformation test from
-    // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-message-transformation>
-
-    let proxy_param =
-        hex::decode("83c57cbe645a132477af55d5020281305860201608e81a1de43ff83f245fb302")
-            .expect("decode");
-
-    let eph = hex::decode("aaea7b3bb92f5f545d023ccb15b50f84ba1bdd53be7f5cfadcfb0106859bf77e")
-        .expect("decode");
-
-    let Some(transf) =
-        transform_ecdh_ephemeral(&eph.try_into().unwrap(), &proxy_param.try_into().unwrap())
-    else {
-        unimplemented!()
-    };
-
-    let expect_transformed =
-        hex::decode("ec31bb937d7ef08c451d516be1d7976179aa7171eea598370661d1152b85005a").unwrap();
-
-    assert_eq!(transf.as_slice(), expect_transformed.as_slice())
-}
-
-#[test]
-fn forward_transform_small_subgroup_a_2() {
-    // Small subgroup detection test from
-    // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-message-transformation>
-
-    let small =
-        hex::decode("ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f").unwrap();
-
-    let res = transform_ecdh_ephemeral(&small.try_into().unwrap(), &[0; 32]);
-
-    assert_eq!(res, None);
 }
 
 #[test]
@@ -355,11 +240,9 @@ fn forward_transform_pkesk() {
     let key_id = forwardee.secret_subkeys[0].key.legacy_key_id();
 
     let transformed_pkesk =
-        transform_pkesk(pkesk.clone(), key_id, PROXY_PARAMETER_K.try_into().unwrap());
+        pkesk.forwarding_transform(key_id, PROXY_PARAMETER_K.try_into().unwrap());
 
-    eprintln!("transformed pkesk {:#02x?}", transformed_pkesk);
-
-    // -- compare with transformed expectation
+    // -- compare with expected transformed pkesk
 
     let (msg, _) = Message::from_string(TRANSFORMED_MESSAGE).unwrap();
     let Message::Encrypted { esk, .. } = msg else {

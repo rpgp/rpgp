@@ -2,6 +2,7 @@ use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
+use curve25519_dalek::{MontgomeryPoint, Scalar};
 use rand::{CryptoRng, Rng};
 use zeroize::Zeroizing;
 
@@ -13,7 +14,7 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PkeskBytes,
+        EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, PkeskBytes,
         PkeskVersion, PublicParams, Tag,
     },
 };
@@ -289,6 +290,75 @@ impl PublicKeyEncryptedSessionKey {
             Self::Other { version, .. } => PkeskVersion::Other(*version),
         }
     }
+
+    /// Transform PKESK
+    pub fn forwarding_transform(&self, forwardee_key_id: KeyId, k: [u8; 32]) -> Self {
+        let PublicKeyEncryptedSessionKey::V3 {
+            packet_header,
+            id,
+            values,
+            pk_algo,
+            ..
+        } = self
+        else {
+            unimplemented!()
+        };
+
+        let new_id = if id == &KeyId::WILDCARD {
+            KeyId::WILDCARD
+        } else {
+            forwardee_key_id
+        };
+
+        let mut values = values.clone();
+
+        let PkeskBytes::Ecdh {
+            ref mut public_point,
+            ..
+        } = values
+        else {
+            unimplemented!()
+        };
+
+        assert_eq!(public_point.len(), 33);
+        assert_eq!(public_point.as_ref().first(), Some(&0x40));
+
+        let public = public_point.as_ref()[1..33].to_vec();
+
+        let mut transformed = Self::transform_ecdh_ephemeral(public.try_into().expect("FIXME"), k)
+            .expect("FIXME")
+            .to_vec();
+        transformed.insert(0, 0x40);
+
+        *public_point = Mpi::from_slice(&transformed);
+
+        Self::V3 {
+            packet_header: packet_header.clone(),
+            id: new_id,
+            pk_algo: *pk_algo,
+            values,
+        }
+    }
+
+    /// Implements TransformMessage( eB, k );
+    ///   Input:
+    ///   eB - the ECDH ephemeral public key decoded from the PKESK
+    ///   k - the proxy transformation parameter retrieved from storage
+    fn transform_ecdh_ephemeral(eb: [u8; 32], k: [u8; 32]) -> Option<[u8; 32]> {
+        let ephemeral = MontgomeryPoint(eb);
+
+        // if 0x08 * eB == 0 then abort
+        if (Scalar::from(8u8) * ephemeral).to_bytes() == [0; 32] {
+            return None;
+        }
+
+        // eC = k * eB
+        // return eC
+
+        let k = Scalar::from_bytes_mod_order(k);
+        let ec = (k * ephemeral).to_bytes();
+        Some(ec)
+    }
 }
 
 impl Serialize for PublicKeyEncryptedSessionKey {
@@ -513,5 +583,47 @@ mod tests {
             let new_packet = PublicKeyEncryptedSessionKey::try_from_reader(*packet.packet_header(), &mut &buf[..]).unwrap();
             prop_assert_eq!(packet, new_packet);
         }
+    }
+
+    #[test]
+    fn forward_transform_success_a_2() {
+        // Successful transformation test from
+        // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-message-transformation>
+
+        let proxy_param =
+            hex::decode("83c57cbe645a132477af55d5020281305860201608e81a1de43ff83f245fb302")
+                .expect("decode");
+
+        let eph = hex::decode("aaea7b3bb92f5f545d023ccb15b50f84ba1bdd53be7f5cfadcfb0106859bf77e")
+            .expect("decode");
+
+        let Some(transf) = PublicKeyEncryptedSessionKey::transform_ecdh_ephemeral(
+            eph.try_into().unwrap(),
+            proxy_param.try_into().unwrap(),
+        ) else {
+            unimplemented!()
+        };
+
+        let expect_transformed =
+            hex::decode("ec31bb937d7ef08c451d516be1d7976179aa7171eea598370661d1152b85005a")
+                .unwrap();
+
+        std::assert_eq!(transf.as_slice(), expect_transformed.as_slice())
+    }
+
+    #[test]
+    fn forward_transform_small_subgroup_a_2() {
+        // Small subgroup detection test from
+        // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-message-transformation>
+
+        let small = hex::decode("ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f")
+            .unwrap();
+
+        let res = PublicKeyEncryptedSessionKey::transform_ecdh_ephemeral(
+            small.try_into().unwrap(),
+            [0; 32],
+        );
+
+        std::assert_eq!(res, None);
     }
 }
