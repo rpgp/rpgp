@@ -66,7 +66,7 @@ yGZuVVMAK/ypFfebDf4D/rlEw3cysv213m8aoK8nAUO8xQX3XQq3Sg+EGm0BNV8E
 -----END PGP MESSAGE-----";
 
 #[test]
-fn forward_calculate_proxy_param_a_3() {
+fn forward_a_3_calculate_proxy_param() {
     // Calculate proxy parameter (test vectors from a.3 end-to-end test)
     //
     // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-end-to-end-tests>
@@ -91,7 +91,7 @@ fn forward_calculate_proxy_param_a_3() {
 }
 
 #[test]
-fn forward_transform_pkesk_a_3() {
+fn forward_a_3_transform_pkesk() {
     let _ = pretty_env_logger::try_init();
 
     // Get the PKESK from ENCYPTED_MESSAGE
@@ -133,7 +133,7 @@ fn forward_transform_pkesk_a_3() {
 }
 
 #[test]
-fn forward_decrypt_forwarded_a_3() {
+fn forward_a_3_decrypt_forwarded() {
     // Perform end-to-end decryption tests on the test vectors from draft-wussler-openpgp-forwarding A.3
     //
     // See <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-end-to-end-tests>
