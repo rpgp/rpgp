@@ -2,7 +2,6 @@ use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
-use curve25519_dalek::{MontgomeryPoint, Scalar};
 use rand::{CryptoRng, Rng};
 use zeroize::Zeroizing;
 
@@ -14,8 +13,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        EcdhKdfType, EcdhPublicParams, EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId,
-        KeyVersion, Mpi, PkeskBytes, PkeskVersion, PublicParams, Tag,
+        EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PkeskBytes,
+        PkeskVersion, PublicParams, Tag,
     },
 };
 
@@ -296,11 +295,14 @@ impl PublicKeyEncryptedSessionKey {
     /// The underlying forwarding mechanism only supports ECDH with Curve 25519.
     ///
     /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-forwarding-messages>
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     pub fn forwarding_transform<K: KeyDetails>(
         &self,
         forwardee: &K,
         proxy_parameter: [u8; 32],
     ) -> Result<Self> {
+        use crate::types::{EcdhKdfType, EcdhPublicParams, Mpi};
+
         let PublicKeyEncryptedSessionKey::V3 {
             packet_header,
             id,
@@ -396,7 +398,10 @@ impl PublicKeyEncryptedSessionKey {
     ///   Input:
     ///   eB - the ECDH ephemeral public key decoded from the PKESK
     ///   k - the proxy transformation parameter retrieved from storage
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     fn transform_ecdh_ephemeral(eb: [u8; 32], k: [u8; 32]) -> Result<[u8; 32]> {
+        use curve25519_dalek::{MontgomeryPoint, Scalar};
+
         let ephemeral = MontgomeryPoint(eb);
 
         // if 0x08 * eB == 0 then abort
@@ -540,10 +545,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::{
-        errors::Error,
-        types::{PacketHeaderVersion, PacketLength},
-    };
+    use crate::types::{PacketHeaderVersion, PacketLength};
 
     impl Arbitrary for PublicKeyEncryptedSessionKey {
         type Parameters = PublicKeyAlgorithm;
@@ -642,6 +644,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     fn forward_transform_success_a_2() {
         // Successful transformation test from
         // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-message-transformation>
@@ -668,6 +671,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     fn forward_transform_small_subgroup_a_2() {
         // Small subgroup detection test from
         // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-message-transformation>
@@ -680,6 +684,6 @@ mod tests {
             [0; 32],
         );
 
-        matches!(res, Err(Error::Message { .. }));
+        matches!(res, Err(crate::errors::Error::Message { .. }));
     }
 }
