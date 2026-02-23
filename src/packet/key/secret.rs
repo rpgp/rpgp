@@ -216,9 +216,9 @@ impl SecretSubkey {
         &self.details
     }
 
-    /// Given the recipient and forwardee encryption subkeys parameters, compute the proxy transformation parameter.
+    /// Given recipient and forwardee encryption subkeys, compute proxy transformation parameter.
     ///
-    /// FIXME: unlocking
+    /// FIXME: unlocking?
     pub fn generate_proxy_parameter(&self, forwardee: &SecretSubkey) -> Result<[u8; 32]> {
         let recipient = self.secret_params();
         let forwardee = forwardee.secret_params();
@@ -227,22 +227,20 @@ impl SecretSubkey {
             crate::crypto::ecdh::SecretKey::Curve25519(r),
         )) = recipient
         else {
-            unimplemented!()
+            bail!("Only non-locked ECDH/Curve 25519 recipient keys are supported")
         };
 
         let SecretParams::Plain(PlainSecretParams::ECDH(
             crate::crypto::ecdh::SecretKey::Curve25519(f),
         )) = forwardee
         else {
-            unimplemented!()
+            bail!("Only non-locked ECDH/Curve 25519 forwardee keys are supported")
         };
 
         Self::compute_proxy_parameter(r.to_bytes_rev(), f.to_bytes_rev())
     }
 
-    /// Computing the proxy parameter
-    ///
-    /// Given the recipient and forwardee private key material, compute the proxy transformation parameter.
+    /// Given the recipient and forwardee private key integers, compute the proxy transformation parameter.
     ///
     /// See <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-computing-the-proxy-paramet>
     ///

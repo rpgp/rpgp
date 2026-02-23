@@ -94,8 +94,6 @@ fn forward_calculate_proxy_param_a_3() {
 fn forward_transform_pkesk_a_3() {
     let _ = pretty_env_logger::try_init();
 
-    let (forwardee, _) = SignedSecretKey::from_string(FORWARDEE_KEY).expect("FORWARDEE_KEY");
-
     // Get the PKESK from ENCYPTED_MESSAGE
     let (msg, _) = Message::from_string(ENCYPTED_MESSAGE).unwrap();
     let Message::Encrypted { esk, .. } = msg else {
@@ -106,14 +104,23 @@ fn forward_transform_pkesk_a_3() {
         unimplemented!();
     };
 
-    // Calculate the transformed PKESK
-    let key_id = forwardee.secret_subkeys[0].key.legacy_key_id();
+    // Calculate the transformed Pkesk for FORWARDEE_KEY
+    let (forwardee, _) = SignedSecretKey::from_string(FORWARDEE_KEY).expect("FORWARDEE_KEY");
+
+    eprintln!(
+        "forwardee fp {:#02x?}",
+        &forwardee.secret_subkeys[0].key.fingerprint()
+    );
+    eprintln!("forwardee {:#02x?}", &forwardee.secret_subkeys[0].key,);
 
     let transformed_pkesk = pkesk
-        .forwarding_transform(key_id, PROXY_PARAMETER_K.try_into().unwrap())
+        .forwarding_transform(
+            &forwardee.secret_subkeys[0].key,
+            PROXY_PARAMETER_K.try_into().unwrap(),
+        )
         .expect("transform");
 
-    // Validate: Compare with the expected transformed pkesk
+    // Compare `transformed_pkesk` with the expected output
     let (msg, _) = Message::from_string(TRANSFORMED_MESSAGE).unwrap();
     let Message::Encrypted { esk, .. } = msg else {
         unimplemented!()

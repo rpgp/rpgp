@@ -14,8 +14,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, PkeskBytes,
-        PkeskVersion, PublicParams, Tag,
+        EcdhKdfType, EcdhPublicParams, EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId,
+        KeyVersion, Mpi, PkeskBytes, PkeskVersion, PublicParams, Tag,
     },
 };
 
@@ -296,9 +296,9 @@ impl PublicKeyEncryptedSessionKey {
     /// The underlying forwarding mechanism only supports ECDH with Curve 25519.
     ///
     /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-forwarding-messages>
-    pub fn forwarding_transform(
+    pub fn forwarding_transform<K: KeyDetails>(
         &self,
-        forwardee_key_id: KeyId, // take KeyDetails type?
+        forwardee: &K,
         proxy_parameter: [u8; 32],
     ) -> Result<Self> {
         let PublicKeyEncryptedSessionKey::V3 {
@@ -309,26 +309,36 @@ impl PublicKeyEncryptedSessionKey {
             ..
         } = self
         else {
-            unimplemented!() // FIXME: error
+            bail!("Only V3 PKESK are supported right now");
         };
 
-        let new_id = if id == &KeyId::WILDCARD {
-            KeyId::WILDCARD
-        } else {
-            forwardee_key_id
+        // Check that the forwardee key uses ECDH/curve 25519
+        let PublicParams::ECDH(EcdhPublicParams::Curve25519 { ecdh_kdf_type, .. }) =
+            forwardee.public_params()
+        else {
+            bail!("Only forwardees using ECDH/Curve25519 are supported right now");
         };
 
+        let EcdhKdfType::Replaced {
+            replacement_fingerprint,
+            ..
+        } = ecdh_kdf_type
+        else {
+            bail!("Unexpected forwardee ecdh_kdf_type {:?}", ecdh_kdf_type)
+        };
+
+        // Prepare to replace PKESK values with transformed public point
         let mut values = values.clone();
 
-        // FIXME: check that the forwardee uses ecdh/curve 25519?
         let PkeskBytes::Ecdh {
             ref mut public_point,
             ..
         } = values
         else {
-            unimplemented!()
+            bail!("Forwarding is only supported for PKESK based on ECDH right now");
         };
 
+        // Check that the value of public_point looks reasonable for ECDH/curve25519
         ensure_eq!(
             public_point.len(),
             33,
@@ -341,19 +351,38 @@ impl PublicKeyEncryptedSessionKey {
             "Public point in PKESK has no 0x40 prefix",
         );
 
-        let public = public_point.as_ref()[1..33].to_vec();
+        // Strip 0x40 prefix for proxy transformation
+        let public_point_data = &public_point.as_ref()[1..33];
 
-        let mut transformed =
-            Self::transform_ecdh_ephemeral(public.try_into().expect("FIXME"), proxy_parameter)
-                .expect("FIXME")
-                .to_vec();
-        transformed.insert(0, 0x40);
+        let mut forwarded_point = Self::transform_ecdh_ephemeral(
+            public_point_data.try_into().expect("FIXME"),
+            proxy_parameter,
+        )?
+        .to_vec();
+        // re-add 0x40 prefix for the OpenPGP "MPI" representation
+        forwarded_point.insert(0, 0x40);
 
-        *public_point = Mpi::from_slice(&transformed);
+        *public_point = Mpi::from_slice(&forwarded_point);
+
+        // Replace recipient Key ID in Pkesk
+        let id = if id == &KeyId::WILDCARD {
+            KeyId::WILDCARD
+        } else {
+            // the `replacement_fingerprint` in the forwardee key must match the key id in this pkesk
+            ensure_eq!(
+                id.as_ref(),
+                &replacement_fingerprint[12..],
+                "Key ID in PKESK {:02x?} doesn't match the replacement fingerprint of the forwardee key {:02x?}",
+                id.as_ref(),
+                &replacement_fingerprint[12..]
+            );
+
+            forwardee.legacy_key_id()
+        };
 
         Ok(Self::V3 {
             packet_header: *packet_header,
-            id: new_id,
+            id,
             pk_algo: *pk_algo,
             values,
         })
@@ -367,20 +396,21 @@ impl PublicKeyEncryptedSessionKey {
     ///   Input:
     ///   eB - the ECDH ephemeral public key decoded from the PKESK
     ///   k - the proxy transformation parameter retrieved from storage
-    fn transform_ecdh_ephemeral(eb: [u8; 32], k: [u8; 32]) -> Option<[u8; 32]> {
+    fn transform_ecdh_ephemeral(eb: [u8; 32], k: [u8; 32]) -> Result<[u8; 32]> {
         let ephemeral = MontgomeryPoint(eb);
 
         // if 0x08 * eB == 0 then abort
         if (Scalar::from(8u8) * ephemeral).to_bytes() == [0; 32] {
-            return None;
+            bail!("Ephemeral public key belongs to a small subgroup");
         }
+
+        let k = Scalar::from_bytes_mod_order(k);
 
         // eC = k * eB
         // return eC
+        let ec = k * ephemeral;
 
-        let k = Scalar::from_bytes_mod_order(k);
-        let ec = (k * ephemeral).to_bytes();
-        Some(ec)
+        Ok(ec.to_bytes())
     }
 }
 
@@ -510,7 +540,10 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::types::{PacketHeaderVersion, PacketLength};
+    use crate::{
+        errors::Error,
+        types::{PacketHeaderVersion, PacketLength},
+    };
 
     impl Arbitrary for PublicKeyEncryptedSessionKey {
         type Parameters = PublicKeyAlgorithm;
@@ -620,7 +653,7 @@ mod tests {
         let eph = hex::decode("aaea7b3bb92f5f545d023ccb15b50f84ba1bdd53be7f5cfadcfb0106859bf77e")
             .expect("decode");
 
-        let Some(transf) = PublicKeyEncryptedSessionKey::transform_ecdh_ephemeral(
+        let Ok(transf) = PublicKeyEncryptedSessionKey::transform_ecdh_ephemeral(
             eph.try_into().unwrap(),
             proxy_param.try_into().unwrap(),
         ) else {
@@ -647,6 +680,6 @@ mod tests {
             [0; 32],
         );
 
-        std::assert_eq!(res, None);
+        matches!(res, Err(Error::Message { .. }));
     }
 }
