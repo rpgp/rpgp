@@ -291,8 +291,16 @@ impl PublicKeyEncryptedSessionKey {
         }
     }
 
-    /// Transform PKESK
-    pub fn forwarding_transform(&self, forwardee_key_id: KeyId, k: [u8; 32]) -> Self {
+    /// Transform PKESK to forward a message to a 'forwardee'.
+    ///
+    /// The underlying forwarding mechanism only supports ECDH with Curve 25519.
+    ///
+    /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-forwarding-messages>
+    pub fn forwarding_transform(
+        &self,
+        forwardee_key_id: KeyId, // take KeyDetails type?
+        proxy_parameter: [u8; 32],
+    ) -> Result<Self> {
         let PublicKeyEncryptedSessionKey::V3 {
             packet_header,
             id,
@@ -301,7 +309,7 @@ impl PublicKeyEncryptedSessionKey {
             ..
         } = self
         else {
-            unimplemented!()
+            unimplemented!() // FIXME: error
         };
 
         let new_id = if id == &KeyId::WILDCARD {
@@ -312,6 +320,7 @@ impl PublicKeyEncryptedSessionKey {
 
         let mut values = values.clone();
 
+        // FIXME: check that the forwardee uses ecdh/curve 25519?
         let PkeskBytes::Ecdh {
             ref mut public_point,
             ..
@@ -320,26 +329,40 @@ impl PublicKeyEncryptedSessionKey {
             unimplemented!()
         };
 
-        assert_eq!(public_point.len(), 33);
-        assert_eq!(public_point.as_ref().first(), Some(&0x40));
+        ensure_eq!(
+            public_point.len(),
+            33,
+            "Unexpected public point length {} in PKESK",
+            public_point.len()
+        );
+        ensure_eq!(
+            public_point.as_ref().first(),
+            Some(&0x40),
+            "Public point in PKESK has no 0x40 prefix",
+        );
 
         let public = public_point.as_ref()[1..33].to_vec();
 
-        let mut transformed = Self::transform_ecdh_ephemeral(public.try_into().expect("FIXME"), k)
-            .expect("FIXME")
-            .to_vec();
+        let mut transformed =
+            Self::transform_ecdh_ephemeral(public.try_into().expect("FIXME"), proxy_parameter)
+                .expect("FIXME")
+                .to_vec();
         transformed.insert(0, 0x40);
 
         *public_point = Mpi::from_slice(&transformed);
 
-        Self::V3 {
-            packet_header: packet_header.clone(),
+        Ok(Self::V3 {
+            packet_header: *packet_header,
             id: new_id,
             pk_algo: *pk_algo,
             values,
-        }
+        })
     }
 
+    /// The message forwarding transformation from draft-wussler-openpgp-forwarding
+    ///
+    /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-forwarding-messages>
+    ///
     /// Implements TransformMessage( eB, k );
     ///   Input:
     ///   eB - the ECDH ephemeral public key decoded from the PKESK

@@ -1,5 +1,6 @@
 use std::io::BufRead;
 
+use curve25519_dalek::Scalar;
 use generic_array::GenericArray;
 use log::debug;
 use rand::{CryptoRng, Rng};
@@ -213,6 +214,57 @@ impl SecretSubkey {
 
     pub fn public_key(&self) -> &super::PublicSubkey {
         &self.details
+    }
+
+    /// Given the recipient and forwardee encryption subkeys parameters, compute the proxy transformation parameter.
+    ///
+    /// FIXME: unlocking
+    pub fn generate_proxy_parameter(&self, forwardee: &SecretSubkey) -> Result<[u8; 32]> {
+        let recipient = self.secret_params();
+        let forwardee = forwardee.secret_params();
+
+        let SecretParams::Plain(PlainSecretParams::ECDH(
+            crate::crypto::ecdh::SecretKey::Curve25519(r),
+        )) = recipient
+        else {
+            unimplemented!()
+        };
+
+        let SecretParams::Plain(PlainSecretParams::ECDH(
+            crate::crypto::ecdh::SecretKey::Curve25519(f),
+        )) = forwardee
+        else {
+            unimplemented!()
+        };
+
+        Self::compute_proxy_parameter(r.to_bytes_rev(), f.to_bytes_rev())
+    }
+
+    /// Computing the proxy parameter
+    ///
+    /// Given the recipient and forwardee private key material, compute the proxy transformation parameter.
+    ///
+    /// See <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-computing-the-proxy-paramet>
+    ///
+    ///   Implements ComputeProxyParameter( dB, dC );
+    ///    Input:
+    ///     dB - the recipient's private key integer
+    ///     dC - the forwardee's private key integer
+    ///     n - the size of the field of Curve25519
+    ///
+    /// k = dB/dC mod n
+    /// return k
+    fn compute_proxy_parameter(mut db: [u8; 32], mut dc: [u8; 32]) -> Result<[u8; 32]> {
+        db.reverse();
+        dc.reverse();
+
+        let recipient = Scalar::from_bytes_mod_order(db);
+        let forwardee = Scalar::from_bytes_mod_order(dc);
+
+        // k is implicitly reduced to the group order
+        let k = recipient * forwardee.invert();
+
+        Ok(k.to_bytes())
     }
 }
 
@@ -680,7 +732,7 @@ mod tests {
 
     use crate::{
         crypto::hash::HashAlgorithm,
-        packet::{PubKeyInner, SecretKey},
+        packet::{PubKeyInner, SecretKey, SecretSubkey},
         types::{KeyVersion, S2kParams, SigningKey, Timestamp},
     };
 
@@ -751,5 +803,30 @@ mod tests {
         alice_sec
             .sign(&"bar".into(), hash_algo, DATA)
             .expect("failed to sign");
+    }
+
+    #[test]
+    fn forward_proxy_param_a_1() {
+        // Test vectors from
+        // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-proxy-parameter>
+
+        let rec_integer =
+            hex::decode("5989216365053dcf9e35a04b2a1fc19b83328426be6bb7d0a2ae78105e2e3188")
+                .expect("decode");
+        let forw_integer =
+            hex::decode("684da6225bcd44d880168fc5bec7d2f746217f014c8019005f144cc148f16a00")
+                .expect("decode");
+
+        let k = SecretSubkey::compute_proxy_parameter(
+            rec_integer.try_into().unwrap(),
+            forw_integer.try_into().unwrap(),
+        )
+        .expect("compute_proxy_parameter");
+
+        std::assert_eq!(
+            &k[..],
+            hex::decode("e89786987c3a3ec761a679bc372cd11a425eda72bd5265d78ad0f5f32ee64f02")
+                .unwrap()
+        );
     }
 }
