@@ -1268,6 +1268,9 @@ impl KeyFlags {
     pub fn set_authentication(&mut self, val: bool) {
         self.known.set_authentication(val);
     }
+    pub fn set_draft_decrypt_forwarded(&mut self, val: bool) {
+        self.known.set_draft_decrypt_forwarded(val);
+    }
     pub fn set_group(&mut self, val: bool) {
         self.known.set_group(val);
     }

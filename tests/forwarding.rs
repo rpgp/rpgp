@@ -4,10 +4,24 @@
 //!
 //! See <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-end-to-end-tests>
 
+use std::io::BufReader;
+
 use pgp::{
-    composed::{Deserializable, Esk, Message, SignedSecretKey},
-    types::{EcdhKdfType, EcdhPublicParams, KeyDetails, Password, PublicParams},
+    armor::{BlockType, Dearmor},
+    composed::{
+        ArmorOptions, Deserializable, EncryptionCaps, Esk, KeyType, Message, MessageBuilder,
+        SecretKeyParamsBuilder, SignedSecretKey, SignedSecretSubKey, SubkeyParamsBuilder,
+    },
+    crypto::{ecc_curve::ECCCurve, sym::SymmetricKeyAlgorithm},
+    packet,
+    packet::{KeyFlags, Packet, PacketParser, PubKeyInner},
+    types::{
+        EcdhKdfType, EcdhPublicParams, Fingerprint, KeyDetails, KeyVersion, Password, PublicParams,
+        Timestamp,
+    },
 };
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 
 const RECIPIENT_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
 
@@ -40,7 +54,7 @@ zWBsBR8VnoOVfEE+VQk6YAi7cTSjcMjfsIez9FYtAQDKo9aCMhUohYyqvhZjn8aS
 =lESj
 -----END PGP PRIVATE KEY BLOCK-----";
 
-const ENCYPTED_MESSAGE: &str = "-----BEGIN PGP MESSAGE-----
+const ENCRYPTED_MESSAGE: &str = "-----BEGIN PGP MESSAGE-----
 
 wV4DFVflUJOTBRASAQdAdvFLPtXcvwSkEwbwmnjOrL6eZLh5ysnVpbPlgZbZwjgw
 yGZuVVMAK/ypFfebDf4D/rlEw3cysv213m8aoK8nAUO8xQX3XQq3Sg+EGm0BNV8E
@@ -95,7 +109,7 @@ fn forward_a_3_transform_pkesk() {
     let _ = pretty_env_logger::try_init();
 
     // Get the PKESK from ENCYPTED_MESSAGE
-    let (msg, _) = Message::from_string(ENCYPTED_MESSAGE).unwrap();
+    let (msg, _) = Message::from_string(ENCRYPTED_MESSAGE).unwrap();
     let Message::Encrypted { esk, .. } = msg else {
         unimplemented!()
     };
@@ -184,6 +198,166 @@ fn forward_a_3_decrypt_forwarded() {
     let plain = msg.as_data_vec().unwrap();
 
     assert_eq!(plain, PLAINTEXT.as_bytes());
+}
 
-    // TODO: implement transformation?
+#[test]
+fn forward_end_to_end() {
+    // A full end-to-end test for all functionality in draft-wussler-openpgp-forwarding
+    // which produces all artifacts from scratch with rPGP:
+    //
+    // - generate recipient, forwardee keys
+    // - calculate proxy parameter
+    // - encrypt a message to recipient
+    // - transform message for forwardee
+    // - decrypt message as forwardee
+
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    // # Generate keys for recipient and forwarder
+
+    // ## Robert, the recipient
+    let robert_params = SecretKeyParamsBuilder::default()
+        .key_type(KeyType::Ed25519Legacy)
+        .primary_user_id("robert".into())
+        .subkey(
+            SubkeyParamsBuilder::default()
+                .key_type(KeyType::ECDH(ECCCurve::Curve25519))
+                .can_encrypt(EncryptionCaps::All)
+                .build()
+                .unwrap(),
+        )
+        .build()
+        .unwrap();
+
+    let robert = robert_params.generate(&mut rng).unwrap();
+    let robert_pub = robert.to_public_key();
+
+    // ## Frederick, the forwardee
+    let frederick_params = SecretKeyParamsBuilder::default()
+        .key_type(KeyType::Ed25519Legacy)
+        .primary_user_id("frederick".into())
+        .build()
+        .unwrap();
+
+    let mut frederick = frederick_params.generate(&mut rng).unwrap();
+
+    let (mut public_params, secret_params) = KeyType::ECDH(ECCCurve::Curve25519)
+        .generate(&mut rng)
+        .unwrap();
+    let mut keyflags = KeyFlags::default();
+    keyflags.set_encrypt_comms(true);
+    keyflags.set_encrypt_storage(true);
+    keyflags.set_shared(true);
+    keyflags.set_draft_decrypt_forwarded(true);
+
+    let PublicParams::ECDH(EcdhPublicParams::Curve25519 {
+        ref mut ecdh_kdf_type,
+        ..
+    }) = public_params
+    else {
+        unimplemented!()
+    };
+
+    let Fingerprint::V4(robert_fp) = robert.secret_subkeys[0].fingerprint() else {
+        unimplemented!()
+    };
+
+    *ecdh_kdf_type = EcdhKdfType::Replaced {
+        replacement_fingerprint: robert_fp,
+    };
+
+    let pub_key = PubKeyInner::new(
+        KeyVersion::V4,
+        KeyType::ECDH(ECCCurve::Curve25519).to_alg(),
+        Timestamp::now(),
+        None,
+        public_params,
+    )
+    .unwrap();
+    let pub_sub = packet::PublicSubkey::from_inner(pub_key).unwrap();
+
+    let subkey_binding = pub_sub
+        .sign(
+            &mut rng,
+            &frederick.primary_key,
+            frederick.public_key(),
+            &Password::empty(),
+            keyflags,
+            None,
+        )
+        .unwrap();
+
+    let sec_sub = packet::SecretSubkey::new(pub_sub, secret_params).unwrap();
+
+    frederick
+        .secret_subkeys
+        .push(SignedSecretSubKey::new(sec_sub, vec![subkey_binding]));
+
+    // # Calculate proxy parameter (test vectors from a.3 end-to-end test)
+
+    // TODO: ForwardingInstance type?
+    let proxy_parameter = robert.secret_subkeys[0]
+        .key
+        .generate_proxy_parameter(&frederick.secret_subkeys[0].key)
+        .expect("generate_proxy_parameter");
+
+    // # Produce an encrypted message for robert
+    const MESSAGE_FOR_ROBERT: &str = "hello robert";
+
+    let builder = MessageBuilder::from_bytes(&[][..], MESSAGE_FOR_ROBERT.as_bytes().to_vec());
+    let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+    builder
+        .encrypt_to_key(&mut rng, &robert_pub.public_subkeys[0].key)
+        .unwrap();
+
+    let encrypted = builder
+        .to_armored_string(&mut rng, ArmorOptions::default())
+        .unwrap();
+
+    eprintln!("{}", encrypted);
+
+    let mut pp = PacketParser::new(BufReader::new(Dearmor::new(encrypted.as_bytes())));
+    let pkesk = pp.next().unwrap().unwrap();
+    let seipd = pp.next().unwrap().unwrap();
+
+    let Packet::PublicKeyEncryptedSessionKey(ref pkesk) = pkesk else {
+        unimplemented!();
+    };
+
+    // # Calculate the transformed Message for frederick
+    let transformed_pkesk = pkesk
+        .forwarding_transform(&frederick.secret_subkeys[0].key, proxy_parameter)
+        .expect("transform");
+
+    let transformed_msg = vec![
+        Packet::PublicKeyEncryptedSessionKey(transformed_pkesk),
+        seipd,
+    ];
+
+    let mut armored = Vec::new();
+    pgp::armor::write(
+        &transformed_msg,
+        BlockType::Message,
+        &mut armored,
+        None,
+        true,
+    )
+    .unwrap();
+
+    let armored = String::from_utf8_lossy(&armored);
+
+    eprintln!("transformed message for frederick");
+    eprintln!("{}", armored);
+
+    // # Frederick decrypts the forwarded message
+
+    let (msg, _) = Message::from_string(&armored).unwrap();
+
+    let mut msg = msg
+        .decrypt(&Password::empty(), &frederick)
+        .expect("decrypt");
+
+    let plain = msg.as_data_vec().unwrap();
+
+    assert_eq!(plain, MESSAGE_FOR_ROBERT.as_bytes());
 }
