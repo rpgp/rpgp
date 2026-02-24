@@ -245,8 +245,6 @@ fn forward_end_to_end() {
         .generate(&mut rng)
         .unwrap();
     let mut keyflags = KeyFlags::default();
-    keyflags.set_encrypt_comms(true);
-    keyflags.set_encrypt_storage(true);
     keyflags.set_shared(true);
     keyflags.set_draft_decrypt_forwarded(true);
 
