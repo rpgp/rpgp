@@ -24,7 +24,7 @@ bench = false
 
 # General
 base64 = ">=0.21.7, < 0.23"
-buffer-redux = { version = "1.0.0", default-features = false }
+buffer-redux = { version = "1.1.0", default-features = false }
 bitfields = "1.0.0"
 bytes = "1.11.1"
 byteorder = "1.4"
