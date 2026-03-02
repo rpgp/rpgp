@@ -286,7 +286,7 @@ impl PubKeyInner {
         if version != KeyVersion::V4 {
             if matches!(
                 public_params,
-                PublicParams::ECDH(EcdhPublicParams::Curve25519 { .. })
+                PublicParams::ECDH(EcdhPublicParams::Curve25519Legacy { .. })
             ) {
                 bail!(
                     "ECDH over Curve25519 is illegal for key version {}",
@@ -465,7 +465,7 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
                     // (See https://www.rfoc-editor.org/rfc/rfc9580.html#section-11.5.1-2)
                     let curve = params.curve();
                     match params {
-                        EcdhPublicParams::Curve25519 { hash, alg_sym, .. }
+                        EcdhPublicParams::Curve25519Legacy { hash, alg_sym, .. }
                         | EcdhPublicParams::P256 { hash, alg_sym, .. }
                         | EcdhPublicParams::P521 { hash, alg_sym, .. }
                         | EcdhPublicParams::P384 { hash, alg_sym, .. } => {
@@ -907,7 +907,7 @@ impl VerifyingKey for PubKeyInner {
                 bail!("ML KEM 1024 X448 can not be used for verify operations");
             }
             PublicParams::ECDH(
-                ref params @ EcdhPublicParams::Curve25519 { .. }
+                ref params @ EcdhPublicParams::Curve25519Legacy { .. }
                 | ref params @ EcdhPublicParams::P256 { .. }
                 | ref params @ EcdhPublicParams::P384 { .. }
                 | ref params @ EcdhPublicParams::P521 { .. },

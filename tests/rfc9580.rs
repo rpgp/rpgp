@@ -225,7 +225,7 @@ fn rfc9580_legacy_25519_illegal_in_v6() {
     // -- Create a v6 curve 25519 legacy encryption key, expect failure --
     let mut key_params = SecretKeyParamsBuilder::default();
     key_params
-        .key_type(KeyType::ECDH(ECCCurve::Curve25519))
+        .key_type(KeyType::ECDH(ECCCurve::Curve25519Legacy))
         .version(KeyVersion::V6)
         .can_encrypt(EncryptionCaps::All)
         .primary_user_id("Me <me@example.com>".into());

@@ -60,7 +60,7 @@ impl EcdhKdfType {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum EcdhPublicParams {
     /// ECDH public parameters for a curve that we know uses Mpi representation
-    Curve25519 {
+    Curve25519Legacy {
         #[cfg_attr(test, proptest(strategy = "tests::ecdh_curve25519_gen()"))]
         p: x25519_dalek::PublicKey,
         hash: HashAlgorithm,
@@ -120,7 +120,7 @@ impl Serialize for EcdhPublicParams {
         writer.write_all(&oid)?;
 
         let tags = match self {
-            Self::Curve25519 {
+            Self::Curve25519Legacy {
                 p,
                 hash,
                 alg_sym,
@@ -189,7 +189,7 @@ impl Serialize for EcdhPublicParams {
         let mut sum = 1; // oid len
 
         match self {
-            Self::Curve25519 {
+            Self::Curve25519Legacy {
                 p,
                 #[cfg(feature = "draft-wussler-openpgp-forwarding")]
                 ecdh_kdf_type,
@@ -262,7 +262,7 @@ impl EcdhPublicParams {
     /// Get the `ECCCurve` that this key is based on
     pub fn curve(&self) -> ECCCurve {
         match self {
-            Self::Curve25519 { .. } => ECCCurve::Curve25519,
+            Self::Curve25519Legacy { .. } => ECCCurve::Curve25519Legacy,
             Self::P256 { .. } => ECCCurve::P256,
             Self::P384 { .. } => ECCCurve::P384,
             Self::P521 { .. } => ECCCurve::P521,
@@ -282,7 +282,7 @@ impl EcdhPublicParams {
         let curve = ecc_curve_from_oid(&curve_raw).ok_or_else(|| format_err!("invalid curve"))?;
 
         match curve {
-            ECCCurve::Curve25519
+            ECCCurve::Curve25519Legacy
             | ECCCurve::P256
             | ECCCurve::P384
             | ECCCurve::P521
@@ -314,7 +314,7 @@ impl EcdhPublicParams {
                     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
                     0xff => {
                         crate::errors::ensure!(
-                            curve == ECCCurve::Curve25519,
+                            curve == ECCCurve::Curve25519Legacy,
                             "unexpected curve for forwardee key {}",
                             curve
                         );
@@ -361,7 +361,7 @@ impl EcdhPublicParams {
         ecdh_kdf_type: EcdhKdfType,
     ) -> Result<Self> {
         match curve {
-            ECCCurve::Curve25519 => {
+            ECCCurve::Curve25519Legacy => {
                 ensure_eq!(p.len(), 33, "invalid public key length");
                 // public part of the ephemeral key (removes 0x40 prefix)
                 let public_key = &p.as_ref()[1..];
@@ -371,7 +371,7 @@ impl EcdhPublicParams {
                 public_key_arr[..].copy_from_slice(public_key);
 
                 let p = x25519_dalek::PublicKey::from(public_key_arr);
-                Ok(EcdhPublicParams::Curve25519 {
+                Ok(EcdhPublicParams::Curve25519Legacy {
                     p,
                     hash,
                     alg_sym,
@@ -408,7 +408,7 @@ pub(super) mod tests {
     proptest::prop_compose! {
         pub fn ecdh_curve25519_gen()(seed: u64) -> x25519_dalek::PublicKey {
             let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            let mut secret_key_bytes = [0u8; ECCCurve::Curve25519.secret_key_length()];
+            let mut secret_key_bytes = [0u8; 32];
             rng.fill_bytes(&mut secret_key_bytes);
 
             let secret = x25519_dalek::StaticSecret::from(secret_key_bytes);

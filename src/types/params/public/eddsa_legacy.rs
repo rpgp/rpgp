@@ -38,7 +38,7 @@ impl EddsaLegacyPublicParams {
 
         // MPI of an EC point representing a public key
         match curve {
-            ECCCurve::Ed25519 => {
+            ECCCurve::Ed25519Legacy => {
                 let q = Mpi::try_from_reader(&mut i)?;
                 ensure_eq!(q.len(), 33, "invalid Q (len)");
                 ensure_eq!(q.as_ref()[0], 0x40, "invalid Q (prefix)");
@@ -61,7 +61,7 @@ impl EddsaLegacyPublicParams {
 
     pub fn curve(&self) -> ECCCurve {
         match self {
-            Self::Ed25519 { .. } => ECCCurve::Ed25519,
+            Self::Ed25519 { .. } => ECCCurve::Ed25519Legacy,
             Self::Unsupported { curve, .. } => curve.clone(),
         }
     }
@@ -71,7 +71,7 @@ impl Serialize for EddsaLegacyPublicParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
             Self::Ed25519 { key } => {
-                let oid = ECCCurve::Ed25519.oid();
+                let oid = ECCCurve::Ed25519Legacy.oid();
                 writer.write_u8(oid.len().try_into()?)?;
                 writer.write_all(&oid)?;
                 let mut mpi = Vec::with_capacity(33);
@@ -94,7 +94,7 @@ impl Serialize for EddsaLegacyPublicParams {
         let mut sum = 0;
         match self {
             Self::Ed25519 { key } => {
-                let oid = ECCCurve::Ed25519.oid();
+                let oid = ECCCurve::Ed25519Legacy.oid();
                 sum += 1;
                 sum += oid.len();
 

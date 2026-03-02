@@ -16,11 +16,11 @@ use rand::thread_rng;
 fn main() {
     // Generate a new OpenPGP private key (TSK)
     let secret_key = keygen(
-        KeyType::Ed25519Legacy,              // primary
-        KeyType::Ed25519Legacy,              // signing subkey
-        KeyType::ECDH(ECCCurve::Curve25519), // encryption subkey
-        KeyType::Ed25519Legacy,              // authentication subkey
-        "John Doe <jdoe@example.com>",       // user id
+        KeyType::Ed25519Legacy,                    // primary
+        KeyType::Ed25519Legacy,                    // signing subkey
+        KeyType::ECDH(ECCCurve::Curve25519Legacy), // encryption subkey
+        KeyType::Ed25519Legacy,                    // authentication subkey
+        "John Doe <jdoe@example.com>",             // user id
     )
     .expect("failed during keygen");
 

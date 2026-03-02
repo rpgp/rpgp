@@ -20,27 +20,28 @@ const ANON_SENDER: [u8; 20] = [
     0x20, 0x20, 0x20, 0x20,
 ];
 
-/// ECDH Curve25519 secret key
+/// ECDH Curve25519Legacy secret key
 #[derive(Clone, ZeroizeOnDrop, derive_more::Debug)]
-pub struct Curve25519(#[debug("..")] StaticSecret);
+pub struct Curve25519Legacy(#[debug("..")] StaticSecret);
 
-impl From<StaticSecret> for Curve25519 {
+impl From<StaticSecret> for Curve25519Legacy {
     fn from(value: StaticSecret) -> Self {
         Self(value)
     }
 }
 
-impl PartialEq for Curve25519 {
+impl PartialEq for Curve25519Legacy {
     fn eq(&self, other: &Self) -> bool {
         self.0.as_bytes().eq(other.0.as_bytes())
     }
 }
 
-impl Eq for Curve25519 {}
+impl Eq for Curve25519Legacy {}
 
-impl Curve25519 {
+impl Curve25519Legacy {
     pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
-        let mut secret_key_bytes = Zeroizing::new([0u8; ECCCurve::Curve25519.secret_key_length()]);
+        let mut secret_key_bytes =
+            Zeroizing::new([0u8; ECCCurve::Curve25519Legacy.secret_key_length()]);
         rng.fill_bytes(&mut *secret_key_bytes);
 
         // Clamp, as `to_bytes` does not clamp.
@@ -77,8 +78,8 @@ impl Curve25519 {
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum SecretKey {
-    /// ECDH with Curve25519
-    Curve25519(Curve25519),
+    /// ECDH with Curve25519Legacy
+    Curve25519Legacy(Curve25519Legacy),
     /// ECDH with Nist P256
     P256 {
         /// The secret point.
@@ -110,7 +111,7 @@ impl From<&SecretKey> for EcdhPublicParams {
         let hash = curve.hash_algo().expect("known algo");
         let alg_sym = curve.sym_algo().expect("known algo");
         match value {
-            SecretKey::Curve25519(key) => Self::Curve25519 {
+            SecretKey::Curve25519Legacy(key) => Self::Curve25519Legacy {
                 p: PublicKey::from(&key.0),
                 hash,
                 alg_sym,
@@ -139,9 +140,9 @@ impl SecretKey {
     /// Generate an ECDH KeyPair.
     pub fn generate<R: Rng + CryptoRng>(mut rng: R, curve: &ECCCurve) -> Result<Self> {
         match curve {
-            ECCCurve::Curve25519 => {
-                let key = Curve25519::generate(rng);
-                Ok(Self::Curve25519(key))
+            ECCCurve::Curve25519Legacy => {
+                let key = Curve25519Legacy::generate(rng);
+                Ok(Self::Curve25519Legacy(key))
             }
             ECCCurve::P256 => {
                 let secret = p256::SecretKey::random(&mut rng);
@@ -161,9 +162,9 @@ impl SecretKey {
 
     pub(crate) fn try_from_mpi(pub_params: &EcdhPublicParams, d: Mpi) -> Result<Self> {
         match pub_params {
-            EcdhPublicParams::Curve25519 { .. } => {
-                let key = Curve25519::try_from_bytes_rev(d.as_ref())?;
-                Ok(SecretKey::Curve25519(key))
+            EcdhPublicParams::Curve25519Legacy { .. } => {
+                let key = Curve25519Legacy::try_from_bytes_rev(d.as_ref())?;
+                Ok(SecretKey::Curve25519Legacy(key))
             }
             EcdhPublicParams::P256 { .. } => {
                 const SIZE: usize = ECCCurve::P256.secret_key_length();
@@ -203,7 +204,7 @@ impl SecretKey {
 
     fn to_mpi(&self) -> Mpi {
         match self {
-            Self::Curve25519(key) => {
+            Self::Curve25519Legacy(key) => {
                 let bytes = key.to_bytes_rev();
 
                 // create scalar and reverse to little endian
@@ -218,7 +219,7 @@ impl SecretKey {
 
     pub fn curve(&self) -> ECCCurve {
         match self {
-            Self::Curve25519 { .. } => ECCCurve::Curve25519,
+            Self::Curve25519Legacy { .. } => ECCCurve::Curve25519Legacy,
             Self::P256 { .. } => ECCCurve::P256,
             Self::P384 { .. } => ECCCurve::P384,
             Self::P521 { .. } => ECCCurve::P521,
@@ -228,7 +229,7 @@ impl SecretKey {
     /// Returns the secret material as raw bytes.
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
-            Self::Curve25519(key) => key.as_bytes().to_vec(),
+            Self::Curve25519Legacy(key) => key.as_bytes().to_vec(),
             Self::P256 { secret, .. } => secret.to_bytes().to_vec(),
             Self::P384 { secret, .. } => secret.to_bytes().to_vec(),
             Self::P521 { secret, .. } => secret.to_bytes().to_vec(),
@@ -274,7 +275,7 @@ impl Decryptor for SecretKey {
         let hash = data.hash;
 
         let shared_secret = match self {
-            SecretKey::Curve25519(key) => {
+            SecretKey::Curve25519Legacy(key) => {
                 ensure_eq!(data.public_point.len(), 33, "invalid public point"); // prefix "0x40" + 32 bytes = 33 bytes
 
                 let their_public = {
@@ -575,7 +576,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     );
 
     let (encoded_public, shared_secret, hash, alg_sym) = match params {
-        EcdhPublicParams::Curve25519 {
+        EcdhPublicParams::Curve25519Legacy {
             p,
             hash,
             alg_sym,
@@ -589,7 +590,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
 
             let their_public = p;
             let mut our_secret_key_bytes =
-                Zeroizing::new([0u8; ECCCurve::Curve25519.secret_key_length()]);
+                Zeroizing::new([0u8; ECCCurve::Curve25519Legacy.secret_key_length()]);
             rng.fill_bytes(&mut *our_secret_key_bytes);
             let our_secret = StaticSecret::from(*our_secret_key_bytes);
 
@@ -695,7 +696,7 @@ mod tests {
     #[ignore]
     fn test_encrypt_decrypt() {
         for curve in [
-            ECCCurve::Curve25519,
+            ECCCurve::Curve25519Legacy,
             ECCCurve::P256,
             ECCCurve::P384,
             ECCCurve::P521,
@@ -902,7 +903,7 @@ mod tests {
         }
     }
 
-    impl Arbitrary for Curve25519 {
+    impl Arbitrary for Curve25519Legacy {
         type Parameters = ();
         type Strategy = BoxedStrategy<Self>;
 
@@ -910,7 +911,7 @@ mod tests {
             any::<u64>()
                 .prop_map(|seed| {
                     let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-                    Curve25519::generate(&mut rng)
+                    Curve25519Legacy::generate(&mut rng)
                 })
                 .boxed()
         }
