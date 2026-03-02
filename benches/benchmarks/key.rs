@@ -34,18 +34,21 @@ fn bench_key(c: &mut Criterion) {
         b.iter(|| black_box(SignedSecretKey::from_armor_single(&bytes[..]).unwrap()));
     });
 
-    g.bench_function("x25519_parse_armored", |b| {
-        let key = build_key(KeyType::Ed25519Legacy, KeyType::ECDH(ECCCurve::Curve25519));
+    g.bench_function("ed25519legacy_ecdh_curve25519legacy_parse_armored", |b| {
+        let key = build_key(
+            KeyType::Ed25519Legacy,
+            KeyType::ECDH(ECCCurve::Curve25519Legacy),
+        );
         let bytes = key.to_armored_bytes(None.into()).unwrap();
 
         b.iter(|| black_box(SignedSecretKey::from_armor_single(&bytes[..]).unwrap()));
     });
 
-    g.bench_function("x25519_generate", |b| {
+    g.bench_function("ed25519legacy_ecdh_curve25519legacy_generate", |b| {
         b.iter(|| {
             black_box(build_key(
                 KeyType::Ed25519Legacy,
-                KeyType::ECDH(ECCCurve::Curve25519),
+                KeyType::ECDH(ECCCurve::Curve25519Legacy),
             ))
         })
     });

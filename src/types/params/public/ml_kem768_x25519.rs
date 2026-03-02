@@ -50,7 +50,6 @@ mod tests {
     use rand::SeedableRng;
 
     use super::*;
-    use crate::crypto::ecc_curve::ECCCurve;
 
     impl Arbitrary for MlKem768X25519PublicParams {
         type Parameters = ();
@@ -59,7 +58,7 @@ mod tests {
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
             fn from_seed(seed: u64) -> MlKem768X25519PublicParams {
                 let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-                let mut secret_key_bytes = [0u8; ECCCurve::Curve25519.secret_key_length()];
+                let mut secret_key_bytes = [0u8; 32];
                 rng.fill_bytes(&mut secret_key_bytes);
 
                 let secret = x25519_dalek::StaticSecret::from(secret_key_bytes);

@@ -147,7 +147,7 @@ impl PlainSecretParams {
             (PublicKeyAlgorithm::EdDSALegacy, PublicParams::EdDSALegacy(_pub_params)) => {
                 let secret = Mpi::try_from_reader(i)?;
 
-                const SIZE: usize = ECCCurve::Ed25519.secret_key_length();
+                const SIZE: usize = ECCCurve::Ed25519Legacy.secret_key_length();
                 let secret = pad_key::<SIZE>(secret.as_ref())?;
                 let key = crate::crypto::ed25519::SecretKey::try_from_bytes(
                     secret,
@@ -426,7 +426,7 @@ impl PlainSecretParams {
                 };
 
                 let (hash, alg_sym) = match params {
-                    EcdhPublicParams::Curve25519 { hash, alg_sym, .. } => (hash, alg_sym),
+                    EcdhPublicParams::Curve25519Legacy { hash, alg_sym, .. } => (hash, alg_sym),
                     EcdhPublicParams::P256 { hash, alg_sym, .. } => (hash, alg_sym),
                     EcdhPublicParams::P384 { hash, alg_sym, .. } => (hash, alg_sym),
                     EcdhPublicParams::P521 { hash, alg_sym, .. } => (hash, alg_sym),
@@ -447,7 +447,7 @@ impl PlainSecretParams {
                 let mut fingerprint = recipient_fp.as_bytes(); // normally: the recipient fp
 
                 #[cfg(feature = "draft-wussler-openpgp-forwarding")]
-                if let EcdhPublicParams::Curve25519 {
+                if let EcdhPublicParams::Curve25519Legacy {
                     ecdh_kdf_type:
                         crate::types::EcdhKdfType::Replaced {
                             replacement_fingerprint,

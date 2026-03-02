@@ -51,7 +51,7 @@
 //!     .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha256,])
 //!     .preferred_compression_algorithms(smallvec![])
 //!     .subkeys(vec![SubkeyParamsBuilder::default()
-//!         .key_type(KeyType::ECDH(ECCCurve::Curve25519))
+//!         .key_type(KeyType::ECDH(ECCCurve::Curve25519Legacy))
 //!         .can_encrypt(EncryptionCaps::All)
 //!         .build()
 //!         .expect("Must be able to create subkey")]);

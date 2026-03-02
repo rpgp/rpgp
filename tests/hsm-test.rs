@@ -177,10 +177,10 @@ impl FakeHsm {
 
                 let ciphertext = public_point.as_ref();
 
-                let _ciphertext = if params.curve() == ECCCurve::Curve25519 {
+                let _ciphertext = if params.curve() == ECCCurve::Curve25519Legacy {
                     assert_eq!(
                         ciphertext[0], 0x40,
-                        "Unexpected shape of Cv25519 encrypted data"
+                        "Unexpected shape of Curve25519Legacy encrypted data"
                     );
 
                     // Strip trailing 0x40
@@ -197,7 +197,7 @@ impl FakeHsm {
                 let shared_secret: [u8; 32] = dec.try_into().expect("must be [u8; 32]");
 
                 let (hash, alg_sym) = match params {
-                    EcdhPublicParams::Curve25519 { hash, alg_sym, .. }
+                    EcdhPublicParams::Curve25519Legacy { hash, alg_sym, .. }
                     | EcdhPublicParams::P256 { hash, alg_sym, .. }
                     | EcdhPublicParams::P384 { hash, alg_sym, .. }
                     | EcdhPublicParams::P521 { hash, alg_sym, .. } => (hash, alg_sym),

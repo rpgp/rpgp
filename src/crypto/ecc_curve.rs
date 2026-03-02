@@ -5,16 +5,31 @@ use crate::{
     errors::unsupported_err,
 };
 
+/// ECC Curves.
+///
+/// Standard curves are defined in <https://www.rfc-editor.org/rfc/rfc9580.html#name-ecc-curves-for-openpgp>
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum ECCCurve {
-    Curve25519,
-    Ed25519,
+    /// Curve25519Legacy ("1.3.6.1.4.1.3029.1.5.1") curve.
+    ///
+    /// For modern applications you may want to use [`crate::composed::KeyType::X25519`] instead of ECDH with this curve.
+    Curve25519Legacy,
+    /// Ed25519Legacy ("1.3.6.1.4.1.11591.15.1") curve.
+    ///
+    /// For modern applications you may want to use [`crate::composed::KeyType::Ed25519`].
+    Ed25519Legacy,
+    /// NIST P-256 ("1.2.840.10045.3.1.7") curve.
     P256,
+    /// NIST P-384 ("1.3.132.0.34") curve.
     P384,
+    /// NIST P-521 ("1.3.132.0.35") curve.
     P521,
+    /// brainpoolP256r1 ("1.3.36.3.3.2.8.1.1.7") curve.
     BrainpoolP256r1,
+    /// brainpoolP384r1 ("1.3.36.3.3.2.8.1.1.11") curve.
     BrainpoolP384r1,
+    /// brainpoolP512r1 ("1.3.36.3.3.2.8.1.1.13") curve.
     BrainpoolP512r1,
     Secp256k1,
     #[cfg_attr(test, proptest(skip))]
@@ -25,8 +40,8 @@ impl ECCCurve {
     /// Standard name
     pub fn name(&self) -> &str {
         match self {
-            ECCCurve::Curve25519 => "Curve25519",
-            ECCCurve::Ed25519 => "Ed25519",
+            ECCCurve::Curve25519Legacy => "Curve25519Legacy",
+            ECCCurve::Ed25519Legacy => "Ed25519Legacy",
             ECCCurve::P256 => "NIST P-256",
             ECCCurve::P384 => "NIST P-384",
             ECCCurve::P521 => "NIST P-521",
@@ -41,8 +56,8 @@ impl ECCCurve {
     /// IETF formatted OID
     pub fn oid_str(&self) -> String {
         match self {
-            ECCCurve::Curve25519 => "1.3.6.1.4.1.3029.1.5.1".into(),
-            ECCCurve::Ed25519 => "1.3.6.1.4.1.11591.15.1".into(),
+            ECCCurve::Curve25519Legacy => "1.3.6.1.4.1.3029.1.5.1".into(),
+            ECCCurve::Ed25519Legacy => "1.3.6.1.4.1.11591.15.1".into(),
             ECCCurve::P256 => "1.2.840.10045.3.1.7".into(),
             ECCCurve::P384 => "1.3.132.0.34".into(),
             ECCCurve::P521 => "1.3.132.0.35".into(),
@@ -57,8 +72,8 @@ impl ECCCurve {
     /// Nominal bit length of the curve
     pub fn nbits(&self) -> u16 {
         match self {
-            ECCCurve::Curve25519 => 255,
-            ECCCurve::Ed25519 => 255,
+            ECCCurve::Curve25519Legacy => 255,
+            ECCCurve::Ed25519Legacy => 255,
             ECCCurve::P256 => 256,
             ECCCurve::P384 => 384,
             ECCCurve::P521 => 521,
@@ -73,8 +88,8 @@ impl ECCCurve {
     /// Length of secret key in bytes
     pub const fn secret_key_length(&self) -> usize {
         match self {
-            ECCCurve::Curve25519 => 32,
-            ECCCurve::Ed25519 => 32,
+            ECCCurve::Curve25519Legacy => 32,
+            ECCCurve::Ed25519Legacy => 32,
             ECCCurve::P256 => 32,
             ECCCurve::P384 => 48,
             ECCCurve::P521 => 66,
@@ -89,8 +104,8 @@ impl ECCCurve {
     /// Alternative name of the curve
     pub fn alias(&self) -> Option<&str> {
         match self {
-            ECCCurve::Curve25519 => Some("cv25519"),
-            ECCCurve::Ed25519 => Some("ed25519"),
+            ECCCurve::Curve25519Legacy => Some("cv25519"),
+            ECCCurve::Ed25519Legacy => Some("ed25519"),
             ECCCurve::P256 => Some("nistp256"),
             ECCCurve::P384 => Some("nistp384"),
             ECCCurve::P521 => Some("nistp521"),
@@ -105,8 +120,8 @@ impl ECCCurve {
     /// Required algo, or None for ECDSA/ECDH
     pub fn pubkey_algo(&self) -> Option<PublicKeyAlgorithm> {
         match self {
-            ECCCurve::Curve25519 => Some(PublicKeyAlgorithm::ECDH),
-            ECCCurve::Ed25519 => Some(PublicKeyAlgorithm::EdDSALegacy),
+            ECCCurve::Curve25519Legacy => Some(PublicKeyAlgorithm::ECDH),
+            ECCCurve::Ed25519Legacy => Some(PublicKeyAlgorithm::EdDSALegacy),
             ECCCurve::P256 => None,
             ECCCurve::P384 => None,
             ECCCurve::P521 => None,
@@ -121,8 +136,8 @@ impl ECCCurve {
     /// Default hash algorithm for this curve
     pub fn hash_algo(&self) -> crate::errors::Result<HashAlgorithm> {
         match self {
-            ECCCurve::Curve25519
-            | ECCCurve::Ed25519
+            ECCCurve::Curve25519Legacy
+            | ECCCurve::Ed25519Legacy
             | ECCCurve::P256
             | ECCCurve::BrainpoolP256r1
             | ECCCurve::Secp256k1 => Ok(HashAlgorithm::Sha256),
@@ -140,8 +155,8 @@ impl ECCCurve {
     /// Default symmetric encryption algorithm for this curve
     pub fn sym_algo(&self) -> crate::errors::Result<SymmetricKeyAlgorithm> {
         match self {
-            ECCCurve::Curve25519
-            | ECCCurve::Ed25519
+            ECCCurve::Curve25519Legacy
+            | ECCCurve::Ed25519Legacy
             | ECCCurve::P256
             | ECCCurve::BrainpoolP256r1
             | ECCCurve::Secp256k1 => Ok(SymmetricKeyAlgorithm::AES128),
@@ -177,11 +192,11 @@ impl ECCCurve {
 }
 /// Get the right curve given an oid.
 pub fn ecc_curve_from_oid(oid: &[u8]) -> Option<ECCCurve> {
-    if ECCCurve::Curve25519.oid().as_slice() == oid {
-        return Some(ECCCurve::Curve25519);
+    if ECCCurve::Curve25519Legacy.oid().as_slice() == oid {
+        return Some(ECCCurve::Curve25519Legacy);
     }
-    if ECCCurve::Ed25519.oid().as_slice() == oid {
-        return Some(ECCCurve::Ed25519);
+    if ECCCurve::Ed25519Legacy.oid().as_slice() == oid {
+        return Some(ECCCurve::Ed25519Legacy);
     }
     if ECCCurve::P256.oid().as_slice() == oid {
         return Some(ECCCurve::P256);
@@ -246,11 +261,11 @@ mod tests {
         assert_eq!(ECCCurve::P384.oid(), vec![0x2B, 0x81, 0x04, 0x00, 0x22]);
         assert_eq!(ECCCurve::P521.oid(), vec![0x2B, 0x81, 0x04, 0x00, 0x23]);
         assert_eq!(
-            ECCCurve::Ed25519.oid(),
+            ECCCurve::Ed25519Legacy.oid(),
             vec![0x2B, 0x06, 0x01, 0x04, 0x01, 0xDA, 0x47, 0x0F, 0x01]
         );
         assert_eq!(
-            ECCCurve::Curve25519.oid(),
+            ECCCurve::Curve25519Legacy.oid(),
             vec![0x2B, 0x06, 0x01, 0x04, 0x01, 0x97, 0x55, 0x01, 0x05, 0x01]
         );
         assert_eq!(

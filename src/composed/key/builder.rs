@@ -828,7 +828,7 @@ mod tests {
             ])
             .subkey(
                 SubkeyParamsBuilder::default()
-                    .key_type(KeyType::ECDH(ECCCurve::Curve25519))
+                    .key_type(KeyType::ECDH(ECCCurve::Curve25519Legacy))
                     .can_encrypt(EncryptionCaps::All)
                     .passphrase(None)
                     .build()
@@ -1113,8 +1113,8 @@ mod tests {
             gen_ecdsa_ecdh(
                 &mut rng,
                 ECCCurve::Secp256k1,
-                ECCCurve::Curve25519, // we don't currently support ECDH over Secp256k1
-                KeyVersion::V4,       // use of secp256k1 isn't specified in RFC 9580
+                ECCCurve::Curve25519Legacy, // we don't currently support ECDH over Secp256k1
+                KeyVersion::V4,             // use of secp256k1 isn't specified in RFC 9580
             );
         }
     }
@@ -1145,7 +1145,7 @@ mod tests {
             ])
             .subkey(
                 SubkeyParamsBuilder::default()
-                    .key_type(KeyType::ECDH(ECCCurve::Curve25519))
+                    .key_type(KeyType::ECDH(ECCCurve::Curve25519Legacy))
                     .can_encrypt(EncryptionCaps::All)
                     .passphrase(None)
                     .build()

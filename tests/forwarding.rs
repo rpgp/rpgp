@@ -74,7 +74,7 @@ fn test_forwarding_v4() {
         // inspect the internal shape of the forwardee secret key:
 
         // 1. it has the replacement fingerprint parameter in its encryption subkey
-        let PublicParams::ECDH(EcdhPublicParams::Curve25519 { ecdh_kdf_type, .. }) =
+        let PublicParams::ECDH(EcdhPublicParams::Curve25519Legacy { ecdh_kdf_type, .. }) =
             forwardee.secret_subkeys[0].key.public_key().public_params()
         else {
             panic!("expect ecdh")
