@@ -10,7 +10,7 @@ use crate::ser::Serialize;
 /// Timestamp that refers to a moment in time after the [`UNIX_EPOCH`].
 ///
 /// Stored in seconds precision.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Default)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Timestamp(u32);
 
 impl fmt::Debug for Timestamp {
