@@ -1,6 +1,5 @@
 use std::io::BufRead;
 
-use curve25519_dalek::Scalar;
 use generic_array::GenericArray;
 use log::debug;
 use rand::{CryptoRng, Rng};
@@ -219,6 +218,7 @@ impl SecretSubkey {
     /// Given recipient and forwardee encryption subkeys, compute proxy transformation parameter.
     ///
     /// FIXME: unlocking?
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     pub fn generate_proxy_parameter(&self, forwardee: &SecretSubkey) -> Result<[u8; 32]> {
         let recipient = self.secret_params();
         let forwardee = forwardee.secret_params();
@@ -252,12 +252,13 @@ impl SecretSubkey {
     ///
     /// k = dB/dC mod n
     /// return k
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     fn compute_proxy_parameter(mut db: [u8; 32], mut dc: [u8; 32]) -> Result<[u8; 32]> {
         db.reverse();
         dc.reverse();
 
-        let recipient = Scalar::from_bytes_mod_order(db);
-        let forwardee = Scalar::from_bytes_mod_order(dc);
+        let recipient = curve25519_dalek::Scalar::from_bytes_mod_order(db);
+        let forwardee = curve25519_dalek::Scalar::from_bytes_mod_order(dc);
 
         // k is implicitly reduced to the group order
         let k = recipient * forwardee.invert();
@@ -730,7 +731,7 @@ mod tests {
 
     use crate::{
         crypto::hash::HashAlgorithm,
-        packet::{PubKeyInner, SecretKey, SecretSubkey},
+        packet::{PubKeyInner, SecretKey},
         types::{KeyVersion, S2kParams, SigningKey, Timestamp},
     };
 
@@ -804,6 +805,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     fn forward_proxy_param_a_1() {
         // Test vectors from
         // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-proxy-parameter>
@@ -815,7 +817,7 @@ mod tests {
             hex::decode("684da6225bcd44d880168fc5bec7d2f746217f014c8019005f144cc148f16a00")
                 .expect("decode");
 
-        let k = SecretSubkey::compute_proxy_parameter(
+        let k = crate::packet::SecretSubkey::compute_proxy_parameter(
             rec_integer.try_into().unwrap(),
             forw_integer.try_into().unwrap(),
         )

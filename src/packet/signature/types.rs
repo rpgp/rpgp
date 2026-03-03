@@ -1268,6 +1268,7 @@ impl KeyFlags {
     pub fn set_authentication(&mut self, val: bool) {
         self.known.set_authentication(val);
     }
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     pub fn set_draft_decrypt_forwarded(&mut self, val: bool) {
         self.known.set_draft_decrypt_forwarded(val);
     }

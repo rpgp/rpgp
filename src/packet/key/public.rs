@@ -20,9 +20,9 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EcdhKdfType, EcdhPublicParams, EddsaLegacyPublicParams, EncryptionKey, EskType,
-        Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes,
-        PublicParams, SignatureBytes, SigningKey, Tag, Timestamp, VerifyingKey,
+        EcdhPublicParams, EddsaLegacyPublicParams, EncryptionKey, EskType, Fingerprint, Imprint,
+        KeyDetails, KeyId, KeyVersion, Mpi, Password, PkeskBytes, PublicParams, SignatureBytes,
+        SigningKey, Tag, Timestamp, VerifyingKey,
     },
 };
 
@@ -111,6 +111,7 @@ impl PublicKey {
         })
     }
 
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     pub fn is_forwardee_key(&self) -> bool {
         self.inner.is_forwardee_key()
     }
@@ -231,6 +232,7 @@ impl PublicSubkey {
         config.sign_subkey_binding(primary_sec_key, primary_pub_key, key_pw, &self)
     }
 
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     pub fn is_forwardee_key(&self) -> bool {
         self.inner.is_forwardee_key()
     }
@@ -448,10 +450,11 @@ impl PubKeyInner {
         config.sign_key(key, key_pw, &self)
     }
 
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     fn is_forwardee_key(&self) -> bool {
         match self.public_params {
             PublicParams::ECDH(EcdhPublicParams::Curve25519 { ecdh_kdf_type, .. }) => {
-                matches!(ecdh_kdf_type, EcdhKdfType::Replaced { .. })
+                matches!(ecdh_kdf_type, crate::types::EcdhKdfType::Replaced { .. })
             }
             _ => false,
         }

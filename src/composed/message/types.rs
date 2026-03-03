@@ -490,6 +490,8 @@ pub enum Edata<'a> {
 pub struct DecryptionOptions {
     legacy: bool,
     gnupg_aead: bool,
+
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     draft_forwarding: bool,
 }
 
@@ -524,6 +526,7 @@ impl DecryptionOptions {
     }
 
     /// Enable decryption of forwarded messages as specified in draft-wussler-openpgp-forwarding
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     pub fn enable_draft_forwarding(mut self) -> Self {
         self.draft_forwarding = true;
         self
@@ -1135,8 +1138,16 @@ impl TheRing<'_> {
                 macro_rules! try_key {
                     ($skey:expr, $pkey:expr, $values:expr) => {
 
+                        #[allow(unused_mut)]
+                        let mut forwardee_not_allowed_error = false;
+
                         // Detect and reject forwardee keys if DecryptionOptions::draft_forwarding is unset
+                        #[cfg(feature = "draft-wussler-openpgp-forwarding")]
                         if !self.decrypt_options.draft_forwarding && $pkey.is_forwardee_key() {
+                            forwardee_not_allowed_error = true;
+                        }
+
+                        if forwardee_not_allowed_error {
                             debug!("draft_forwarding unset in DecryptionOptions, not trying forwardee key: {:?}", $pkey.fingerprint());
                             result.secret_keys[i] = InnerRingResult::Invalid;
                         } else {
