@@ -9,8 +9,9 @@ use std::io::BufReader;
 use pgp::{
     armor::{BlockType, Dearmor},
     composed::{
-        ArmorOptions, Deserializable, EncryptionCaps, Esk, KeyType, Message, MessageBuilder,
-        SecretKeyParamsBuilder, SignedSecretKey, SignedSecretSubKey, SubkeyParamsBuilder,
+        ArmorOptions, DecryptionOptions, Deserializable, EncryptionCaps, Esk, KeyType, Message,
+        MessageBuilder, SecretKeyParamsBuilder, SignedSecretKey, SignedSecretSubKey,
+        SubkeyParamsBuilder, TheRing,
     },
     crypto::{ecc_curve::ECCCurve, sym::SymmetricKeyAlgorithm},
     packet,
@@ -191,9 +192,13 @@ fn forward_a_3_decrypt_forwarded() {
     // Forwardee decrypts the transformed message
     let (msg, _) = Message::from_string(TRANSFORMED_MESSAGE).unwrap();
 
-    let mut msg = msg
-        .decrypt(&Password::empty(), &forwardee)
-        .expect("decrypt");
+    let ring = TheRing {
+        decrypt_options: DecryptionOptions::new().enable_draft_forwarding(),
+        secret_keys: vec![&forwardee],
+        ..Default::default()
+    };
+
+    let (mut msg, _) = msg.decrypt_the_ring(ring, true).expect("decrypt");
 
     let plain = msg.as_data_vec().unwrap();
 
@@ -351,9 +356,13 @@ fn forward_end_to_end() {
 
     let (msg, _) = Message::from_string(&armored).unwrap();
 
-    let mut msg = msg
-        .decrypt(&Password::empty(), &frederick)
-        .expect("decrypt");
+    let ring = TheRing {
+        decrypt_options: DecryptionOptions::new().enable_draft_forwarding(),
+        secret_keys: vec![&frederick],
+        ..Default::default()
+    };
+
+    let (mut msg, _) = msg.decrypt_the_ring(ring, true).expect("decrypt");
 
     let plain = msg.as_data_vec().unwrap();
 

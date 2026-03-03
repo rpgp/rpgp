@@ -490,6 +490,7 @@ pub enum Edata<'a> {
 pub struct DecryptionOptions {
     legacy: bool,
     gnupg_aead: bool,
+    draft_forwarding: bool,
 }
 
 impl DecryptionOptions {
@@ -519,6 +520,12 @@ impl DecryptionOptions {
     /// This format is not part of the IETF-specified OpenPGP standard!
     pub fn enable_gnupg_aead(mut self) -> Self {
         self.gnupg_aead = true;
+        self
+    }
+
+    /// Enable decryption of forwarded messages as specified in draft-wussler-openpgp-forwarding
+    pub fn enable_draft_forwarding(mut self) -> Self {
+        self.draft_forwarding = true;
         self
     }
 }
@@ -1127,46 +1134,53 @@ impl TheRing<'_> {
 
                 macro_rules! try_key {
                     ($skey:expr, $pkey:expr, $values:expr) => {
-                        debug!(
-                            "found matching key {:?}, trying to decrypt",
-                            $skey.fingerprint()
-                        );
-                        match $skey.secret_params() {
-                            SecretParams::Encrypted(_) => {
-                                // unlock
-                                for pw in &self.key_passwords {
-                                    match $skey.decrypt(pw, $values, typ) {
-                                        Ok(Ok(session_key)) => {
-                                            debug!("decrypted session key");
-                                            result.secret_keys[i] = InnerRingResult::Ok;
-                                            pkesk_session_keys.push((i, session_key));
-                                            break;
-                                        }
-                                        Ok(Err(err)) => {
-                                            debug!("failed to decrypt session key: {:?}", err);
-                                            result.secret_keys[i] = InnerRingResult::Invalid;
-                                            break;
-                                        }
-                                        Err(err) => {
-                                            debug!("failed to unlock key: {:?}", err);
-                                            result.secret_keys[i] =
-                                                InnerRingResult::InvalidPassword;
+
+                        // Detect and reject forwardee keys if DecryptionOptions::draft_forwarding is unset
+                        if !self.decrypt_options.draft_forwarding && $pkey.is_forwardee_key() {
+                            debug!("draft_forwarding unset in DecryptionOptions, not trying forwardee key: {:?}", $pkey.fingerprint());
+                            result.secret_keys[i] = InnerRingResult::Invalid;
+                        } else {
+                            debug!(
+                                "found matching key {:?}, trying to decrypt",
+                                $skey.fingerprint()
+                            );
+                            match $skey.secret_params() {
+                                SecretParams::Encrypted(_) => {
+                                    // unlock
+                                    for pw in &self.key_passwords {
+                                        match $skey.decrypt(pw, $values, typ) {
+                                            Ok(Ok(session_key)) => {
+                                                debug!("decrypted session key");
+                                                result.secret_keys[i] = InnerRingResult::Ok;
+                                                pkesk_session_keys.push((i, session_key));
+                                                break;
+                                            }
+                                            Ok(Err(err)) => {
+                                                debug!("failed to decrypt session key: {:?}", err);
+                                                result.secret_keys[i] = InnerRingResult::Invalid;
+                                                break;
+                                            }
+                                            Err(err) => {
+                                                debug!("failed to unlock key: {:?}", err);
+                                                result.secret_keys[i] =
+                                                    InnerRingResult::InvalidPassword;
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            SecretParams::Plain(sec_params) => {
-                                // already unlocked
-                                debug!("key is already unlocked");
-                                match sec_params.decrypt($pkey.public_params(), $values, typ, $pkey)
-                                {
-                                    Ok(session_key) => {
-                                        result.secret_keys[i] = InnerRingResult::Ok;
-                                        pkesk_session_keys.push((i, session_key));
-                                    }
-                                    Err(err) => {
-                                        debug!("failed to decrypt session key: {:?}", err);
-                                        result.secret_keys[i] = InnerRingResult::Invalid;
+                                SecretParams::Plain(sec_params) => {
+                                    // already unlocked
+                                    debug!("key is already unlocked");
+                                    match sec_params.decrypt($pkey.public_params(), $values, typ, $pkey)
+                                    {
+                                        Ok(session_key) => {
+                                            result.secret_keys[i] = InnerRingResult::Ok;
+                                            pkesk_session_keys.push((i, session_key));
+                                        }
+                                        Err(err) => {
+                                            debug!("failed to decrypt session key: {:?}", err);
+                                            result.secret_keys[i] = InnerRingResult::Invalid;
+                                        }
                                     }
                                 }
                             }
