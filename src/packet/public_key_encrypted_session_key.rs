@@ -357,7 +357,7 @@ impl PublicKeyEncryptedSessionKey {
         let public_point_data = &public_point.as_ref()[1..33];
 
         let mut forwarded_point = Self::transform_ecdh_ephemeral(
-            public_point_data.try_into().expect("FIXME"),
+            public_point_data.try_into().expect("32 bytes"),
             proxy_parameter,
         )?
         .to_vec();
