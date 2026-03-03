@@ -112,11 +112,11 @@ fn forward_a_3_transform_pkesk() {
     // Get the PKESK from ENCYPTED_MESSAGE
     let (msg, _) = Message::from_string(ENCRYPTED_MESSAGE).unwrap();
     let Message::Encrypted { esk, .. } = msg else {
-        unimplemented!()
+        panic!("expected encrypted message")
     };
     assert_eq!(esk.len(), 1);
     let Esk::PublicKeyEncryptedSessionKey(pkesk) = &esk[0] else {
-        unimplemented!();
+        panic!("expected pkesk");
     };
 
     // Calculate the transformed Pkesk for FORWARDEE_KEY
@@ -126,7 +126,7 @@ fn forward_a_3_transform_pkesk() {
         "forwardee fp {:#02x?}",
         &forwardee.secret_subkeys[0].key.fingerprint()
     );
-    eprintln!("forwardee {:#02x?}", &forwardee.secret_subkeys[0].key,);
+    eprintln!("forwardee {:#02x?}", &forwardee.secret_subkeys[0].key);
 
     let transformed_pkesk = pkesk
         .forwarding_transform(
@@ -138,10 +138,10 @@ fn forward_a_3_transform_pkesk() {
     // Compare `transformed_pkesk` with the expected output
     let (msg, _) = Message::from_string(TRANSFORMED_MESSAGE).unwrap();
     let Message::Encrypted { esk, .. } = msg else {
-        unimplemented!()
+        panic!("expected encrypted message")
     };
     let Esk::PublicKeyEncryptedSessionKey(expected_pkesk) = &esk[0] else {
-        unimplemented!();
+        panic!("expected pkesk");
     };
 
     assert_eq!(&transformed_pkesk, expected_pkesk);
@@ -258,11 +258,11 @@ fn forward_end_to_end() {
         ..
     }) = public_params
     else {
-        unimplemented!()
+        panic!("expected ECDH/Curve25519");
     };
 
     let Fingerprint::V4(robert_fp) = robert.secret_subkeys[0].fingerprint() else {
-        unimplemented!()
+        panic!("expected v4 fingerprint");
     };
 
     *ecdh_kdf_type = EcdhKdfType::Replaced {
@@ -298,7 +298,6 @@ fn forward_end_to_end() {
 
     // # Calculate proxy parameter
 
-    // TODO: ForwardingInstance type?
     let proxy_parameter = robert.secret_subkeys[0]
         .key
         .generate_proxy_parameter(
@@ -328,7 +327,7 @@ fn forward_end_to_end() {
     let seipd = pp.next().unwrap().unwrap();
 
     let Packet::PublicKeyEncryptedSessionKey(ref pkesk) = pkesk else {
-        unimplemented!();
+        panic!("expected pkesk");
     };
 
     // # Calculate the transformed Message for frederick
@@ -374,7 +373,7 @@ fn forward_end_to_end() {
 }
 
 #[test]
-fn forward_lock() {
+fn forward_locked() {
     // Test generate_proxy_parameter with locked keys
 
     let mut rng = ChaCha8Rng::seed_from_u64(0);
@@ -409,11 +408,11 @@ fn forward_lock() {
         ..
     }) = public_params
     else {
-        unimplemented!()
+        panic!("expected ECDH/Curve25519");
     };
 
     let Fingerprint::V4(robert_fp) = robert.secret_subkeys[0].fingerprint() else {
-        unimplemented!()
+        panic!("expected v4 fingerprint");
     };
 
     *ecdh_kdf_type = EcdhKdfType::Replaced {
