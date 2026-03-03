@@ -216,28 +216,29 @@ impl SecretSubkey {
     }
 
     /// Given recipient and forwardee encryption subkeys, compute proxy transformation parameter.
-    ///
-    /// FIXME: unlocking?
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
-    pub fn generate_proxy_parameter(&self, forwardee: &SecretSubkey) -> Result<[u8; 32]> {
-        let recipient = self.secret_params();
-        let forwardee = forwardee.secret_params();
-
-        let SecretParams::Plain(PlainSecretParams::ECDH(
-            crate::crypto::ecdh::SecretKey::Curve25519(r),
-        )) = recipient
-        else {
-            bail!("Only non-locked ECDH/Curve 25519 recipient keys are supported")
-        };
-
-        let SecretParams::Plain(PlainSecretParams::ECDH(
-            crate::crypto::ecdh::SecretKey::Curve25519(f),
-        )) = forwardee
-        else {
-            bail!("Only non-locked ECDH/Curve 25519 forwardee keys are supported")
-        };
-
-        Self::compute_proxy_parameter(r.to_bytes_rev(), f.to_bytes_rev())
+    pub fn generate_proxy_parameter(
+        &self,
+        forwardee: &SecretSubkey,
+        password_recipient: &Password,
+        password_fowardee: &Password,
+    ) -> Result<[u8; 32]> {
+        self.unlock(
+            password_recipient,
+            |_, unlocked_recipient| match unlocked_recipient {
+                PlainSecretParams::ECDH(crate::crypto::ecdh::SecretKey::Curve25519(r)) => {
+                    forwardee.unlock(password_fowardee, |_, unlocked_forwardee| {
+                        match unlocked_forwardee {
+                            PlainSecretParams::ECDH(
+                                crate::crypto::ecdh::SecretKey::Curve25519(f),
+                            ) => Self::compute_proxy_parameter(r.to_bytes_rev(), f.to_bytes_rev()),
+                            _ => bail!("Only ECDH/Curve 25519 forwardee keys are supported"),
+                        }
+                    })?
+                }
+                _ => bail!("Only ECDH/Curve 25519 recipient keys are supported"),
+            },
+        )?
     }
 
     /// Given the recipient and forwardee private key integers, compute the proxy transformation parameter.

@@ -96,7 +96,7 @@ fn forward_a_3_calculate_proxy_param() {
     let forwardee_key = &forwardee.secret_subkeys[0].key;
 
     let k = recipient_key
-        .generate_proxy_parameter(forwardee_key)
+        .generate_proxy_parameter(forwardee_key, &Password::empty(), &Password::empty())
         .expect("generate_proxy_parameter");
 
     assert_eq!(
@@ -296,12 +296,16 @@ fn forward_end_to_end() {
         .secret_subkeys
         .push(SignedSecretSubKey::new(sec_sub, vec![subkey_binding]));
 
-    // # Calculate proxy parameter (test vectors from a.3 end-to-end test)
+    // # Calculate proxy parameter
 
     // TODO: ForwardingInstance type?
     let proxy_parameter = robert.secret_subkeys[0]
         .key
-        .generate_proxy_parameter(&frederick.secret_subkeys[0].key)
+        .generate_proxy_parameter(
+            &frederick.secret_subkeys[0].key,
+            &Password::empty(),
+            &Password::empty(),
+        )
         .expect("generate_proxy_parameter");
 
     // # Produce an encrypted message for robert
@@ -367,4 +371,77 @@ fn forward_end_to_end() {
     let plain = msg.as_data_vec().unwrap();
 
     assert_eq!(plain, MESSAGE_FOR_ROBERT.as_bytes());
+}
+
+#[test]
+fn forward_lock() {
+    // Test generate_proxy_parameter with locked keys
+
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    // Generate recipient
+    let robert_params = SecretKeyParamsBuilder::default()
+        .key_type(KeyType::Ed25519Legacy)
+        .primary_user_id("robert".into())
+        .subkey(
+            SubkeyParamsBuilder::default()
+                .key_type(KeyType::ECDH(ECCCurve::Curve25519))
+                .can_encrypt(EncryptionCaps::All)
+                .passphrase(Some("lock-robert".to_string()))
+                .build()
+                .unwrap(),
+        )
+        .build()
+        .unwrap();
+
+    let robert = robert_params.generate(&mut rng).unwrap();
+
+    // Generate forwardee subkey
+    let (mut public_params, secret_params) = KeyType::ECDH(ECCCurve::Curve25519)
+        .generate(&mut rng)
+        .unwrap();
+    let mut keyflags = KeyFlags::default();
+    keyflags.set_shared(true);
+    keyflags.set_draft_decrypt_forwarded(true);
+
+    let PublicParams::ECDH(EcdhPublicParams::Curve25519 {
+        ref mut ecdh_kdf_type,
+        ..
+    }) = public_params
+    else {
+        unimplemented!()
+    };
+
+    let Fingerprint::V4(robert_fp) = robert.secret_subkeys[0].fingerprint() else {
+        unimplemented!()
+    };
+
+    *ecdh_kdf_type = EcdhKdfType::Replaced {
+        replacement_fingerprint: robert_fp,
+    };
+
+    let forwardee_inner = PubKeyInner::new(
+        KeyVersion::V4,
+        KeyType::ECDH(ECCCurve::Curve25519).to_alg(),
+        Timestamp::now(),
+        None,
+        public_params,
+    )
+    .unwrap();
+    let forwardee_pub = packet::PublicSubkey::from_inner(forwardee_inner).unwrap();
+
+    let mut forwardee_secret_sub = packet::SecretSubkey::new(forwardee_pub, secret_params).unwrap();
+    forwardee_secret_sub
+        .set_password(&mut rng, &"lock-forwardee".into())
+        .unwrap();
+
+    // Calculate proxy parameter
+    let _proxy_parameter = robert.secret_subkeys[0]
+        .key
+        .generate_proxy_parameter(
+            &forwardee_secret_sub,
+            &"lock-robert".into(),
+            &"lock-forwardee".into(),
+        )
+        .expect("generate_proxy_parameter");
 }

@@ -111,6 +111,9 @@ impl PublicKey {
         })
     }
 
+    /// True, if this key packet is a forwardee key as defined in draft-wussler-openpgp-forwarding
+    ///
+    /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke>
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     pub fn is_forwardee_key(&self) -> bool {
         self.inner.is_forwardee_key()
@@ -232,6 +235,9 @@ impl PublicSubkey {
         config.sign_subkey_binding(primary_sec_key, primary_pub_key, key_pw, &self)
     }
 
+    /// True, if this key packet is a forwardee key as defined in draft-wussler-openpgp-forwarding
+    ///
+    /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke>
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     pub fn is_forwardee_key(&self) -> bool {
         self.inner.is_forwardee_key()
@@ -450,6 +456,9 @@ impl PubKeyInner {
         config.sign_key(key, key_pw, &self)
     }
 
+    /// True, if this key packet is a forwardee key as defined in draft-wussler-openpgp-forwarding
+    ///
+    /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke>
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     fn is_forwardee_key(&self) -> bool {
         match self.public_params {
