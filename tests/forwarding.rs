@@ -109,7 +109,7 @@ fn forward_a_3_calculate_proxy_param() {
 fn forward_a_3_transform_pkesk() {
     let _ = pretty_env_logger::try_init();
 
-    // Get the PKESK from ENCYPTED_MESSAGE
+    // Get the PKESK from ENCRYPTED_MESSAGE
     let (msg, _) = Message::from_string(ENCRYPTED_MESSAGE).unwrap();
     let Message::Encrypted { esk, .. } = msg else {
         panic!("expected encrypted message")
