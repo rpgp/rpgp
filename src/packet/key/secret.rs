@@ -221,13 +221,13 @@ impl SecretSubkey {
         &self,
         forwardee: &SecretSubkey,
         password_recipient: &Password,
-        password_fowardee: &Password,
+        password_forwardee: &Password,
     ) -> Result<[u8; 32]> {
         self.unlock(
             password_recipient,
             |_, unlocked_recipient| match unlocked_recipient {
                 PlainSecretParams::ECDH(crate::crypto::ecdh::SecretKey::Curve25519(r)) => {
-                    forwardee.unlock(password_fowardee, |_, unlocked_forwardee| {
+                    forwardee.unlock(password_forwardee, |_, unlocked_forwardee| {
                         match unlocked_forwardee {
                             PlainSecretParams::ECDH(
                                 crate::crypto::ecdh::SecretKey::Curve25519(f),
