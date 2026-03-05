@@ -681,9 +681,9 @@ mod tests {
 
         let res = PublicKeyEncryptedSessionKey::transform_ecdh_ephemeral(
             small.try_into().unwrap(),
-            [0; 32],
+            [0x11; 32].into(),
         );
 
-        matches!(res, Err(crate::errors::Error::Message { .. }));
+        assert!(matches!(res, Err(crate::errors::Error::Message { .. })));
     }
 }
