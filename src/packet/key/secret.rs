@@ -1,5 +1,6 @@
 use std::io::BufRead;
 
+use elliptic_curve::subtle::ConstantTimeEq;
 use generic_array::GenericArray;
 use log::debug;
 use rand::{CryptoRng, Rng};
@@ -260,6 +261,11 @@ impl SecretSubkey {
 
         let recipient = curve25519_dalek::Scalar::from_bytes_mod_order(db);
         let forwardee = curve25519_dalek::Scalar::from_bytes_mod_order(dc);
+
+        // ensure forwardee is not zero (precondition for calling `invert`)
+        if forwardee.ct_eq(&curve25519_dalek::Scalar::ZERO).into() {
+            bail!("Forwardee private key is zero");
+        }
 
         // k is implicitly reduced to the group order
         let k = recipient * forwardee.invert();
