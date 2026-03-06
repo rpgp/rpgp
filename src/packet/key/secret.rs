@@ -264,8 +264,12 @@ impl SecretSubkey {
         db.reverse();
         dc.reverse();
 
-        let recipient = Zeroizing::new(curve25519_dalek::Scalar::from_bytes_mod_order(db));
-        let forwardee = Zeroizing::new(curve25519_dalek::Scalar::from_bytes_mod_order(dc));
+        let recipient = Zeroizing::new(curve25519_dalek::Scalar::from_bytes_mod_order(
+            curve25519_dalek::scalar::clamp_integer(db),
+        ));
+        let forwardee = Zeroizing::new(curve25519_dalek::Scalar::from_bytes_mod_order(
+            curve25519_dalek::scalar::clamp_integer(dc),
+        ));
 
         // ensure forwardee is not zero (precondition for calling `invert`)
         if forwardee.ct_eq(&curve25519_dalek::Scalar::ZERO).into() {
