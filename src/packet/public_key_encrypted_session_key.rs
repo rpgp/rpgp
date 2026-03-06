@@ -410,7 +410,7 @@ impl PublicKeyEncryptedSessionKey {
         let ephemeral = MontgomeryPoint(eb);
 
         // if 0x08 * eB == 0 then abort
-        if (Scalar::from(8u8) * ephemeral).to_bytes() == [0; 32] {
+        if (Scalar::from(8u8) * ephemeral).is_identity() {
             bail!("Ephemeral public key belongs to a small subgroup");
         }
 
