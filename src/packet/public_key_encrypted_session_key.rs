@@ -417,13 +417,13 @@ impl PublicKeyEncryptedSessionKey {
         let k = Zeroizing::new(Scalar::from_bytes_mod_order(k.into()));
 
         // eC = k * eB
-        // return eC
         let ec = (*k) * ephemeral;
 
         if ec.is_identity() {
             bail!("Transformed ephemeral is the identity point");
         }
 
+        // return eC
         Ok(ec.to_bytes())
     }
 }
@@ -549,9 +549,12 @@ fn write_len_v6(values: &PkeskBytes, fingerprint: &Option<Fingerprint>) -> usize
     sum
 }
 
-// FIXME: where should this type go?
 #[cfg(feature = "draft-wussler-openpgp-forwarding")]
 #[derive(zeroize::ZeroizeOnDrop)]
+/// A proxy parameter for use in `draft-wussler-openpgp-forwarding` message transformations.
+/// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-computing-the-proxy-paramet>
+///
+/// TODO: where should this type go?
 pub struct ProxyParameter([u8; 32]);
 
 #[cfg(feature = "draft-wussler-openpgp-forwarding")]

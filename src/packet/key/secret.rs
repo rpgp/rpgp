@@ -261,6 +261,7 @@ impl SecretSubkey {
         use elliptic_curve::subtle::ConstantTimeEq;
         use zeroize::Zeroizing;
 
+        // reverse the bytes for little-endian encoding
         db.reverse();
         dc.reverse();
 
