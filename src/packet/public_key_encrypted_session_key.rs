@@ -314,6 +314,12 @@ impl PublicKeyEncryptedSessionKey {
             bail!("Only V3 PKESK are supported right now");
         };
 
+        ensure_eq!(
+            *pk_algo,
+            PublicKeyAlgorithm::ECDH,
+            "PKESK algorithm is not ECDH"
+        );
+
         // Check that the forwardee key uses ECDH/curve 25519
         let PublicParams::ECDH(EcdhPublicParams::Curve25519 { ecdh_kdf_type, .. }) =
             forwardee.public_params()
