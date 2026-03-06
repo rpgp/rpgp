@@ -356,13 +356,12 @@ impl PublicKeyEncryptedSessionKey {
         // Strip 0x40 prefix for proxy transformation
         let public_point_data = &public_point.as_ref()[1..33];
 
-        let mut forwarded_point = Self::transform_ecdh_ephemeral(
+        let mut forwarded_point = [0u8; 33];
+        forwarded_point[0] = 0x40;
+        forwarded_point[1..].copy_from_slice(&Self::transform_ecdh_ephemeral(
             public_point_data.try_into().expect("32 bytes"),
             proxy_parameter,
-        )?
-        .to_vec();
-        // re-add 0x40 prefix for the OpenPGP "MPI" representation
-        forwarded_point.insert(0, 0x40);
+        )?);
 
         *public_point = Mpi::from_slice(&forwarded_point);
 
