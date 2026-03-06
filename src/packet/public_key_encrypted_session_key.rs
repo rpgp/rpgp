@@ -415,6 +415,10 @@ impl PublicKeyEncryptedSessionKey {
         // return eC
         let ec = (*k) * ephemeral;
 
+        if ec.is_identity() {
+            bail!("Transformed ephemeral is the identity point");
+        }
+
         Ok(ec.to_bytes())
     }
 }
