@@ -1,6 +1,5 @@
 use std::io::BufRead;
 
-use elliptic_curve::subtle::ConstantTimeEq;
 use generic_array::GenericArray;
 use log::debug;
 use rand::{CryptoRng, Rng};
@@ -223,7 +222,7 @@ impl SecretSubkey {
         forwardee: &SecretSubkey,
         password_recipient: &Password,
         password_forwardee: &Password,
-    ) -> Result<[u8; 32]> {
+    ) -> Result<crate::packet::ProxyParameter> {
         self.unlock(
             password_recipient,
             |_, unlocked_recipient| match unlocked_recipient {
@@ -255,22 +254,30 @@ impl SecretSubkey {
     /// k = dB/dC mod n
     /// return k
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
-    fn compute_proxy_parameter(mut db: [u8; 32], mut dc: [u8; 32]) -> Result<[u8; 32]> {
+    fn compute_proxy_parameter(
+        mut db: [u8; 32],
+        mut dc: [u8; 32],
+    ) -> Result<crate::packet::ProxyParameter> {
+        use elliptic_curve::subtle::ConstantTimeEq;
+        use zeroize::Zeroizing;
+
         db.reverse();
         dc.reverse();
 
-        let recipient = curve25519_dalek::Scalar::from_bytes_mod_order(db);
-        let forwardee = curve25519_dalek::Scalar::from_bytes_mod_order(dc);
+        let recipient = Zeroizing::new(curve25519_dalek::Scalar::from_bytes_mod_order(db));
+        let forwardee = Zeroizing::new(curve25519_dalek::Scalar::from_bytes_mod_order(dc));
 
         // ensure forwardee is not zero (precondition for calling `invert`)
         if forwardee.ct_eq(&curve25519_dalek::Scalar::ZERO).into() {
             bail!("Forwardee private key is zero");
         }
 
-        // k is implicitly reduced to the group order
-        let k = recipient * forwardee.invert();
+        let forwardee_inverted = Zeroizing::new(forwardee.invert());
 
-        Ok(k.to_bytes())
+        // k is implicitly reduced to the group order
+        let k = (*recipient) * (*forwardee_inverted);
+
+        Ok(k.to_bytes().into())
     }
 }
 
@@ -831,7 +838,7 @@ mod tests {
         .expect("compute_proxy_parameter");
 
         std::assert_eq!(
-            &k[..],
+            k.as_ref(),
             hex::decode("e89786987c3a3ec761a679bc372cd11a425eda72bd5265d78ad0f5f32ee64f02")
                 .unwrap()
         );

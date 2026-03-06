@@ -64,7 +64,7 @@ yGZuVVMAK/ypFfebDf4D/rlEw3cysv213m8aoK8nAUO8xQX3XQq3Sg+EGm0BNV8E
 =uOPV
 -----END PGP MESSAGE-----";
 
-const PROXY_PARAMETER_K: &[u8] = &[
+const PROXY_PARAMETER_K: [u8; 32] = [
     0x04, 0xb6, 0x57, 0x04, 0x5f, 0xc9, 0xc0, 0x75, 0x9c, 0x5f, 0xd1, 0x1d, 0x8c, 0xa7, 0x5a, 0x2b,
     0x1a, 0xa1, 0x01, 0xc9, 0xc8, 0x96, 0x49, 0x0b, 0xce, 0xc1, 0x00, 0xf9, 0x41, 0xe9, 0x7e, 0x0e,
 ];
@@ -100,7 +100,7 @@ fn forward_a_3_calculate_proxy_param() {
         .expect("generate_proxy_parameter");
 
     assert_eq!(
-        &k[..],
+        k.as_ref(),
         hex::decode("04b657045fc9c0759c5fd11d8ca75a2b1aa101c9c896490bcec100f941e97e0e").unwrap()
     );
 }
@@ -129,10 +129,7 @@ fn forward_a_3_transform_pkesk() {
     eprintln!("forwardee {:#02x?}", &forwardee.secret_subkeys[0].key);
 
     let transformed_pkesk = pkesk
-        .forwarding_transform(
-            &forwardee.secret_subkeys[0].key,
-            PROXY_PARAMETER_K.try_into().unwrap(),
-        )
+        .forwarding_transform(&forwardee.secret_subkeys[0].key, PROXY_PARAMETER_K.into())
         .expect("transform");
 
     // Compare `transformed_pkesk` with the expected output

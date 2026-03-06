@@ -299,7 +299,7 @@ impl PublicKeyEncryptedSessionKey {
     pub fn forwarding_transform<K: KeyDetails>(
         &self,
         forwardee: &K,
-        proxy_parameter: [u8; 32],
+        proxy_parameter: ProxyParameter,
     ) -> Result<Self> {
         use crate::types::{EcdhKdfType, EcdhPublicParams, Mpi};
 
@@ -399,8 +399,8 @@ impl PublicKeyEncryptedSessionKey {
     ///   eB - the ECDH ephemeral public key decoded from the PKESK
     ///   k - the proxy transformation parameter retrieved from storage
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
-    fn transform_ecdh_ephemeral(eb: [u8; 32], k: [u8; 32]) -> Result<[u8; 32]> {
-        use curve25519_dalek::{MontgomeryPoint, Scalar};
+    fn transform_ecdh_ephemeral(eb: [u8; 32], k: ProxyParameter) -> Result<[u8; 32]> {
+        use curve25519_dalek::{traits::IsIdentity, MontgomeryPoint, Scalar};
 
         let ephemeral = MontgomeryPoint(eb);
 
@@ -409,11 +409,11 @@ impl PublicKeyEncryptedSessionKey {
             bail!("Ephemeral public key belongs to a small subgroup");
         }
 
-        let k = Scalar::from_bytes_mod_order(k);
+        let k = Zeroizing::new(Scalar::from_bytes_mod_order(k.into()));
 
         // eC = k * eB
         // return eC
-        let ec = k * ephemeral;
+        let ec = (*k) * ephemeral;
 
         Ok(ec.to_bytes())
     }
@@ -540,6 +540,32 @@ fn write_len_v6(values: &PkeskBytes, fingerprint: &Option<Fingerprint>) -> usize
     sum
 }
 
+// FIXME: where should this type go?
+#[cfg(feature = "draft-wussler-openpgp-forwarding")]
+#[derive(zeroize::ZeroizeOnDrop)]
+pub struct ProxyParameter([u8; 32]);
+
+#[cfg(feature = "draft-wussler-openpgp-forwarding")]
+impl From<[u8; 32]> for ProxyParameter {
+    fn from(value: [u8; 32]) -> Self {
+        Self(value)
+    }
+}
+
+#[cfg(feature = "draft-wussler-openpgp-forwarding")]
+impl From<ProxyParameter> for [u8; 32] {
+    fn from(value: ProxyParameter) -> Self {
+        value.0
+    }
+}
+
+#[cfg(feature = "draft-wussler-openpgp-forwarding")]
+impl AsRef<[u8]> for ProxyParameter {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
@@ -649,16 +675,18 @@ mod tests {
         // Successful transformation test from
         // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-message-transformation>
 
-        let proxy_param =
+        let proxy_param: [u8; 32] =
             hex::decode("83c57cbe645a132477af55d5020281305860201608e81a1de43ff83f245fb302")
-                .expect("decode");
+                .expect("decode")
+                .try_into()
+                .unwrap();
 
         let eph = hex::decode("aaea7b3bb92f5f545d023ccb15b50f84ba1bdd53be7f5cfadcfb0106859bf77e")
             .expect("decode");
 
         let Ok(transf) = PublicKeyEncryptedSessionKey::transform_ecdh_ephemeral(
             eph.try_into().unwrap(),
-            proxy_param.try_into().unwrap(),
+            proxy_param.into(),
         ) else {
             unimplemented!()
         };
