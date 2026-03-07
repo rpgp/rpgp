@@ -552,12 +552,12 @@ XsGytxnhi5ATBz5XOozNS1ZJTujbK2vhVPZk3E4M
 -----END PGP PRIVATE KEY BLOCK-----";
         const MSG: &str = "-----BEGIN PGP MESSAGE-----
 
-xEYGAAoAIGw7mqdn94W1N8DYul+lRnfmpuKBMg37snyIm4+kYGcPMRthAHCPzcH0
-ZeNcpwSD1zRKuYkrOt8NlYHzo74FWkkByxFiAAAAAABoZWxsbyB3b3JsZMKJBgAA
-CgAAACkiIQYxG2EAcI/NwfRl41ynBIPXNEq5iSs63w2VgfOjvgVaSQUCaSRlrgAA
-AADo9CBsO5qnZ/eFtTfA2LpfpUZ35qbigTIN+7J8iJuPpGBnDwJ7j2mu35ArcqUG
-QpAiHaqE2GWdapfQFTAq9w2kh1NOzZgzl9VQVYs7XA/CYnhHNt8=
-=W5gU
+xEYGAAoAIGw7mqdn94W1N8DYul+lRnfmpuKBMg37snyIm4+kYGcP35p9qQfgQ6s6
+2dxCQgmGXX6VFr5+7UlbvUX/4fago8oByxFiAAAAAABoZWxsbyB3b3JsZMKJBgAA
+CgAAACkiIQbfmn2pB+BDqzrZ3EJCCYZdfpUWvn7tSVu9Rf/h9qCjygUCaaxTqwAA
+AACLjSBsO5qnZ/eFtTfA2LpfpUZ35qbigTIN+7J8iJuPpGBnDwL/UZyh7SdmSF0n
+EN6rcnCdGrHtbnaevXgEt/h+4qr8EKogUsV/JxmVOt6NUAF8jKM=
+=owYj
 -----END PGP MESSAGE-----";
 
         let dearmor = Dearmor::new(KEY.as_bytes());
