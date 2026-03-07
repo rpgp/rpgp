@@ -270,8 +270,8 @@ impl<'a> KeyDetails for UnlockablePersistentSymmetricKey<'a> {
         self.psk.created_at()
     }
 
-    fn expiration(&self) -> Option<u16> {
-        self.psk.expiration()
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        self.psk.legacy_v3_expiration_days()
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -348,8 +348,8 @@ impl KeyDetails for PersistentSymmetricKey {
         self.details.created_at()
     }
 
-    fn expiration(&self) -> Option<u16> {
-        self.details.expiration()
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        self.details.legacy_v3_expiration_days()
     }
 
     fn public_params(&self) -> &PublicParams {
