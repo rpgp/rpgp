@@ -90,7 +90,7 @@ impl SecretKey {
         persistent_key: &[u8],
         salt: &[u8; 32],
         info: InfoParameter,
-    ) -> (Vec<u8>, Vec<u8>) {
+    ) -> (Zeroizing<Box<[u8]>>, Box<[u8]>) {
         let hk = Hkdf::<Sha512>::new(Some(salt), persistent_key);
 
         let key_size = info.sym_alg.key_size();
@@ -99,17 +99,16 @@ impl SecretKey {
         // M + N bits are derived using HKDF.
         // The left-most M bits are used as symmetric algorithm key, the remaining N bits are
         // used as initialization vector.
-        let info_parameter: [u8; 4] = info.into();
+        let mut output = Zeroizing::new(vec![0u8; key_size + nonce_size]);
 
-        // FIXME: zeroize
-        let mut output = vec![0u8; key_size + nonce_size];
+        let info_parameter: [u8; 4] = info.into();
         hk.expand(&info_parameter, &mut output)
             .expect("expand size is < 255 * HashLength");
 
-        let key = output[0..key_size].to_vec();
-        let iv = output[key_size..].to_vec();
+        let key: Box<[u8]> = output[0..key_size].into();
+        let iv = output[key_size..].into();
 
-        (key, iv)
+        (key.into(), iv)
     }
 }
 
@@ -226,15 +225,15 @@ mod tests {
         );
 
         assert_eq!(
-            &key,
-            &[
+            **key,
+            [
                 0xc2, 0x41, 0x48, 0x69, 0x39, 0x9f, 0x5c, 0x53, 0xbb, 0x6a, 0xfb, 0x61, 0xac, 0xa5,
                 0xe7, 0x62
             ]
         );
         assert_eq!(
-            &iv,
-            &[
+            *iv,
+            [
                 0x85, 0x71, 0x58, 0x76, 0x2f, 0x06, 0x7c, 0xaa, 0x15, 0x92, 0x9f, 0xa9, 0x31, 0x64,
                 0x95
             ]
