@@ -433,7 +433,7 @@ impl PlainSecretParams {
                 };
 
                 let decrypted = priv_key.decrypt(aead_key::EncryptionFields {
-                    data: encrypted,
+                    data: encrypted.clone(),
                     aead: *aead,
                     version: match typ {
                         EskType::V3_4 => PkeskVersion::V3,
