@@ -28,7 +28,7 @@ pub struct SecretKey {
 }
 
 pub struct EncryptionFields<'a> {
-    pub data: &'a Bytes,
+    pub data: Bytes,
     pub aead: AeadAlgorithm,
     pub version: PkeskVersion,
     pub salt: &'a [u8; 32],
@@ -163,7 +163,7 @@ impl Decryptor for SecretKey {
 
         let (key, iv) = Self::derive(&self.key, data.salt, info);
 
-        let mut buf = data.data.clone().into(); // FIXME: don't clone
+        let mut buf = data.data.into();
 
         data.aead
             .decrypt_in_place(&self.sym_alg, &key, &iv, &[], &mut buf)?;
