@@ -495,6 +495,9 @@ mod tests {
 
         fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
             match args {
+                PublicKeyAlgorithm::AEAD => any::<AeadPublicParams>()
+                    .prop_map(PublicParams::AEAD)
+                    .boxed(),
                 PublicKeyAlgorithm::RSA
                 | PublicKeyAlgorithm::RSAEncrypt
                 | PublicKeyAlgorithm::RSASign => {
