@@ -12,23 +12,25 @@ use crate::{crypto::sym::SymmetricKeyAlgorithm, parsing_reader::BufReadParsing, 
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct AeadPublicParams {
     pub sym_alg: SymmetricKeyAlgorithm,
-    pub seed: [u8; 32],
+    pub fingerprint_seed: [u8; 32],
 }
 
 impl AeadPublicParams {
     pub fn try_from_reader<B: BufRead>(mut i: B) -> crate::errors::Result<Self> {
         let sym_alg = i.read_u8()?.into();
-        let seed = i.read_arr()?;
+        let fingerprint_seed = i.read_arr()?;
 
-        let params = AeadPublicParams { sym_alg, seed };
-        Ok(params)
+        Ok(AeadPublicParams {
+            sym_alg,
+            fingerprint_seed,
+        })
     }
 }
 
 impl Serialize for AeadPublicParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> crate::errors::Result<()> {
         writer.write_u8(self.sym_alg.into())?;
-        writer.write_all(&self.seed)?;
+        writer.write_all(&self.fingerprint_seed)?;
         Ok(())
     }
 

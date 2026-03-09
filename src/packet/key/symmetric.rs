@@ -173,13 +173,14 @@ impl EncryptionKey for UnlockablePersistentSymmetricKey<'_> {
 
             let version = self.psk.details.version().into();
             let info = InfoParameter {
-                tag: Tag::PublicKeyEncryptedSessionKey,
+                packet_type: Tag::PublicKeyEncryptedSessionKey,
                 version,
                 aead,
                 sym_alg: public_params.sym_alg,
             };
 
-            let (key, iv) = crate::crypto::aead_key::SecretKey::derive(&secret.key, &salt, info);
+            let (key, iv) =
+                crate::crypto::aead_key::SecretKey::derive_key_iv(&secret.key, &salt, info);
 
             let mut buf = plain.into();
 
@@ -288,10 +289,24 @@ impl<'a> Debug for UnlockablePersistentSymmetricKey<'a> {
 impl<'a> VerifyingKey for UnlockablePersistentSymmetricKey<'a> {
     fn verify(
         &self,
-        _hash: HashAlgorithm,
+        hash: HashAlgorithm,
         data: &[u8],
         sig: &SignatureBytes,
     ) -> crate::errors::Result<()> {
+        let Some(digest_len) = hash.digest_size() else {
+            bail!(
+                "UnlockablePersistentSymmetricKey::verify: invalid hash algorithm: {:?}",
+                hash
+            );
+        };
+        ensure_eq!(
+            data.len(),
+            digest_len,
+            "signature data length {} doesn't match digest len {}",
+            data.len(),
+            digest_len,
+        );
+
         let SignatureBytes::PersistentSymmetric { aead, salt, tag } = sig else {
             bail!("Unsupported SignatureBytes for persistent symmetric key: {sig:?}");
         };
@@ -313,7 +328,7 @@ impl<'a> VerifyingKey for UnlockablePersistentSymmetricKey<'a> {
             let buf = secret.calculate_signature(version, *aead, salt, data)?;
 
             // check if the stored and calculated authentication tags match
-            if buf != tag {
+            if buf != **tag {
                 // no: the signature is invalid!
                 bail!("PersistentSymmetricKey signature mismatch");
             }
@@ -408,7 +423,7 @@ mod tests {
 
         let pp = PublicParams::AEAD(AeadPublicParams {
             sym_alg: SYM_ALG,
-            seed: rng.gen(),
+            fingerprint_seed: rng.gen(),
         });
 
         let inner = PubKeyInner::new(
