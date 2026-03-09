@@ -102,14 +102,12 @@ impl PlainSecretParams {
     ) -> Result<Self> {
         let params = match (alg, public_params) {
             (PublicKeyAlgorithm::AEAD, PublicParams::AEAD(pub_params)) => {
-                let key_size = pub_params.sym_alg.key_size();
-                let key = i.take_bytes(key_size)?;
+                let sym_alg = pub_params.sym_alg;
 
-                let key = aead_key::SecretKey {
-                    key: key.to_vec().into(),
-                    sym_alg: pub_params.sym_alg,
-                };
-                Self::AEAD(key)
+                let key_bytes = i.take_bytes(sym_alg.key_size())?;
+                let key = key_bytes.to_vec().into();
+
+                Self::AEAD(aead_key::SecretKey { key, sym_alg })
             }
             (
                 PublicKeyAlgorithm::RSA

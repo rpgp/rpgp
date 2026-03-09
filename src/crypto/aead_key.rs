@@ -24,7 +24,7 @@ pub struct SecretKey {
     #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
     pub(crate) key: Box<[u8]>, // sized to match the sym_alg
 
-    /// Copy of [`AeadPublicParams::sym_alg`]
+    /// Copy of [`AeadPublicParams::sym_alg`], needed for Info Parameters
     pub(crate) sym_alg: SymmetricKeyAlgorithm,
 }
 
@@ -37,7 +37,7 @@ pub struct EncryptionFields<'a> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) struct InfoParameter {
-    pub tag: Tag,
+    pub packet_type: Tag,
     pub version: u8,
     pub sym_alg: SymmetricKeyAlgorithm,
     pub aead: AeadAlgorithm,
@@ -46,7 +46,7 @@ pub(crate) struct InfoParameter {
 impl From<InfoParameter> for [u8; 4] {
     fn from(value: InfoParameter) -> Self {
         [
-            value.tag.encode(),
+            value.packet_type.encode(),
             value.version,
             value.sym_alg.into(),
             value.aead.into(),
@@ -81,13 +81,10 @@ impl SecretKey {
         let mut salt = [0; 32];
         rng.fill(&mut salt);
 
-        let buf = self.calculate_signature(version, aead, &salt, digest)?;
+        let signature = self.calculate_signature(version, aead, &salt, digest)?;
+        let tag = signature.to_vec().into();
 
-        Ok(SignatureBytes::PersistentSymmetric {
-            aead,
-            salt,
-            tag: buf.into(),
-        })
+        Ok(SignatureBytes::PersistentSymmetric { aead, salt, tag })
     }
 
     pub(crate) fn calculate_signature(
@@ -98,20 +95,20 @@ impl SecretKey {
         digest: &[u8],
     ) -> Result<BytesMut> {
         let info = InfoParameter {
-            tag: Tag::Signature,
+            packet_type: Tag::Signature,
             version: version.into(),
             sym_alg: self.sym_alg,
             aead,
         };
 
-        let (key, iv) = Self::derive(&self.key, salt, info);
+        let (key, iv) = Self::derive_key_iv(&self.key, salt, info);
 
         // An authentication tag of the size specified by the AEAD mode, created by encrypting the
         // empty value with the message authentication key and IV computed as described in Section
         // 7.4, using the symmetric-key cipher of the key and the indicated AEAD mode, with as
         // additional data the hash digest described in section 5.2.4 of [RFC9580].
 
-        let mut buf = BytesMut::with_capacity(64);
+        let mut buf = BytesMut::with_capacity(16); // pre-allocate tag size
         aead.encrypt_in_place(&self.sym_alg, &key, &iv, digest, &mut buf)?;
         Ok(buf)
     }
@@ -122,7 +119,7 @@ impl SecretKey {
     /// Returns:
     /// - M bits of key, matching the size of SymmetricKeyAlgorithm,
     /// - N bit of IV, matching the nonce size of AeadAlgorithm
-    pub(crate) fn derive(
+    pub(crate) fn derive_key_iv(
         persistent_key: &[u8],
         salt: &[u8; 32],
         info: InfoParameter,
@@ -171,13 +168,13 @@ impl Decryptor for SecretKey {
 
     fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Zeroizing<Vec<u8>>> {
         let info = InfoParameter {
-            tag: Tag::PublicKeyEncryptedSessionKey,
+            packet_type: Tag::PublicKeyEncryptedSessionKey,
             version: data.version.into(),
             sym_alg: self.sym_alg,
             aead: data.aead,
         };
 
-        let (key, iv) = Self::derive(&self.key, data.salt, info);
+        let (key, iv) = Self::derive_key_iv(&self.key, data.salt, info);
 
         let mut buf = data.data.into();
 
@@ -229,14 +226,19 @@ mod tests {
     /// - salt: 32 bytes of 0xff
     /// - info: Signature, Version 6, OCB, AES128
     #[test]
-    fn psk_derive() {
-        let (key, iv) = SecretKey::derive(
-            &[0; 16],
-            &[0xff; 32],
+    fn psk_derive_key_iv() {
+        const SYM_ALG: SymmetricKeyAlgorithm = SymmetricKeyAlgorithm::AES128;
+
+        let persistent_key = &[0; SYM_ALG.key_size()];
+        let salt = &[0xff; 32];
+
+        let (key, iv) = SecretKey::derive_key_iv(
+            persistent_key,
+            salt,
             InfoParameter {
-                tag: Tag::Signature,
+                packet_type: Tag::Signature,
                 version: 6,
-                sym_alg: SymmetricKeyAlgorithm::AES128,
+                sym_alg: SYM_ALG,
                 aead: AeadAlgorithm::Ocb,
             },
         );
