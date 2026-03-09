@@ -310,7 +310,7 @@ impl<'a> VerifyingKey for UnlockablePersistentSymmetricKey<'a> {
             let version = SignatureVersion::V6; // FIXME: should not be fixed
 
             // "buf" is the newly calculated authentication tag
-            let buf = secret.calculate_signature(*aead, version, salt, data)?;
+            let buf = secret.calculate_signature(version, *aead, salt, data)?;
 
             // check if the stored and calculated authentication tags match
             if buf != tag {
