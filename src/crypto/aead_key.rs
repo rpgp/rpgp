@@ -4,7 +4,7 @@
 
 use bytes::{Bytes, BytesMut};
 use hkdf::Hkdf;
-use rand::{thread_rng, Rng};
+use rand::{thread_rng, CryptoRng, Rng};
 use sha2::Sha512;
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
@@ -24,7 +24,8 @@ pub struct SecretKey {
     #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
     pub(crate) key: Box<[u8]>, // sized to match the sym_alg
 
-    pub(crate) sym_alg: SymmetricKeyAlgorithm, // (copy of the information from the public part)
+    /// Copy of [`AeadPublicParams::sym_alg`]
+    pub(crate) sym_alg: SymmetricKeyAlgorithm,
 }
 
 pub struct EncryptionFields<'a> {
@@ -54,10 +55,45 @@ impl From<InfoParameter> for [u8; 4] {
 }
 
 impl SecretKey {
+    /// Signing operation for persistent symmetric keys that exposes the full algorithmic flexibility
+    pub fn sign_persistent_symmetric<RNG: Rng + CryptoRng>(
+        &self,
+        mut rng: RNG,
+        version: SignatureVersion,
+        aead: AeadAlgorithm,
+        hash: HashAlgorithm,
+        digest: &[u8],
+    ) -> Result<SignatureBytes> {
+        let Some(digest_size) = hash.digest_size() else {
+            bail!(
+                "sign_persistent_symmetric: invalid hash algorithm: {:?}",
+                hash
+            );
+        };
+        ensure_eq!(
+            digest.len(),
+            digest_size,
+            "Unexpected digest length {} for hash algorithm {:?}",
+            digest.len(),
+            hash,
+        );
+
+        let mut salt = [0; 32];
+        rng.fill(&mut salt);
+
+        let buf = self.calculate_signature(version, aead, &salt, digest)?;
+
+        Ok(SignatureBytes::PersistentSymmetric {
+            aead,
+            salt,
+            tag: buf.into(),
+        })
+    }
+
     pub(crate) fn calculate_signature(
         &self,
-        aead: AeadAlgorithm,
         version: SignatureVersion,
+        aead: AeadAlgorithm,
         salt: &[u8; 32],
         digest: &[u8],
     ) -> Result<BytesMut> {
@@ -114,38 +150,19 @@ impl SecretKey {
 
 impl Signer for SecretKey {
     fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
-        let Some(digest_size) = hash.digest_size() else {
-            bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
-        };
-        ensure_eq!(
-            digest.len(),
-            digest_size,
-            "Unexpected digest length {} for hash algorithm {:?}",
-            digest.len(),
-            hash,
-        );
-
-        // The signature consists of this series of values:
+        // This trait interface doesn't allow exposing the full flexibility of persistent symmetric
+        // key signatures, so we're using fixed values here.
         //
-        // A 1-octet AEAD algorithm (see section 9.6 of [RFC9580]).
-        let aead = AeadAlgorithm::Ocb; // FIXME: should be a parameter
+        // Clients who need more control can instead use the
+        // `aead_key::SecretKey::sign_persistent_symmetric` interface
 
-        // 32 octets of salt.
-        // The salt is used to derive the message authentication key and MUST be securely generated
-        // (see section 13.10 of [RFC9580]).
-        let mut rng = thread_rng(); // FIXME: should be a parameter
-        let mut salt: [u8; 32] = [0; 32];
-        rng.fill(&mut salt);
+        let rng = thread_rng();
+        let aead = AeadAlgorithm::Ocb;
 
-        let version = SignatureVersion::V6; // FIXME: should be a parameter
+        // FIXME: must be aligned with key version - derive from key version?
+        let version = SignatureVersion::V6;
 
-        let buf = self.calculate_signature(aead, version, &salt, digest)?;
-
-        Ok(SignatureBytes::PersistentSymmetric {
-            aead,
-            salt,
-            tag: buf.into(),
-        })
+        self.sign_persistent_symmetric(rng, version, aead, hash, digest)
     }
 }
 
