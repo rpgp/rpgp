@@ -9,6 +9,7 @@ use byteorder::WriteBytesExt;
 use crate::{crypto::sym::SymmetricKeyAlgorithm, parsing_reader::BufReadParsing, ser::Serialize};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct AeadPublicParams {
     pub sym_alg: SymmetricKeyAlgorithm,
     pub seed: [u8; 32],
