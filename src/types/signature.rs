@@ -30,7 +30,7 @@ pub enum SignatureBytes {
     PersistentSymmetric {
         aead: AeadAlgorithm,
         salt: [u8; 32],
-        tag: Vec<u8>,
+        tag: Box<[u8]>,
     },
 }
 
