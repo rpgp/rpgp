@@ -1,6 +1,6 @@
 //! Algorithm-Specific Fields for Persistent Symmetric Keys
 //!
-//! <https://twisstle.gitlab.io/openpgp-persistent-symmetric-keys/#name-algorithm-specific-fields-f>
+//! <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html#name-algorithm-specific-fields-f>
 
 use std::{io, io::BufRead};
 
