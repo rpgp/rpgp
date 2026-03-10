@@ -1,6 +1,6 @@
 //! Persistent Symmetric Keys in OpenPGP
 //!
-//! Ref <https://twisstle.gitlab.io/openpgp-persistent-symmetric-keys/>
+//! Ref <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html>
 
 use std::{
     fmt::{Debug, Formatter},
@@ -27,6 +27,8 @@ use crate::{
     },
 };
 
+/// A persistent symmetric key as specified in
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html>
 #[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
 pub struct PersistentSymmetricKey {
     #[zeroize(skip)]

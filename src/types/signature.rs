@@ -26,7 +26,7 @@ pub enum SignatureBytes {
 
     /// A cryptographic "signature" from draft-ietf-openpgp-persistent-symmetric-keys
     ///
-    /// See https://twisstle.gitlab.io/openpgp-persistent-symmetric-keys/#name-algorithm-specific-fields-for
+    /// See <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html#name-algorithm-specific-fields-for>
     PersistentSymmetric {
         aead: AeadAlgorithm,
         salt: [u8; 32],

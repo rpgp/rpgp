@@ -1,6 +1,6 @@
 //! Persistent Symmetric Key support
 //!
-//! <https://twisstle.gitlab.io/openpgp-persistent-symmetric-keys/#name-algorithm-specific-fields-f>
+//! <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html#name-algorithm-specific-fields-f>
 
 use bytes::{Bytes, BytesMut};
 use hkdf::Hkdf;
@@ -114,7 +114,7 @@ impl SecretKey {
     }
 
     /// Key and IV derivation
-    /// <https://twisstle.gitlab.io/openpgp-persistent-symmetric-keys/#name-key-and-iv-derivation>
+    /// <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html#name-key-and-iv-derivation>
     ///
     /// Returns:
     /// - M bits of key, matching the size of SymmetricKeyAlgorithm,
