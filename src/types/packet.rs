@@ -150,7 +150,7 @@ pub enum Tag {
 
     /// Persistent Symmetric Key Packet (PSK)
     ///
-    /// <https://twisstle.gitlab.io/openpgp-persistent-symmetric-keys/#name-persistent-symmetric-key-pa>
+    /// <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html#name-persistent-symmetric-key-pa>
     PersistentSymmetricKey = 40,
 
     /// Unassigned Non-Critical Packets [41-59]

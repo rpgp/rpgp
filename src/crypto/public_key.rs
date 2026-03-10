@@ -6,7 +6,7 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 #[non_exhaustive]
 pub enum PublicKeyAlgorithm {
     /// AEAD (only for use in a "Persistent Symmetric Key Packet"!)
-    /// Ref <https://twisstle.gitlab.io/openpgp-persistent-symmetric-keys/#name-persistent-symmetric-key-al>
+    /// Ref <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html#name-persistent-symmetric-key-al>
     ///
     /// CAUTION: This is not a public key algorithm, it may not be used with regular key packets.
     /// Instead, this algorithm may be used with [`PersistentSymmetricKey`] packets.
