@@ -4,12 +4,12 @@
 
 use bytes::{Bytes, BytesMut};
 use hkdf::Hkdf;
-use rand::{thread_rng, CryptoRng, Rng};
+use rand::{CryptoRng, Rng};
 use sha2::Sha512;
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::{
-    crypto::{aead::AeadAlgorithm, sym::SymmetricKeyAlgorithm, Decryptor, HashAlgorithm, Signer},
+    crypto::{aead::AeadAlgorithm, sym::SymmetricKeyAlgorithm, Decryptor, HashAlgorithm},
     errors::{bail, ensure_eq, Result},
     packet::SignatureVersion,
     ser::Serialize,
@@ -142,24 +142,6 @@ impl SecretKey {
         let iv = output[key_size..].into();
 
         (key.into(), iv)
-    }
-}
-
-impl Signer for SecretKey {
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
-        // This trait interface doesn't allow exposing the full flexibility of persistent symmetric
-        // key signatures, so we're using fixed values here.
-        //
-        // Clients who need more control can instead use the
-        // `aead_key::SecretKey::sign_persistent_symmetric` interface
-
-        let rng = thread_rng();
-        let aead = AeadAlgorithm::Ocb;
-
-        // FIXME: must be aligned with key version - derive from key version?
-        let version = SignatureVersion::V6;
-
-        self.sign_persistent_symmetric(rng, version, aead, hash, digest)
     }
 }
 

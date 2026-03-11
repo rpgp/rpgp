@@ -9,13 +9,13 @@ use std::{
 
 use bytes::Bytes;
 use log::debug;
-use rand::{CryptoRng, Rng};
+use rand::{thread_rng, CryptoRng, Rng};
 
 use crate::{
     composed::PlainSessionKey,
     crypto::{
         aead::AeadAlgorithm, aead_key::InfoParameter, hash::HashAlgorithm,
-        public_key::PublicKeyAlgorithm, Signer,
+        public_key::PublicKeyAlgorithm,
     },
     errors::{bail, ensure, ensure_eq, unsupported_err},
     packet::{PacketHeader, PacketTrait, PubKeyInner, SignatureVersion},
@@ -50,8 +50,7 @@ impl PersistentSymmetricKey {
             details.version()
         );
 
-        let len =
-            crate::ser::Serialize::write_len(&details) + secret_params.write_len(details.version());
+        let len = Serialize::write_len(&details) + secret_params.write_len(details.version());
         let packet_header = PacketHeader::new_fixed(Tag::PersistentSymmetricKey, len.try_into()?);
 
         Ok(Self {
@@ -217,7 +216,22 @@ impl SigningKey for PersistentSymmetricKey {
 
             debug!("unlocked key");
 
-            let sig = secret.sign(hash, data)?;
+            let version = match self.version() {
+                KeyVersion::V6 => SignatureVersion::V6, // Version 6 keys MUST produce Version 6 signatures
+
+                _ => bail!("Unsupported key version for persistent symmetric key signing"),
+            };
+
+            // This trait interface doesn't allow exposing the full flexibility of persistent symmetric
+            // key signatures, so we're using fixed values for `rng` and `aead` here.
+
+            // TODO: expose signing with full flexibility as a separate fn on this type?
+
+
+            let rng = thread_rng();
+            let aead = AeadAlgorithm::Ocb;
+
+            let sig = secret.sign_persistent_symmetric(rng, version, aead, hash, data)?;
             signature.replace(sig);
             Ok(())
         })??;
