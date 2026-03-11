@@ -194,7 +194,10 @@ mod tests {
     prop_compose! {
         pub fn key_gen()(seed: u64) -> Box<[u8]> {
             let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            let mut key :Box<[u8]>  = vec![0u8 ;32].into(); // FIXME: size depends on sym alg!
+
+            // Sized to match AES256 as sym alg
+            // TODO: how to handle sym alg in proptests?
+            let mut key :Box<[u8]>  = vec![0u8 ;32].into();
 
             rng.fill(&mut key[..]);
 
