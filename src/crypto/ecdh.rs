@@ -9,7 +9,7 @@ use crate::{
         aes_kw, ecc_curve::ECCCurve, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
         Decryptor,
     },
-    errors::{ensure, ensure_eq, unsupported_err, Error, Result},
+    errors::{bail, ensure, ensure_eq, unsupported_err, Error, Result},
     ser::Serialize,
     types::{ecdh::EcdhKdfType, pad_key, EcdhPublicParams, Mpi, PkeskBytes},
 };
@@ -290,6 +290,9 @@ impl Decryptor for SecretKey {
 
                 // derive shared secret
                 let shared_secret = key.0.diffie_hellman(&their_public);
+                if !shared_secret.was_contributory() {
+                    bail!("All-zero x25519 shared secret");
+                }
 
                 shared_secret.to_bytes().to_vec()
             }

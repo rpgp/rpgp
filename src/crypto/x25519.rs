@@ -9,7 +9,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::{
     crypto::{aes_kw, Decryptor},
-    errors::{ensure, Result},
+    errors::{bail, ensure, Result},
     ser::Serialize,
     types::X25519PublicParams,
 };
@@ -97,6 +97,9 @@ impl Decryptor for SecretKey {
 
             // derive shared secret
             let shared_secret = our_secret.diffie_hellman(&their_public);
+            if !shared_secret.was_contributory() {
+                bail!("All-zero x25519 shared secret");
+            }
 
             shared_secret.to_bytes()
         };
