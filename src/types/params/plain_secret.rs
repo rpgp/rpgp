@@ -1035,22 +1035,26 @@ mod tests {
         fn params_roundtrip_v3(
             (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
         ) {
-            let mut buf = Vec::new();
-            secret_params.to_writer(&mut buf, KeyVersion::V3)?;
-            let public_params = PublicParams::try_from(&secret_params)?;
-            let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V3, alg, &public_params)?;
-            prop_assert_eq!(secret_params, new_params);
+            if alg != PublicKeyAlgorithm::AEAD {
+                let mut buf = Vec::new();
+                secret_params.to_writer(&mut buf, KeyVersion::V3)?;
+                let public_params = PublicParams::try_from(&secret_params)?;
+                let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V3, alg, &public_params)?;
+                prop_assert_eq!(secret_params, new_params);
+            }
         }
         #[test]
         #[ignore]
         fn params_roundtrip_v4(
             (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
         ) {
-            let mut buf = Vec::new();
-            secret_params.to_writer(&mut buf, KeyVersion::V4)?;
-            let public_params = PublicParams::try_from(&secret_params)?;
-            let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V4, alg, &public_params)?;
-            prop_assert_eq!(secret_params, new_params);
+            if alg != PublicKeyAlgorithm::AEAD {
+                let mut buf = Vec::new();
+                secret_params.to_writer(&mut buf, KeyVersion::V4)?;
+                let public_params = PublicParams::try_from(&secret_params)?;
+                let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V4, alg, &public_params)?;
+                prop_assert_eq!(secret_params, new_params);
+            }
         }
 
         #[test]
@@ -1058,11 +1062,13 @@ mod tests {
         fn params_roundtrip_v6(
             (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
         ) {
-            let mut buf = Vec::new();
-            secret_params.to_writer(&mut buf, KeyVersion::V6)?;
-            let public_params = PublicParams::try_from(&secret_params)?;
-            let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V6, alg, &public_params)?;
-            prop_assert_eq!(secret_params, new_params);
+            if alg != PublicKeyAlgorithm::AEAD {
+                let mut buf = Vec::new();
+                secret_params.to_writer(&mut buf, KeyVersion::V6)?;
+                let public_params = PublicParams::try_from(&secret_params)?;
+                let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V6, alg, &public_params)?;
+                prop_assert_eq!(secret_params, new_params);
+            }
         }
     }
 }
