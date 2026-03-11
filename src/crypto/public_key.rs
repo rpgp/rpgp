@@ -10,6 +10,7 @@ pub enum PublicKeyAlgorithm {
     ///
     /// CAUTION: This is not a public key algorithm, it may not be used with regular key packets.
     /// Instead, this algorithm may be used with [`PersistentSymmetricKey`] packets.
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
     AEAD = 0,
 
     /// RSA (Encrypt and Sign)

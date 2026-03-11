@@ -611,9 +611,11 @@ fn create_signature(
 
     debug!("unlocked key");
     match *priv_key {
+        #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
         PlainSecretParams::AEAD(_) => {
             bail!("AEAD can not be used for signing operations with asymmetric keys")
         }
+
         PlainSecretParams::RSA(ref priv_key) => {
             let PublicParams::RSA(_) = pub_params else {
                 bail!("inconsistent key");

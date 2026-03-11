@@ -18,16 +18,16 @@ use crate::crypto::{
 use crate::{
     composed::{PlainSessionKey, RawSessionKey},
     crypto::{
-        aead::AeadAlgorithm, aead_key, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519,
-        ed448, elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519,
-        x448, Decryptor,
+        aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
+        elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, x448,
+        Decryptor,
     },
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
         EcdhPublicParams, EncryptedSecretParams, EskType, KeyDetails, KeyVersion, Mpi, PkeskBytes,
-        PkeskVersion, PublicParams, S2kParams, StringToKey, Tag,
+        PublicParams, S2kParams, StringToKey, Tag,
     },
     util::TeeWriter,
 };
@@ -35,7 +35,9 @@ use crate::{
 /// Raw secret key material in unlocked/unencrypted form
 #[derive(Clone, PartialEq, Eq, derive_more::Debug, ZeroizeOnDrop)]
 pub enum PlainSecretParams {
-    AEAD(aead_key::SecretKey),
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+    AEAD(crate::crypto::aead_key::SecretKey),
+
     RSA(rsa::SecretKey),
     DSA(dsa::SecretKey),
     ECDSA(ecdsa::SecretKey),
@@ -101,13 +103,14 @@ impl PlainSecretParams {
         public_params: &PublicParams,
     ) -> Result<Self> {
         let params = match (alg, public_params) {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
             (PublicKeyAlgorithm::AEAD, PublicParams::AEAD(pub_params)) => {
                 let sym_alg = pub_params.sym_alg;
 
                 let key_bytes = i.take_bytes(sym_alg.key_size())?;
                 let key = key_bytes.to_vec().into();
 
-                Self::AEAD(aead_key::SecretKey { key })
+                Self::AEAD(crate::crypto::aead_key::SecretKey { key })
             }
             (
                 PublicKeyAlgorithm::RSA
@@ -418,6 +421,7 @@ impl PlainSecretParams {
         K: KeyDetails,
     {
         let decrypted_key = match (self, values) {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
             (
                 PlainSecretParams::AEAD(ref priv_key),
                 PkeskBytes::Aead {
@@ -430,13 +434,13 @@ impl PlainSecretParams {
                     bail!("inconsistent key state");
                 };
 
-                let decrypted = priv_key.decrypt(aead_key::EncryptionFields {
+                let decrypted = priv_key.decrypt(crate::crypto::aead_key::EncryptionFields {
                     data: encrypted.clone(),
                     sym_alg: pub_param.sym_alg,
                     aead: *aead,
                     version: match typ {
-                        EskType::V3_4 => PkeskVersion::V3,
-                        EskType::V6 => PkeskVersion::V6,
+                        EskType::V3_4 => crate::types::PkeskVersion::V3,
+                        EskType::V6 => crate::types::PkeskVersion::V6,
                     },
                     salt,
                 })?;
@@ -749,9 +753,11 @@ impl PlainSecretParams {
 
     fn to_writer_raw<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
             PlainSecretParams::AEAD(key) => {
                 key.to_writer(writer)?;
             }
+
             PlainSecretParams::RSA(key) => {
                 key.to_writer(writer)?;
             }
@@ -818,7 +824,9 @@ impl PlainSecretParams {
 
     fn write_len_raw(&self) -> usize {
         match self {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
             PlainSecretParams::AEAD(key) => key.write_len(),
+
             PlainSecretParams::RSA(key) => key.write_len(),
             PlainSecretParams::DSA(key) => key.write_len(),
             PlainSecretParams::Elgamal(key) => key.write_len(),
@@ -903,9 +911,11 @@ mod tests {
 
         fn arbitrary_with(alg: Self::Parameters) -> Self::Strategy {
             match alg {
-                PublicKeyAlgorithm::AEAD => any::<aead_key::SecretKey>()
+                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+                PublicKeyAlgorithm::AEAD => any::<crate::crypto::aead_key::SecretKey>()
                     .prop_map(PlainSecretParams::AEAD)
                     .boxed(),
+
                 PublicKeyAlgorithm::RSA
                 | PublicKeyAlgorithm::RSAEncrypt
                 | PublicKeyAlgorithm::RSASign => any::<rsa::SecretKey>()
@@ -1020,12 +1030,16 @@ mod tests {
         fn params_roundtrip_v3(
             (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
         ) {
-            if alg != PublicKeyAlgorithm::AEAD {
-                let mut buf = Vec::new();
-                secret_params.to_writer(&mut buf, KeyVersion::V3)?;
-                let public_params = PublicParams::try_from(&secret_params)?;
-                let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V3, alg, &public_params)?;
-                prop_assert_eq!(secret_params, new_params);
+             match alg {
+                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+                PublicKeyAlgorithm::AEAD => {},
+                _ => {
+                    let mut buf = Vec::new();
+                    secret_params.to_writer(&mut buf, KeyVersion::V3)?;
+                    let public_params = PublicParams::try_from(&secret_params)?;
+                    let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V3, alg, &public_params)?;
+                    prop_assert_eq!(secret_params, new_params);
+                }
             }
         }
         #[test]
@@ -1033,12 +1047,16 @@ mod tests {
         fn params_roundtrip_v4(
             (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
         ) {
-            if alg != PublicKeyAlgorithm::AEAD {
-                let mut buf = Vec::new();
-                secret_params.to_writer(&mut buf, KeyVersion::V4)?;
-                let public_params = PublicParams::try_from(&secret_params)?;
-                let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V4, alg, &public_params)?;
-                prop_assert_eq!(secret_params, new_params);
+            match alg {
+                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+                PublicKeyAlgorithm::AEAD => {},
+                _ => {
+                    let mut buf = Vec::new();
+                    secret_params.to_writer(&mut buf, KeyVersion::V4)?;
+                    let public_params = PublicParams::try_from(&secret_params)?;
+                    let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V4, alg, &public_params)?;
+                    prop_assert_eq!(secret_params, new_params);
+                }
             }
         }
 
@@ -1047,12 +1065,16 @@ mod tests {
         fn params_roundtrip_v6(
             (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
         ) {
-            if alg != PublicKeyAlgorithm::AEAD {
-                let mut buf = Vec::new();
-                secret_params.to_writer(&mut buf, KeyVersion::V6)?;
-                let public_params = PublicParams::try_from(&secret_params)?;
-                let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V6, alg, &public_params)?;
-                prop_assert_eq!(secret_params, new_params);
+             match alg {
+                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+                PublicKeyAlgorithm::AEAD => {},
+                _ => {
+                    let mut buf = Vec::new();
+                    secret_params.to_writer(&mut buf, KeyVersion::V6)?;
+                    let public_params = PublicParams::try_from(&secret_params)?;
+                    let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V6, alg, &public_params)?;
+                    prop_assert_eq!(secret_params, new_params);
+                }
             }
         }
     }

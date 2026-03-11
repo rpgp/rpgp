@@ -1,3 +1,5 @@
+#![cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+
 //! Persistent Symmetric Key support
 //!
 //! <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html#name-algorithm-specific-fields-f>
