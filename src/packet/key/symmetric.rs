@@ -1,3 +1,5 @@
+#![cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+
 //! Persistent Symmetric Keys in OpenPGP
 //!
 //! Ref <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html>
