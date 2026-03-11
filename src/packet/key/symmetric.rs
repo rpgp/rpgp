@@ -206,7 +206,10 @@ impl SigningKey for PersistentSymmetricKey {
         data: &[u8],
     ) -> crate::errors::Result<SignatureBytes> {
         let mut signature: Option<SignatureBytes> = None;
-        self.unlock(key_pw, |_pub_params, priv_key| {
+        self.unlock(key_pw, |pub_params, priv_key| {
+            let PublicParams::AEAD(public) = &pub_params else {
+                bail!("Unsupported public parameters for persistent symmetric key: {pub_params:?}");
+            };
             let PlainSecretParams::AEAD(secret) = &priv_key else {
                 unsupported_err!(
                     "Unsupported signing algorithm {:?} for a persistent symmetric key",
@@ -227,11 +230,11 @@ impl SigningKey for PersistentSymmetricKey {
 
             // TODO: expose signing with full flexibility as a separate fn on this type?
 
-
             let rng = thread_rng();
             let aead = AeadAlgorithm::Ocb;
 
-            let sig = secret.sign_persistent_symmetric(rng, version, aead, hash, data)?;
+            let sig =
+                secret.sign_persistent_symmetric(rng, version, public.sym_alg, aead, hash, data)?;
             signature.replace(sig);
             Ok(())
         })??;
@@ -333,7 +336,10 @@ impl<'a> VerifyingKey for UnlockablePersistentSymmetricKey<'a> {
             "unexpected tag length"
         );
 
-        self.psk.unlock(self.key_pw, |_pub_params, sec_params| {
+        self.psk.unlock(self.key_pw, |pub_params, sec_params| {
+            let PublicParams::AEAD(public) = &pub_params else {
+                bail!("Unsupported public parameters for persistent symmetric key: {pub_params:?}");
+            };
             let PlainSecretParams::AEAD(secret) = &sec_params else {
                 bail!("Unsupported secret parameters for persistent symmetric key: {sec_params:?}");
             };
@@ -341,7 +347,7 @@ impl<'a> VerifyingKey for UnlockablePersistentSymmetricKey<'a> {
             let version = SignatureVersion::V6; // FIXME: should not be fixed
 
             // "buf" is the newly calculated authentication tag
-            let buf = secret.calculate_signature(version, *aead, salt, data)?;
+            let buf = secret.calculate_signature(version, public.sym_alg, *aead, salt, data)?;
 
             // check if the stored and calculated authentication tags match
             if buf != **tag {
@@ -456,7 +462,6 @@ mod tests {
 
         let plainsecret = SecretParams::Plain(PlainSecretParams::AEAD(aead_key::SecretKey {
             key: key.to_vec().into(),
-            sym_alg: SYM_ALG,
         }));
 
         let psk = PersistentSymmetricKey::new(pk, plainsecret).expect("foo");
