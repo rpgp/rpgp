@@ -1,3 +1,5 @@
+#![cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+
 //! Tests for persistent symmetric key support
 
 use std::{fs::File, io::BufReader, path::Path};

@@ -151,6 +151,7 @@ pub enum Tag {
     /// Persistent Symmetric Key Packet (PSK)
     ///
     /// <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html#name-persistent-symmetric-key-pa>
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
     PersistentSymmetricKey = 40,
 
     /// Unassigned Non-Critical Packets [41-59]
@@ -279,6 +280,7 @@ impl From<Tag> for u8 {
 
             Tag::UnassignedCritical(id) => id.into(),
 
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
             Tag::PersistentSymmetricKey => 40,
             Tag::UnassignedNonCritical(id) => id.into(),
 
@@ -312,7 +314,12 @@ impl From<u8> for Tag {
             20 => Self::GnupgAeadData,
             21 => Self::Padding,
             22..=39 => Self::UnassignedCritical(UnassignedCriticalTag(value)),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
             40 => Self::PersistentSymmetricKey,
+            #[cfg(not(feature = "draft-ietf-openpgp-persistent-symmetric-keys"))]
+            40 => Self::UnassignedNonCritical(UnassignedNonCriticalTag(value)),
+
             41..=59 => Self::UnassignedNonCritical(UnassignedNonCriticalTag(value)),
             60..=63 => Self::Experimental(ExperimentalTag(value)),
 

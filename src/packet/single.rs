@@ -6,10 +6,9 @@ use crate::{
     errors::{format_err, Error, Result, UnsupportedSnafu},
     packet::{
         CompressedData, GnupgAeadData, LiteralData, Marker, ModDetectionCode, OnePassSignature,
-        Packet, PacketHeader, Padding, PersistentSymmetricKey, PublicKey,
-        PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey, SecretSubkey, Signature,
-        SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust,
-        UserAttribute, UserId,
+        Packet, PacketHeader, Padding, PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey,
+        SecretKey, SecretSubkey, Signature, SymEncryptedData, SymEncryptedProtectedData,
+        SymKeyEncryptedSessionKey, Trust, UserAttribute, UserId,
     },
     parsing_reader::BufReadParsing,
     types::Tag,
@@ -75,8 +74,10 @@ impl Packet {
                 })
             }
 
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
             Tag::PersistentSymmetricKey => {
-                PersistentSymmetricKey::try_from_reader(packet_header, &mut body).map(Into::into)
+                crate::packet::PersistentSymmetricKey::try_from_reader(packet_header, &mut body)
+                    .map(Into::into)
             }
 
             // "Unassigned Non-Critical Packets"

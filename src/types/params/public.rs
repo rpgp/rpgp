@@ -11,7 +11,7 @@ use crate::{
         public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{bail, Error, Result},
+    errors::{Error, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
 };
@@ -97,7 +97,9 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
 
     fn try_from(secret: &PlainSecretParams) -> Result<Self, Self::Error> {
         match secret {
-            PlainSecretParams::AEAD(_) => bail!("can't get PublicParams"),
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            PlainSecretParams::AEAD(_) => crate::errors::bail!("can't get PublicParams"),
+
             PlainSecretParams::RSA(ref p) => Ok(Self::RSA(p.into())),
             PlainSecretParams::DSA(ref p) => Ok(Self::DSA(p.into())),
             PlainSecretParams::ECDSA(ref p) => p.try_into().map(Self::ECDSA),
@@ -137,10 +139,12 @@ impl PublicParams {
         i: B,
     ) -> Result<PublicParams> {
         match typ {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
             PublicKeyAlgorithm::AEAD => {
                 let params = AeadPublicParams::try_from_reader(i)?;
                 Ok(PublicParams::AEAD(params))
             }
+
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSAEncrypt
             | PublicKeyAlgorithm::RSASign => {
@@ -495,9 +499,11 @@ mod tests {
 
         fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
             match args {
+                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
                 PublicKeyAlgorithm::AEAD => any::<AeadPublicParams>()
                     .prop_map(PublicParams::AEAD)
                     .boxed(),
+
                 PublicKeyAlgorithm::RSA
                 | PublicKeyAlgorithm::RSAEncrypt
                 | PublicKeyAlgorithm::RSASign => {

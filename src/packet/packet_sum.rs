@@ -6,9 +6,9 @@ use crate::{
     errors::Result,
     packet::{
         CompressedData, GnupgAeadData, LiteralData, Marker, ModDetectionCode, OnePassSignature,
-        PacketHeader, Padding, PersistentSymmetricKey, PublicKey, PublicKeyEncryptedSessionKey,
-        PublicSubkey, SecretKey, SecretSubkey, Signature, SymEncryptedData,
-        SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust, UserAttribute, UserId,
+        PacketHeader, Padding, PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey,
+        SecretSubkey, Signature, SymEncryptedData, SymEncryptedProtectedData,
+        SymKeyEncryptedSessionKey, Trust, UserAttribute, UserId,
     },
     ser::Serialize,
     types::{PacketHeaderVersion, PacketLength, Tag},
@@ -40,7 +40,9 @@ pub enum Packet {
     UserId(UserId),
     Padding(Padding),
     GnupgAeadData(GnupgAeadData),
-    PersistentSymmetricKey(PersistentSymmetricKey),
+
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+    PersistentSymmetricKey(crate::packet::PersistentSymmetricKey),
 }
 
 impl_try_from_into!(
@@ -63,8 +65,13 @@ impl_try_from_into!(
     UserAttribute => UserAttribute,
     UserId => UserId,
     Padding => Padding,
-    GnupgAeadData => GnupgAeadData,
-    PersistentSymmetricKey => PersistentSymmetricKey
+    GnupgAeadData => GnupgAeadData
+);
+
+#[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+impl_try_from_into!(
+    Packet,
+    PersistentSymmetricKey => crate::packet::PersistentSymmetricKey
 );
 
 impl Serialize for Packet {
@@ -89,6 +96,8 @@ impl Serialize for Packet {
             Self::UserId(p) => p.to_writer_with_header(writer),
             Self::Padding(p) => p.to_writer_with_header(writer),
             Self::GnupgAeadData(p) => p.to_writer_with_header(writer),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
             Self::PersistentSymmetricKey(p) => p.to_writer_with_header(writer),
         }
     }
@@ -114,6 +123,8 @@ impl Serialize for Packet {
             Self::UserId(p) => p.write_len_with_header(),
             Self::Padding(p) => p.write_len_with_header(),
             Self::GnupgAeadData(p) => p.write_len_with_header(),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
             Self::PersistentSymmetricKey(p) => p.write_len_with_header(),
         }
     }
@@ -193,6 +204,8 @@ impl PacketTrait for Packet {
             Self::UserId(p) => p.packet_header(),
             Self::Padding(p) => p.packet_header(),
             Self::GnupgAeadData(p) => p.packet_header(),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
             Self::PersistentSymmetricKey(p) => p.packet_header(),
         }
     }
