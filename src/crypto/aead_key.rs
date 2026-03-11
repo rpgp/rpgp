@@ -22,14 +22,12 @@ use crate::{
 pub struct SecretKey {
     #[debug("..")]
     #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
-    pub(crate) key: Box<[u8]>, // sized to match the sym_alg
-
-    /// Copy of [`AeadPublicParams::sym_alg`], needed for Info Parameters
-    pub(crate) sym_alg: SymmetricKeyAlgorithm,
+    pub(crate) key: Box<[u8]>, // must be sized to match the sym_alg
 }
 
 pub struct EncryptionFields<'a> {
     pub data: Bytes,
+    pub sym_alg: SymmetricKeyAlgorithm,
     pub aead: AeadAlgorithm,
     pub version: PkeskVersion,
     pub salt: &'a [u8; 32],
@@ -60,6 +58,7 @@ impl SecretKey {
         &self,
         mut rng: RNG,
         version: SignatureVersion,
+        sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
         hash: HashAlgorithm,
         digest: &[u8],
@@ -81,7 +80,7 @@ impl SecretKey {
         let mut salt = [0; 32];
         rng.fill(&mut salt);
 
-        let signature = self.calculate_signature(version, aead, &salt, digest)?;
+        let signature = self.calculate_signature(version, sym_alg, aead, &salt, digest)?;
         let tag = signature.to_vec().into();
 
         Ok(SignatureBytes::PersistentSymmetric { aead, salt, tag })
@@ -90,6 +89,7 @@ impl SecretKey {
     pub(crate) fn calculate_signature(
         &self,
         version: SignatureVersion,
+        sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
         salt: &[u8; 32],
         digest: &[u8],
@@ -97,7 +97,7 @@ impl SecretKey {
         let info = InfoParameter {
             packet_type: Tag::Signature,
             version: version.into(),
-            sym_alg: self.sym_alg,
+            sym_alg,
             aead,
         };
 
@@ -109,7 +109,7 @@ impl SecretKey {
         // additional data the hash digest described in section 5.2.4 of [RFC9580].
 
         let mut buf = BytesMut::with_capacity(16); // pre-allocate tag size
-        aead.encrypt_in_place(&self.sym_alg, &key, &iv, digest, &mut buf)?;
+        aead.encrypt_in_place(&sym_alg, &key, &iv, digest, &mut buf)?;
         Ok(buf)
     }
 
@@ -152,7 +152,7 @@ impl Decryptor for SecretKey {
         let info = InfoParameter {
             packet_type: Tag::PublicKeyEncryptedSessionKey,
             version: data.version.into(),
-            sym_alg: self.sym_alg,
+            sym_alg: data.sym_alg,
             aead: data.aead,
         };
 
@@ -161,7 +161,7 @@ impl Decryptor for SecretKey {
         let mut buf = data.data.into();
 
         data.aead
-            .decrypt_in_place(&self.sym_alg, &key, &iv, &[], &mut buf)?;
+            .decrypt_in_place(&data.sym_alg, &key, &iv, &[], &mut buf)?;
 
         Ok(buf.to_vec().into())
     }

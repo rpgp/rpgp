@@ -107,7 +107,7 @@ impl PlainSecretParams {
                 let key_bytes = i.take_bytes(sym_alg.key_size())?;
                 let key = key_bytes.to_vec().into();
 
-                Self::AEAD(aead_key::SecretKey { key, sym_alg })
+                Self::AEAD(aead_key::SecretKey { key })
             }
             (
                 PublicKeyAlgorithm::RSA
@@ -426,12 +426,13 @@ impl PlainSecretParams {
                     encrypted,
                 },
             ) => {
-                let PublicParams::AEAD(_pub_param) = pub_params else {
+                let PublicParams::AEAD(pub_param) = pub_params else {
                     bail!("inconsistent key state");
                 };
 
                 let decrypted = priv_key.decrypt(aead_key::EncryptionFields {
                     data: encrypted.clone(),
+                    sym_alg: pub_param.sym_alg,
                     aead: *aead,
                     version: match typ {
                         EskType::V3_4 => PkeskVersion::V3,
