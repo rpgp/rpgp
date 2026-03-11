@@ -260,6 +260,7 @@ mod tests {
                     "24016578", // RSA >8192
                     "24022877", // RSA >8192
                     "41034801", // RSA >8192
+                    "12686999", // Malformed Persistent Symmetric Signature
                 ];
                 if list.contains(&offset.as_str()) {
                     warn!("skipping {offset}");
