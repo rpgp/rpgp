@@ -32,7 +32,7 @@ impl DetachedSignature {
     /// Create a detached data signature over `data`, with [SignatureType::Binary].
     pub fn sign_binary_data<RNG: Rng + CryptoRng, R: Read>(
         rng: RNG,
-        key: &impl SigningKey,
+        key: &impl SigningKey<RNG>,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,
@@ -54,7 +54,7 @@ impl DetachedSignature {
     /// This gives callers full control of the hashed and unhashed subpacket areas.
     pub fn sign_binary_data_with_subpackets<RNG: Rng + CryptoRng, R: Read>(
         rng: RNG,
-        key: &impl SigningKey,
+        key: &impl SigningKey<RNG>,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,
@@ -78,7 +78,7 @@ impl DetachedSignature {
     /// "LF" line endings or "CR+LF" line endings.
     pub fn sign_text_data<RNG: Rng + CryptoRng, R: Read>(
         rng: RNG,
-        key: &impl SigningKey,
+        key: &impl SigningKey<RNG>,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,
@@ -104,7 +104,7 @@ impl DetachedSignature {
     /// "LF" line endings or "CR+LF" line endings.
     pub fn sign_text_data_with_subpackets<RNG: Rng + CryptoRng, R: Read>(
         rng: RNG,
-        key: &impl SigningKey,
+        key: &impl SigningKey<RNG>,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,
@@ -122,9 +122,9 @@ impl DetachedSignature {
     }
 
     fn sign_data<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
+        mut rng: RNG,
         typ: SignatureType,
-        key: &impl SigningKey,
+        key: &impl SigningKey<RNG>,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,
@@ -132,7 +132,7 @@ impl DetachedSignature {
     ) -> Result<DetachedSignature> {
         let mut config = match key.version() {
             KeyVersion::V4 => SignatureConfig::v4(typ, key.algorithm(), hash_algorithm),
-            KeyVersion::V6 => SignatureConfig::v6(rng, typ, key.algorithm(), hash_algorithm)?,
+            KeyVersion::V6 => SignatureConfig::v6(&mut rng, typ, key.algorithm(), hash_algorithm)?,
             v => bail!("unsupported key version: {:?}", v),
         };
 
@@ -140,7 +140,7 @@ impl DetachedSignature {
         config.hashed_subpackets = hashed;
         config.unhashed_subpackets = unhashed;
 
-        let sig = config.sign(key, key_pw, data)?;
+        let sig = config.sign(rng, key, key_pw, data)?;
 
         Ok(DetachedSignature::new(sig))
     }
