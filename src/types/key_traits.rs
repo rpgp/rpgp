@@ -103,7 +103,7 @@ impl<T: VerifyingKey> VerifyingKey for &T {
     }
 }
 
-impl KeyDetails for Box<&dyn SigningKey> {
+impl<R> KeyDetails for Box<&dyn SigningKey<R>> {
     fn version(&self) -> KeyVersion {
         (**self).version()
     }
@@ -136,10 +136,11 @@ impl KeyDetails for Box<&dyn SigningKey> {
 /// Keys that can sign data.
 ///
 /// Contains private data.
-pub trait SigningKey: KeyDetails {
+pub trait SigningKey<R: CryptoRng + Rng>: KeyDetails {
     /// Create a raw cryptographic signature over `data`
     fn sign(
         &self,
+        rng: R,
         key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
@@ -150,14 +151,15 @@ pub trait SigningKey: KeyDetails {
     fn hash_alg(&self) -> HashAlgorithm;
 }
 
-impl SigningKey for Box<&dyn SigningKey> {
+impl<R: CryptoRng + Rng> SigningKey<R> for Box<&dyn SigningKey<R>> {
     fn sign(
         &self,
+        rng: R,
         key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
     ) -> Result<crate::types::SignatureBytes> {
-        (**self).sign(key_pw, hash, data)
+        (**self).sign(rng, key_pw, hash, data)
     }
 
     fn hash_alg(&self) -> HashAlgorithm {

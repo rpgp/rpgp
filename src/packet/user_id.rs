@@ -113,7 +113,7 @@ impl UserId {
     ) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
-        S: SigningKey,
+        S: SigningKey<R>,
         K: KeyDetails + Serialize,
     {
         // Self-signatures use CertPositive, see
@@ -138,7 +138,7 @@ impl UserId {
     ) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
-        S: SigningKey,
+        S: SigningKey<R>,
         K: KeyDetails + Serialize,
     {
         ensure!(
@@ -160,8 +160,14 @@ impl UserId {
             ))?];
         }
 
-        let sig =
-            config.sign_certification_third_party(signer, signer_pw, signee, self.tag(), &self)?;
+        let sig = config.sign_certification_third_party(
+            rng,
+            signer,
+            signer_pw,
+            signee,
+            self.tag(),
+            &self,
+        )?;
 
         Ok(SignedUser::new(self.clone(), vec![sig]))
     }
