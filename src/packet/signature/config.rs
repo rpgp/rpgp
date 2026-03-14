@@ -93,8 +93,8 @@ impl From<&SignatureVersionSpecific> for SignatureVersion {
 }
 
 impl SignatureConfig {
-    pub fn from_key<R: CryptoRng + Rng, S: SigningKey>(
-        mut rng: R,
+    pub fn from_key<RNG1: CryptoRng + Rng, RNG2: CryptoRng + Rng, S: SigningKey<RNG2>>(
+        mut rng: RNG1,
         key: &S,
         typ: SignatureType,
     ) -> Result<Self> {
@@ -221,14 +221,20 @@ impl SignatureConfig {
     }
 
     /// Sign the given data.
-    pub fn sign<R>(self, key: &impl SigningKey, key_pw: &Password, mut data: R) -> Result<Signature>
+    pub fn sign<R, RNG: CryptoRng + Rng>(
+        self,
+        rng: RNG,
+        key: &impl SigningKey<RNG>,
+        key_pw: &Password,
+        mut data: R,
+    ) -> Result<Signature>
     where
         R: Read,
     {
         let mut hasher = self.into_hasher()?;
         std::io::copy(&mut data, &mut hasher)?;
 
-        hasher.sign(key, key_pw)
+        hasher.sign(rng, key, key_pw)
     }
 
     pub fn into_hasher(self) -> Result<SignatureHasher> {
@@ -248,8 +254,9 @@ impl SignatureConfig {
     }
 
     /// Create a certification self-signature.
-    pub fn sign_certification<S, K>(
+    pub fn sign_certification<S, K, RNG: CryptoRng + Rng>(
         self,
+        rng: RNG,
         key: &S,
         pub_key: &K,
         key_pw: &Password,
@@ -257,16 +264,17 @@ impl SignatureConfig {
         id: &impl Serialize,
     ) -> Result<Signature>
     where
-        S: SigningKey,
+        S: SigningKey<RNG>,
         K: KeyDetails + Serialize,
     {
-        self.sign_certification_third_party(key, key_pw, pub_key, tag, id)
+        self.sign_certification_third_party(rng, key, key_pw, pub_key, tag, id)
     }
 
     /// Create a certification third-party signature.
-    pub fn sign_certification_third_party<K>(
+    pub fn sign_certification_third_party<K, RNG: CryptoRng + Rng>(
         self,
-        signer: &impl SigningKey,
+        rng: RNG,
+        signer: &impl SigningKey<RNG>,
         signer_pw: &Password,
         signee: &K,
         tag: Tag,
@@ -334,7 +342,7 @@ impl SignatureConfig {
         let hash = &hasher.finalize()[..];
 
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
+        let signature = signer.sign(rng, signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -344,15 +352,16 @@ impl SignatureConfig {
     /// The primary key is expected as `signer`, the subkey as `signee`.
     ///
     /// Produces a "Subkey Binding Signature (type ID 0x18)"
-    pub fn sign_subkey_binding<S, K1, K2>(
+    pub fn sign_subkey_binding<RNG: CryptoRng + Rng, S, K1, K2>(
         self,
+        rng: RNG,
         signer: &S,
         signer_pub: &K1,
         signer_pw: &Password,
         signee: &K2,
     ) -> Result<Signature>
     where
-        S: SigningKey,
+        S: SigningKey<RNG>,
         K1: KeyDetails + Serialize,
         K2: KeyDetails + Serialize,
     {
@@ -379,7 +388,7 @@ impl SignatureConfig {
 
         let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
+        let signature = signer.sign(rng, signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -390,15 +399,16 @@ impl SignatureConfig {
     /// The subkey is expected as `signer`, the primary key as `signee`.
     ///
     /// Produces a "Primary Key Binding Signature (type ID 0x19)"
-    pub fn sign_primary_key_binding<S, K1, K2>(
+    pub fn sign_primary_key_binding<RNG: CryptoRng + Rng, S, K1, K2>(
         self,
+        rng: RNG,
         signer: &S,
         signer_pub: &K1,
         signer_pw: &Password,
         signee: &K2,
     ) -> Result<Signature>
     where
-        S: SigningKey,
+        S: SigningKey<RNG>,
         K1: KeyDetails + Serialize,
         K2: KeyDetails + Serialize,
     {
@@ -425,15 +435,21 @@ impl SignatureConfig {
 
         let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
+        let signature = signer.sign(rng, signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
 
     /// Signs a direct key signature or a revocation.
-    pub fn sign_key<S, K>(self, signing_key: &S, key_pw: &Password, key: &K) -> Result<Signature>
+    pub fn sign_key<RNG: CryptoRng + Rng, S, K>(
+        self,
+        rng: RNG,
+        signing_key: &S,
+        key_pw: &Password,
+        key: &K,
+    ) -> Result<Signature>
     where
-        S: SigningKey,
+        S: SigningKey<RNG>,
         K: KeyDetails + Serialize,
     {
         ensure!(
@@ -464,7 +480,7 @@ impl SignatureConfig {
 
         let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signing_key.sign(key_pw, self.hash_alg, hash)?;
+        let signature = signing_key.sign(rng, key_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -753,9 +769,14 @@ pub struct SignatureHasher {
 
 impl SignatureHasher {
     /// Finalizes the signature.
-    pub fn sign<S>(self, key: &S, key_pw: &Password) -> Result<Signature>
+    pub fn sign<RNG: CryptoRng + Rng, S>(
+        self,
+        rng: RNG,
+        key: &S,
+        key_pw: &Password,
+    ) -> Result<Signature>
     where
-        S: SigningKey + ?Sized,
+        S: SigningKey<RNG> + ?Sized,
     {
         let Self {
             config,
@@ -786,7 +807,7 @@ impl SignatureHasher {
         let hash = &hasher.finalize()[..];
 
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = key.sign(key_pw, config.hash_alg, hash)?;
+        let signature = key.sign(rng, key_pw, config.hash_alg, hash)?;
 
         Signature::from_config(config, signed_hash_value, signature)
     }
@@ -867,6 +888,7 @@ mod tests {
 
         let dks = config
             .sign_key(
+                rng,
                 &alice.primary_key,
                 &Password::empty(),
                 &bob.primary_key.public_key(),
