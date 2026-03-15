@@ -161,7 +161,7 @@ impl UserId {
         }
 
         let sig = config.sign_certification_third_party(
-            rng,
+            &mut rng,
             signer,
             signer_pw,
             signee,

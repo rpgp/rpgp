@@ -236,16 +236,16 @@ impl UserAttribute {
     }
 
     /// Create a self-signature
-    pub fn sign<R, P, K>(
+    pub fn sign<RNG1, P, K>(
         &self,
-        rng: R,
+        rng: &mut RNG1,
         signer_sec_key: &P,
         signer_pub_key: &K,
         key_pw: &Password,
     ) -> Result<SignedUserAttribute>
     where
-        R: CryptoRng + Rng,
-        P: SigningKey<R>,
+        RNG1: CryptoRng + Rng,
+        P: SigningKey<RNG1>,
         K: KeyDetails + Serialize,
     {
         // Self-signatures use CertPositive, see
@@ -260,17 +260,17 @@ impl UserAttribute {
     }
 
     /// Create a third-party signature
-    pub fn sign_third_party<R, P, K>(
+    pub fn sign_third_party<RNG1, P, K>(
         &self,
-        mut rng: R,
+        rng: &mut RNG1,
         signer: &P,
         signer_pw: &Password,
         signee: &K,
         typ: SignatureType,
     ) -> Result<SignedUserAttribute>
     where
-        R: CryptoRng + Rng,
-        P: SigningKey<R>,
+        RNG1: CryptoRng + Rng,
+        P: SigningKey<RNG1>,
         K: KeyDetails + Serialize,
     {
         ensure!(
@@ -283,7 +283,7 @@ impl UserAttribute {
             Subpacket::regular(SubpacketData::IssuerFingerprint(signer.fingerprint()))?,
         ];
 
-        let mut config = SignatureConfig::from_key(&mut rng, signer, typ)?;
+        let mut config = SignatureConfig::from_key(rng, signer, typ)?;
 
         config.hashed_subpackets = hashed_subpackets;
         if signer.version() <= KeyVersion::V4 {

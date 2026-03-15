@@ -186,7 +186,7 @@ impl PublicSubkey {
     /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
     pub fn sign<R: CryptoRng + Rng, S, K>(
         &self,
-        mut rng: R,
+        rng: &mut R,
         primary_sec_key: &S,
         primary_pub_key: &K,
         key_pw: &Password,
@@ -198,7 +198,7 @@ impl PublicSubkey {
         K: KeyDetails + Serialize,
     {
         let mut config =
-            SignatureConfig::from_key(&mut rng, primary_sec_key, SignatureType::SubkeyBinding)?;
+            SignatureConfig::from_key(rng, primary_sec_key, SignatureType::SubkeyBinding)?;
 
         config.hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
@@ -418,7 +418,7 @@ impl PubKeyInner {
     // TODO: Expose in public API
     fn sign<R: CryptoRng + Rng, S>(
         &self,
-        mut rng: R,
+        rng: &mut R,
         key: &S,
         key_pw: &Password,
         sig_type: SignatureType,
@@ -426,7 +426,7 @@ impl PubKeyInner {
     where
         S: SigningKey<R> + Serialize,
     {
-        let mut config = SignatureConfig::from_key(&mut rng, key, sig_type)?;
+        let mut config = SignatureConfig::from_key(rng, key, sig_type)?;
         config.hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,

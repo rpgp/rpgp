@@ -136,11 +136,11 @@ impl<R> KeyDetails for Box<&dyn SigningKey<R>> {
 /// Keys that can sign data.
 ///
 /// Contains private data.
-pub trait SigningKey<R: CryptoRng + Rng>: KeyDetails {
+pub trait SigningKey<RNG: CryptoRng + Rng>: KeyDetails {
     /// Create a raw cryptographic signature over `data`
     fn sign(
         &self,
-        rng: R,
+        rng: &mut RNG,
         key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
@@ -154,7 +154,7 @@ pub trait SigningKey<R: CryptoRng + Rng>: KeyDetails {
 impl<R: CryptoRng + Rng> SigningKey<R> for Box<&dyn SigningKey<R>> {
     fn sign(
         &self,
-        rng: R,
+        rng: &mut R,
         key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],

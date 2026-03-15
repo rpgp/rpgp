@@ -172,14 +172,14 @@ impl SecretSubkey {
     /// willing to be associated with the primary.
     pub fn sign_primary_key_binding<R: CryptoRng + Rng, K>(
         &self,
-        mut rng: R,
+        rng: &mut R,
         pub_key: &K,
         key_pw: &Password,
     ) -> Result<Signature>
     where
         K: KeyDetails + Serialize,
     {
-        let mut config = SignatureConfig::from_key(&mut rng, self, SignatureType::KeyBinding)?;
+        let mut config = SignatureConfig::from_key(rng, self, SignatureType::KeyBinding)?;
 
         config.hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
@@ -219,7 +219,7 @@ impl SecretSubkey {
 impl<RNG: CryptoRng + RngCore> SigningKey<RNG> for SecretKey {
     fn sign(
         &self,
-        rng: RNG,
+        _rng: &mut RNG,
         key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
@@ -309,7 +309,7 @@ impl Imprint for SecretSubkey {
 impl<RNG: CryptoRng + RngCore> SigningKey<RNG> for SecretSubkey {
     fn sign(
         &self,
-        rng: RNG,
+        _rng: &mut RNG,
         key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
@@ -494,7 +494,7 @@ impl SecretSubkey {
     /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
     pub fn sign<R: CryptoRng + Rng, S, K>(
         &self,
-        rng: R,
+        rng: &mut R,
         primary_sec_key: &S,
         primary_pub_key: &K,
         key_pw: &Password,
@@ -682,7 +682,7 @@ where
         ))?];
     }
 
-    config.sign_key(rng, key, key_pw, pub_key)
+    config.sign_key(&mut rng, key, key_pw, pub_key)
 }
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
@@ -741,16 +741,22 @@ mod tests {
         alice_sec.remove_password(&"password".into()).unwrap();
 
         // signing without a password should succeed now
-        assert!(alice_sec.sign(rng, &"".into(), hash_algo, DATA).is_ok());
+        assert!(alice_sec
+            .sign(&mut rng, &"".into(), hash_algo, DATA)
+            .is_ok());
 
         // set different password protection
         alice_sec.set_password(&mut rng, &"foo".into()).unwrap();
 
         // signing without a password should fail now
-        assert!(alice_sec.sign(rng, &"".into(), hash_algo, DATA).is_err());
+        assert!(alice_sec
+            .sign(&mut rng, &"".into(), hash_algo, DATA)
+            .is_err());
 
         // signing with the right password should succeed
-        assert!(alice_sec.sign(rng, &"foo".into(), hash_algo, DATA).is_ok());
+        assert!(alice_sec
+            .sign(&mut rng, &"foo".into(), hash_algo, DATA)
+            .is_ok());
 
         // remove the password protection again
         alice_sec.remove_password(&"foo".into()).unwrap();
@@ -765,7 +771,7 @@ mod tests {
 
         // signing with the right password should succeed
         alice_sec
-            .sign(rng, &"bar".into(), hash_algo, DATA)
+            .sign(&mut rng, &"bar".into(), hash_algo, DATA)
             .expect("failed to sign");
     }
 }
