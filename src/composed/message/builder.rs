@@ -251,7 +251,7 @@ impl<RNG: CryptoRng + Rng> Builder<'_, RNG, DummyReader> {
     }
 }
 
-fn prepare<RNG1>(
+fn prepare<RNG1, RNG2>(
     mut rng: RNG1,
     typ: SignatureType,
     keys: &[SigningConfig<'_, RNG2>],
@@ -1330,19 +1330,17 @@ impl<R: std::io::Read> std::io::Read for SignatureHashers<R> {
     }
 }
 
-impl<'a, RNG1: CryptoRng + Rng, RNG2: CryptoRng + Rng, R: std::io::Read>
-    SignGenerator<'a, RNG2, R>
-{
+impl<'a, RNG: CryptoRng + Rng, R: std::io::Read> SignGenerator<'a, RNG, R> {
     fn new(
-        mut rng: RNG1,
+        rng: &mut RNG,
         typ: SignatureType,
         literal_data_header: LiteralDataHeader,
         chunk_size: u32,
         source: R,
-        signers: Vec<SigningConfig<'a, RNG2>>,
+        signers: Vec<SigningConfig<'a, RNG>>,
         source_len: Option<u32>,
     ) -> Result<Self> {
-        let prep = prepare(&mut rng, typ, &signers)?;
+        let prep = prepare(rng, typ, &signers)?;
         let mut configs = VecDeque::with_capacity(prep.len());
         let mut sign_hashers = VecDeque::with_capacity(prep.len());
         let mut ops = VecDeque::with_capacity(prep.len());
