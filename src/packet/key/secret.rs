@@ -219,14 +219,14 @@ impl SecretSubkey {
 impl<RNG: CryptoRng + RngCore> SigningKey<RNG> for SecretKey {
     fn sign(
         &self,
-        _rng: &mut RNG,
+        rng: &mut RNG,
         key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
     ) -> Result<SignatureBytes> {
         let mut signature: Option<SignatureBytes> = None;
         self.unlock(key_pw, |pub_params, priv_key| {
-            let sig = create_signature(pub_params, priv_key, hash, data)?;
+            let sig = create_signature(rng, pub_params, priv_key, hash, data)?;
             signature.replace(sig);
             Ok(())
         })??;
@@ -309,14 +309,14 @@ impl Imprint for SecretSubkey {
 impl<RNG: CryptoRng + RngCore> SigningKey<RNG> for SecretSubkey {
     fn sign(
         &self,
-        _rng: &mut RNG,
+        rng: &mut RNG,
         key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
     ) -> Result<SignatureBytes> {
         let mut signature: Option<SignatureBytes> = None;
         self.unlock(key_pw, |pub_params, priv_key| {
-            let sig = create_signature(pub_params, priv_key, hash, data)?;
+            let sig = create_signature(rng, pub_params, priv_key, hash, data)?;
             signature.replace(sig);
             Ok(())
         })??;
@@ -542,7 +542,8 @@ impl DecryptionKey for SecretSubkey {
     }
 }
 
-fn create_signature(
+fn create_signature<RNG: CryptoRng + RngCore>(
+    rng: &mut RNG,
     pub_params: &PublicParams,
     priv_key: &PlainSecretParams,
     hash: HashAlgorithm,
@@ -556,19 +557,19 @@ fn create_signature(
             let PublicParams::RSA(_) = pub_params else {
                 bail!("inconsistent key");
             };
-            priv_key.sign(hash, data)
+            priv_key.sign(rng, hash, data)
         }
         PlainSecretParams::ECDSA(ref priv_key) => {
             let PublicParams::ECDSA(_) = pub_params else {
                 bail!("inconsistent key");
             };
-            priv_key.sign(hash, data)
+            priv_key.sign(rng, hash, data)
         }
         PlainSecretParams::DSA(ref priv_key) => {
             let PublicParams::DSA(_) = pub_params else {
                 bail!("inconsistent key");
             };
-            priv_key.sign(hash, data)
+            priv_key.sign(rng, hash, data)
         }
         PlainSecretParams::ECDH(_) => {
             bail!("ECDH can not be used for signing operations")
@@ -591,27 +592,27 @@ fn create_signature(
             let PublicParams::Ed25519(_) = pub_params else {
                 bail!("invalid inconsistent key");
             };
-            priv_key.sign(hash, data)
+            priv_key.sign(rng, hash, data)
         }
         #[cfg(feature = "draft-pqc")]
         PlainSecretParams::MlDsa65Ed25519(ref priv_key) => {
             let PublicParams::MlDsa65Ed25519(_) = pub_params else {
                 bail!("invalid inconsistent key");
             };
-            priv_key.sign(hash, data)
+            priv_key.sign(rng, hash, data)
         }
         #[cfg(feature = "draft-pqc")]
         PlainSecretParams::MlDsa87Ed448(ref priv_key) => {
             let PublicParams::MlDsa87Ed448(_) = pub_params else {
                 bail!("invalid inconsistent key");
             };
-            priv_key.sign(hash, data)
+            priv_key.sign(rng, hash, data)
         }
         PlainSecretParams::Ed448(ref priv_key) => {
             let PublicParams::Ed448(_) = pub_params else {
                 bail!("invalid inconsistent key");
             };
-            priv_key.sign(hash, data)
+            priv_key.sign(rng, hash, data)
         }
         PlainSecretParams::Ed25519Legacy(ref priv_key) => {
             match pub_params {
@@ -625,7 +626,7 @@ fn create_signature(
                     bail!("invalid inconsistent key");
                 }
             }
-            priv_key.sign(hash, data)
+            priv_key.sign(rng, hash, data)
         }
         PlainSecretParams::Elgamal(_) => {
             unsupported_err!("Elgamal signing");
@@ -635,21 +636,21 @@ fn create_signature(
             let PublicParams::SlhDsaShake128s(_) = pub_params else {
                 bail!("invalid inconsistent key");
             };
-            priv_key.sign(hash, data)
+            priv_key.sign(rng, hash, data)
         }
         #[cfg(feature = "draft-pqc")]
         PlainSecretParams::SlhDsaShake128f(ref priv_key) => {
             let PublicParams::SlhDsaShake128f(_) = pub_params else {
                 bail!("invalid inconsistent key");
             };
-            priv_key.sign(hash, data)
+            priv_key.sign(rng, hash, data)
         }
         #[cfg(feature = "draft-pqc")]
         PlainSecretParams::SlhDsaShake256s(ref priv_key) => {
             let PublicParams::SlhDsaShake256s(_) = pub_params else {
                 bail!("invalid inconsistent key");
             };
-            priv_key.sign(hash, data)
+            priv_key.sign(rng, hash, data)
         }
         PlainSecretParams::Unknown { alg, .. } => {
             unsupported_err!("{:?} signing", alg);
