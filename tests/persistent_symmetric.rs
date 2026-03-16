@@ -113,7 +113,7 @@ fn psk_openpgp_js_signature() {
     let (detached, _) = DetachedSignature::from_armor_single(BufReader::new(signed)).unwrap();
 
     let pw = Password::empty();
-    let unlocked = psk.as_unlockable(&pw);
+    let unlocked = psk.to_unlockable(&pw);
 
     detached
         .verify(&unlocked, PLAIN.as_bytes())
