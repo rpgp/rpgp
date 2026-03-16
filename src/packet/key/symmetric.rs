@@ -132,11 +132,11 @@ impl PersistentSymmetricKey {
         &self.details
     }
 
-    pub fn as_unlockable<'a>(
-        &'a self,
-        key_pw: &'a Password,
-    ) -> UnlockablePersistentSymmetricKey<'a> {
-        UnlockablePersistentSymmetricKey { psk: self, key_pw }
+    pub fn to_unlockable(&self, key_pw: &Password) -> UnlockablePersistentSymmetricKey {
+        UnlockablePersistentSymmetricKey {
+            psk: self.clone(),
+            key_pw: Password::Static(key_pw.read()),
+        }
     }
 
     /// Remove the password protection of the private key material in this key packet.
@@ -188,12 +188,18 @@ impl PersistentSymmetricKey {
     }
 }
 
-pub struct UnlockablePersistentSymmetricKey<'a> {
-    psk: &'a PersistentSymmetricKey,
-    key_pw: &'a Password,
+pub struct UnlockablePersistentSymmetricKey {
+    psk: PersistentSymmetricKey,
+    key_pw: Password,
 }
 
-impl EncryptionKey for UnlockablePersistentSymmetricKey<'_> {
+impl UnlockablePersistentSymmetricKey {
+    pub fn new(psk: PersistentSymmetricKey, key_pw: Password) -> Self {
+        Self { psk, key_pw }
+    }
+}
+
+impl EncryptionKey for UnlockablePersistentSymmetricKey {
     fn encrypt<R: CryptoRng + Rng>(
         &self,
         mut rng: R,
@@ -212,7 +218,7 @@ impl EncryptionKey for UnlockablePersistentSymmetricKey<'_> {
         let mut salt: [u8; 32] = [0; 32];
         rng.fill(&mut salt);
 
-        self.psk.unlock(self.key_pw, |pub_params, sec_params| {
+        self.psk.unlock(&self.key_pw, |pub_params, sec_params| {
             let PublicParams::AEAD(public_params) = pub_params else {
                 bail!("Unsupported public parameters for persistent symmetric key: {pub_params:?}");
             };
@@ -323,7 +329,7 @@ impl DecryptionKey for PersistentSymmetricKey {
     }
 }
 
-impl<'a> KeyDetails for UnlockablePersistentSymmetricKey<'a> {
+impl KeyDetails for UnlockablePersistentSymmetricKey {
     fn version(&self) -> KeyVersion {
         self.psk.version()
     }
@@ -353,13 +359,13 @@ impl<'a> KeyDetails for UnlockablePersistentSymmetricKey<'a> {
     }
 }
 
-impl<'a> Debug for UnlockablePersistentSymmetricKey<'a> {
+impl Debug for UnlockablePersistentSymmetricKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.psk.fmt(f)
     }
 }
 
-impl<'a> VerifyingKey for UnlockablePersistentSymmetricKey<'a> {
+impl VerifyingKey for UnlockablePersistentSymmetricKey {
     fn verify(
         &self,
         hash: HashAlgorithm,
@@ -390,7 +396,7 @@ impl<'a> VerifyingKey for UnlockablePersistentSymmetricKey<'a> {
             "unexpected tag length"
         );
 
-        self.psk.unlock(self.key_pw, |pub_params, sec_params| {
+        self.psk.unlock(&self.key_pw, |pub_params, sec_params| {
             let PublicParams::AEAD(public) = &pub_params else {
                 bail!("Unsupported public parameters for persistent symmetric key: {pub_params:?}");
             };
@@ -571,7 +577,7 @@ mod tests {
             ChunkSize::default(),
         );
         builder
-            .encrypt_to_key(&mut rng, &psk.as_unlockable(&Password::empty()))
+            .encrypt_to_key(&mut rng, &psk.to_unlockable(&Password::empty()))
             .expect("encryption");
 
         let encrypted = builder
@@ -629,7 +635,7 @@ mod tests {
         let (mut msg, _) = Message::from_armor(signed.as_bytes()).expect("parse");
         let _payload = msg.as_data_vec().expect("read");
 
-        msg.verify(&psk.as_unlockable(&Password::empty()))
+        msg.verify(&psk.to_unlockable(&Password::empty()))
             .expect("ok");
     }
 
@@ -661,7 +667,7 @@ EN6rcnCdGrHtbnaevXgEt/h+4qr8EKogUsV/JxmVOt6NUAF8jKM=
         let (mut msg, _) = Message::from_armor(MSG.as_bytes()).expect("parse");
         let _payload = msg.as_data_vec().expect("read");
 
-        msg.verify(&psk.as_unlockable(&Password::empty()))
+        msg.verify(&psk.to_unlockable(&Password::empty()))
             .expect("ok");
     }
 }
