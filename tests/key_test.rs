@@ -1479,3 +1479,24 @@ fn test_expiring_v3() {
 
     assert_eq!(pkey.primary_key.legacy_v3_expiration_days(), Some(365));
 }
+
+#[test]
+fn test_short_ed25519() {
+    let _ = pretty_env_logger::try_init();
+
+    let (pkey, _) = SignedSecretKey::from_armor_single(
+        File::open("./tests/ed25519-key-with-31-byte-private-key-scalar.asc").unwrap(),
+    )
+    .unwrap();
+
+    let SecretParams::Plain(secret) = pkey.primary_key.secret_params() else {
+        panic!("expected unencrypted TSK");
+    };
+
+    let PlainSecretParams::Ed25519Legacy(secret) = secret else {
+        panic!("expected ed25519 TSK");
+    };
+
+    // the as_bytes always returns 32 bytes even if the encoding was short (31 bytes)
+    assert_eq!(secret.as_bytes().len(), 32);
+}
