@@ -114,6 +114,10 @@ impl PersistentSymmetricKey {
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> crate::errors::Result<T>,
     {
+        // TODO: AEAD encryption (S2K usage octet 253) MUST be used [..]
+        // Implementations MUST NOT decrypt symmetric key material in a Persistent Symmetric
+        // Key Packet that was encrypted using a different method.
+
         let pub_params = self.details.public_params();
         match self.secret_params {
             SecretParams::Plain(ref k) => Ok(work(pub_params, k)),
@@ -133,6 +137,54 @@ impl PersistentSymmetricKey {
         key_pw: &'a Password,
     ) -> UnlockablePersistentSymmetricKey<'a> {
         UnlockablePersistentSymmetricKey { psk: self, key_pw }
+    }
+
+    /// Remove the password protection of the private key material in this key packet.
+    /// This permanently "unlocks" the secret key material.
+    ///
+    /// If the Secret Key material in the packet is not locked, it is left unchanged.
+    ///
+    /// The current locking password for this key must be provided in `password`.
+    pub fn remove_password(&mut self, password: &Password) -> crate::errors::Result<()> {
+        if let SecretParams::Encrypted(enc) = &self.secret_params {
+            let unlocked = enc.unlock(password, &self.details, Some(self.packet_header.tag()))?;
+            self.secret_params = SecretParams::Plain(unlocked);
+        }
+
+        Ok(())
+    }
+
+    /// Set a `password` that "locks" the private key material in this key packet
+    /// using the mechanisms specified in `s2k_params`.
+    ///
+    /// To change the password on a locked key packet, it needs to be unlocked
+    /// using [Self::remove_password] before calling this function.
+    pub fn set_password_with_s2k(
+        &mut self,
+        password: &Password,
+        s2k_params: crate::types::S2kParams,
+    ) -> crate::errors::Result<()> {
+        // TODO:
+        //
+        // When storing encrypted symmetric key material in a Persistent Symmetric Key Packet,
+        // AEAD encryption (S2K usage octet 253, see section 3.7.2.1 of [RFC9580]) MUST be used,
+        // to ensure that the secret key material is bound to the fingerprint.
+
+        let plain = match &self.secret_params {
+            SecretParams::Plain(plain) => plain,
+            SecretParams::Encrypted(_) => {
+                bail!("Secret Key packet must be unlocked")
+            }
+        };
+
+        self.secret_params = SecretParams::Encrypted(plain.clone().encrypt(
+            &password.read(),
+            s2k_params,
+            &self.details,
+            Some(self.packet_header.tag()),
+        )?);
+
+        Ok(())
     }
 }
 
