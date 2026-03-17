@@ -33,6 +33,7 @@ use pgp::{
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use rsa::traits::PublicKeyParts;
+use testresult::TestResult;
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
     // Open the path in read-only mode, returns `io::Result<File>`
@@ -1480,14 +1481,15 @@ fn test_expiring_v3() {
     assert_eq!(pkey.primary_key.legacy_v3_expiration_days(), Some(365));
 }
 
+const DATA: &[u8] = b"test";
+
 #[test]
-fn test_short_ed25519() {
+fn test_short_ed25519() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
-    let (pkey, _) = SignedSecretKey::from_armor_single(
-        File::open("./tests/ed25519-key-with-31-byte-private-key-scalar.asc").unwrap(),
-    )
-    .unwrap();
+    let (pkey, _) = SignedSecretKey::from_armor_single(File::open(
+        "./tests/ed25519-key-with-31-byte-private-key-scalar.asc",
+    )?)?;
 
     let SecretParams::Plain(secret) = pkey.primary_key.secret_params() else {
         panic!("expected unencrypted TSK");
@@ -1499,4 +1501,43 @@ fn test_short_ed25519() {
 
     // the as_bytes always returns 32 bytes even if the encoding was short (31 bytes)
     assert_eq!(secret.as_bytes().len(), 32);
+
+    let sig = DetachedSignature::sign_binary_data(
+        rand::thread_rng(),
+        &pkey.primary_key,
+        &Password::empty(),
+        HashAlgorithm::Sha256,
+        DATA,
+    )?;
+
+    sig.verify(&pkey.public_key(), DATA)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_non_standard_rsa_modulus() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (pkey, _) =
+        SignedSecretKey::from_armor_single(File::open("./tests/rsa-key-with-modulus-e-257.asc")?)?;
+
+    let PublicParams::RSA(public) = pkey.primary_key.public_params() else {
+        panic!("expected RSA params");
+    };
+
+    // 257 in big-endian bytes
+    assert_eq!(public.key.e().to_bytes_be(), [1, 1]);
+
+    let sig = DetachedSignature::sign_binary_data(
+        rand::thread_rng(),
+        &pkey.primary_key,
+        &Password::empty(),
+        HashAlgorithm::Sha256,
+        DATA,
+    )?;
+
+    sig.verify(&pkey.public_key(), DATA)?;
+
+    Ok(())
 }
