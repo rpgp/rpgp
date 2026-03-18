@@ -6,7 +6,10 @@ use std::{fs::File, io::BufReader, path::Path};
 
 use pgp::{
     armor,
-    composed::{Deserializable, DetachedSignature, Esk, Message, TheRing},
+    composed::{
+        Deserializable, DetachedSignature, Esk, Message, TheRing,
+        TransferablePersistentSymmetricKey,
+    },
     packet::{Packet, PacketParser, PersistentSymmetricKey},
     types::{DecryptionKey, EskType, KeyDetails, Password},
 };
@@ -104,7 +107,7 @@ fn psk_openpgp_js_seipdv2() {
 
 #[test]
 fn psk_openpgp_js_signature() {
-    let psk = get_psk();
+    let tpsk = TransferablePersistentSymmetricKey { key: get_psk() };
 
     let signed = File::open(Path::new(
         "tests/persistent-symmetric/openpgp-js/detached.sig",
@@ -113,7 +116,7 @@ fn psk_openpgp_js_signature() {
     let (detached, _) = DetachedSignature::from_armor_single(BufReader::new(signed)).unwrap();
 
     let pw = Password::empty();
-    let unlocked = psk.to_unlockable(&pw);
+    let unlocked = tpsk.to_unlockable(&pw);
 
     detached
         .verify(&unlocked, PLAIN.as_bytes())

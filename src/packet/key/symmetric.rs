@@ -4,29 +4,20 @@
 //!
 //! Ref <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html>
 
-use std::{
-    fmt::{Debug, Formatter},
-    io::BufRead,
-};
+use std::{fmt::Debug, io::BufRead};
 
-use bytes::Bytes;
-use elliptic_curve::subtle::ConstantTimeEq;
 use log::debug;
-use rand::{thread_rng, CryptoRng, Rng};
+use rand::thread_rng;
 
 use crate::{
     composed::PlainSessionKey,
-    crypto::{
-        aead::AeadAlgorithm, aead_key::InfoParameter, hash::HashAlgorithm,
-        public_key::PublicKeyAlgorithm,
-    },
-    errors::{bail, ensure, ensure_eq, unsupported_err},
+    crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    errors::{bail, ensure_eq, unsupported_err},
     packet::{PacketHeader, PacketTrait, PubKeyInner, SignatureVersion},
     ser::Serialize,
     types::{
-        DecryptionKey, EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion,
-        Password, PkeskBytes, PlainSecretParams, PublicParams, SecretParams, SignatureBytes,
-        SigningKey, Tag, Timestamp, VerifyingKey,
+        DecryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PkeskBytes,
+        PlainSecretParams, PublicParams, SecretParams, SignatureBytes, SigningKey, Tag, Timestamp,
     },
 };
 
@@ -37,7 +28,7 @@ pub struct PersistentSymmetricKey {
     #[zeroize(skip)]
     packet_header: PacketHeader,
     #[zeroize(skip)]
-    details: super::PublicKey,
+    pub(crate) details: super::PublicKey,
     secret_params: SecretParams,
 }
 
@@ -133,13 +124,6 @@ impl PersistentSymmetricKey {
         &self.details
     }
 
-    pub fn to_unlockable(&self, key_pw: &Password) -> UnlockablePersistentSymmetricKey {
-        UnlockablePersistentSymmetricKey {
-            psk: self.clone(),
-            key_pw: Password::Static(key_pw.read()),
-        }
-    }
-
     /// Remove the password protection of the private key material in this key packet.
     /// This permanently "unlocks" the secret key material.
     ///
@@ -186,76 +170,6 @@ impl PersistentSymmetricKey {
         )?);
 
         Ok(())
-    }
-}
-
-pub struct UnlockablePersistentSymmetricKey {
-    psk: PersistentSymmetricKey,
-    key_pw: Password,
-}
-
-impl UnlockablePersistentSymmetricKey {
-    pub fn new(psk: PersistentSymmetricKey, key_pw: Password) -> Self {
-        Self { psk, key_pw }
-    }
-}
-
-impl EncryptionKey for UnlockablePersistentSymmetricKey {
-    fn encrypt<R: CryptoRng + Rng>(
-        &self,
-        mut rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> crate::errors::Result<PkeskBytes> {
-        ensure!(
-            matches!(typ, EskType::V6),
-            "only v6 ESK supported right now"
-        );
-
-        let aead = AeadAlgorithm::Ocb; // FIXME: parameter
-
-        // 32 octets of salt. The salt is used to derive the key-encryption key and MUST be
-        // securely generated (see section 13.10 of [RFC9580]).
-        let mut salt: [u8; 32] = [0; 32];
-        rng.fill(&mut salt);
-
-        self.psk.unlock(&self.key_pw, |pub_params, sec_params| {
-            let PublicParams::AEAD(public_params) = pub_params else {
-                bail!("Unsupported public parameters for persistent symmetric key: {pub_params:?}");
-            };
-
-            let PlainSecretParams::AEAD(secret) = &sec_params else {
-                bail!("Unsupported secret parameters for persistent symmetric key: {sec_params:?}");
-            };
-
-            // A symmetric key encryption of the plaintext value described in section 5.1 of [RFC9580],
-            // performed with the key-encryption key and IV computed as described in Section 7.4,
-            // using the symmetric-key cipher of the key and the indicated AEAD mode, with as
-            // additional data the empty string; including the authentication tag.
-
-            let version = self.psk.details.version().into();
-            let info = InfoParameter {
-                packet_type: Tag::PublicKeyEncryptedSessionKey,
-                version,
-                aead,
-                sym_alg: public_params.sym_alg,
-            };
-
-            let (key, iv) =
-                crate::crypto::aead_key::SecretKey::derive_key_iv(&secret.key, &salt, info);
-
-            let mut buf = plain.into();
-
-            aead.encrypt_in_place(&public_params.sym_alg, &key, &iv, &[], &mut buf)?;
-
-            let encrypted: Bytes = buf.into();
-
-            Ok(PkeskBytes::Aead {
-                aead,
-                salt,
-                encrypted,
-            })
-        })?
     }
 }
 
@@ -336,97 +250,6 @@ impl DecryptionKey for PersistentSymmetricKey {
     }
 }
 
-impl KeyDetails for UnlockablePersistentSymmetricKey {
-    fn version(&self) -> KeyVersion {
-        self.psk.version()
-    }
-
-    fn legacy_key_id(&self) -> KeyId {
-        self.psk.legacy_key_id()
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        self.psk.fingerprint()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.psk.algorithm()
-    }
-
-    fn created_at(&self) -> Timestamp {
-        self.psk.created_at()
-    }
-
-    fn legacy_v3_expiration_days(&self) -> Option<u16> {
-        self.psk.legacy_v3_expiration_days()
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.psk.public_params()
-    }
-}
-
-impl Debug for UnlockablePersistentSymmetricKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.psk.fmt(f)
-    }
-}
-
-impl VerifyingKey for UnlockablePersistentSymmetricKey {
-    fn verify(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> crate::errors::Result<()> {
-        let Some(digest_len) = hash.digest_size() else {
-            bail!(
-                "UnlockablePersistentSymmetricKey::verify: invalid hash algorithm: {:?}",
-                hash
-            );
-        };
-        ensure_eq!(
-            data.len(),
-            digest_len,
-            "signature data length {} doesn't match digest len {}",
-            data.len(),
-            digest_len,
-        );
-
-        let SignatureBytes::PersistentSymmetric { aead, salt, tag } = sig else {
-            bail!("Unsupported SignatureBytes for persistent symmetric key: {sig:?}");
-        };
-
-        ensure_eq!(
-            tag.len(),
-            aead.tag_size().unwrap_or(0),
-            "unexpected tag length"
-        );
-
-        self.psk.unlock(&self.key_pw, |pub_params, sec_params| {
-            let PublicParams::AEAD(public) = &pub_params else {
-                bail!("Unsupported public parameters for persistent symmetric key: {pub_params:?}");
-            };
-            let PlainSecretParams::AEAD(secret) = &sec_params else {
-                bail!("Unsupported secret parameters for persistent symmetric key: {sec_params:?}");
-            };
-
-            let version = SignatureVersion::V6; // FIXME: should not be fixed
-
-            // "buf" is the newly calculated authentication tag
-            let buf = secret.compute_persistent_mac(version, public.sym_alg, *aead, salt, data)?;
-
-            // check if the stored and calculated authentication tags match
-            if buf.ct_ne(&**tag).into() {
-                // no: the signature is invalid!
-                bail!("PersistentSymmetricKey signature mismatch");
-            }
-
-            Ok(())
-        })?
-    }
-}
-
 impl PacketTrait for PersistentSymmetricKey {
     fn packet_header(&self) -> &PacketHeader {
         &self.packet_header
@@ -487,7 +310,9 @@ mod tests {
 
     use crate::{
         armor::{BlockType, Dearmor},
-        composed::{ArmorOptions, Esk, Message, MessageBuilder},
+        composed::{
+            ArmorOptions, Esk, Message, MessageBuilder, TransferablePersistentSymmetricKey,
+        },
         crypto::{
             aead::{AeadAlgorithm, ChunkSize},
             aead_key,
@@ -575,7 +400,7 @@ mod tests {
 
         const PLAIN: &[u8] = b"hello world";
 
-        let psk = make_psk();
+        let psk = TransferablePersistentSymmetricKey { key: make_psk() };
 
         let mut builder = MessageBuilder::from_bytes(&[][..], PLAIN.to_vec()).seipd_v2(
             &mut rng,
@@ -609,6 +434,7 @@ mod tests {
         };
 
         let sk = psk
+            .key
             .decrypt(&Password::empty(), pkesk.values().unwrap(), EskType::V6)
             .expect("decryption")
             .expect("decryption");
@@ -626,12 +452,12 @@ mod tests {
 
         const PLAIN: &[u8] = b"hello world";
 
-        let psk = make_psk();
+        let tpsk = TransferablePersistentSymmetricKey { key: make_psk() };
 
         // let signed = psk.to(&mut rng, ArmorOptions::default()).expect("writing");
 
         let mut builder = MessageBuilder::from_bytes(&[][..], PLAIN.to_vec());
-        builder.sign(&psk, Password::empty(), HashAlgorithm::Sha512);
+        builder.sign(&tpsk.key, Password::empty(), HashAlgorithm::Sha512);
 
         let signed = builder
             .to_armored_string(&mut rng, ArmorOptions::default())
@@ -642,7 +468,7 @@ mod tests {
         let (mut msg, _) = Message::from_armor(signed.as_bytes()).expect("parse");
         let _payload = msg.as_data_vec().expect("read");
 
-        msg.verify(&psk.to_unlockable(&Password::empty()))
+        msg.verify(&tpsk.to_unlockable(&Password::empty()))
             .expect("ok");
     }
 
@@ -671,10 +497,12 @@ EN6rcnCdGrHtbnaevXgEt/h+4qr8EKogUsV/JxmVOt6NUAF8jKM=
             unimplemented!()
         };
 
+        let tpsk = TransferablePersistentSymmetricKey { key: psk };
+
         let (mut msg, _) = Message::from_armor(MSG.as_bytes()).expect("parse");
         let _payload = msg.as_data_vec().expect("read");
 
-        msg.verify(&psk.to_unlockable(&Password::empty()))
+        msg.verify(&tpsk.to_unlockable(&Password::empty()))
             .expect("ok");
     }
 }
