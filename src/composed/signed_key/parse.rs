@@ -2,9 +2,12 @@ use std::{io, io::BufReader, iter};
 
 use crate::{
     armor::{self, BlockType, DearmorOptions},
-    composed::signed_key::{
-        PublicOrSecret, SignedPublicKey, SignedPublicKeyParser, SignedSecretKey,
-        SignedSecretKeyParser,
+    composed::{
+        signed_key::{
+            PublicOrSecret, SignedPublicKey, SignedPublicKeyParser, SignedSecretKey,
+            SignedSecretKeyParser,
+        },
+        TransferablePersistentSymmetricKey,
     },
     errors::{bail, format_err, unimplemented_err, Result},
     packet::{Packet, PacketParser, PacketTrait},
@@ -152,7 +155,12 @@ impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for PubPrivIterator<I>
                             let Some(Ok(Packet::PersistentSymmetricKey(p))) = packets.next() else {
                                 unimplemented!()
                             };
-                            (Some(Ok(PublicOrSecret::PersistentSymmetric(p))), packets)
+                            (
+                                Some(Ok(PublicOrSecret::PersistentSymmetric(
+                                    TransferablePersistentSymmetricKey { key: p },
+                                ))),
+                                packets,
+                            )
                         }
                         _ => (None, packets),
                     };

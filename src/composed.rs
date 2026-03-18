@@ -94,10 +94,13 @@ mod any;
 mod cleartext;
 mod key;
 mod message;
+mod persistent_symmetric;
 mod shared;
 mod signature;
 mod signed_key;
 
+#[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+pub use self::persistent_symmetric::*;
 pub use self::{
     any::Any, cleartext::CleartextSignedMessage, key::*, message::*, shared::Deserializable,
     signature::*, signed_key::*,
