@@ -8,7 +8,7 @@ use crate::{
     composed::{
         key::KeyDetails,
         signed_key::{SignedPublicKey, SignedSecretKey},
-        ArmorOptions,
+        ArmorOptions, TransferablePersistentSymmetricKey,
     },
     errors::Result,
     packet,
@@ -304,7 +304,7 @@ pub enum PublicOrSecret {
     Public(SignedPublicKey),
     Secret(SignedSecretKey),
     #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
-    PersistentSymmetric(crate::packet::PersistentSymmetricKey),
+    PersistentSymmetric(TransferablePersistentSymmetricKey),
 }
 
 impl PublicOrSecret {
@@ -328,7 +328,7 @@ impl PublicOrSecret {
             PublicOrSecret::Secret(k) => k.to_armored_writer(writer, opts),
 
             #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
-            PublicOrSecret::PersistentSymmetric(_) => unimplemented!(), // FIXME: implement
+            PublicOrSecret::PersistentSymmetric(k) => k.to_armored_writer(writer, opts),
         }
     }
 
@@ -338,7 +338,7 @@ impl PublicOrSecret {
             PublicOrSecret::Secret(k) => k.to_armored_bytes(opts),
 
             #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
-            PublicOrSecret::PersistentSymmetric(_) => unimplemented!(), // FIXME: implement
+            PublicOrSecret::PersistentSymmetric(k) => k.to_armored_bytes(opts),
         }
     }
 
@@ -348,7 +348,7 @@ impl PublicOrSecret {
             PublicOrSecret::Secret(k) => k.to_armored_string(opts),
 
             #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
-            PublicOrSecret::PersistentSymmetric(_) => unimplemented!(), // FIXME: implement
+            PublicOrSecret::PersistentSymmetric(k) => k.to_armored_string(opts),
         }
     }
 
