@@ -81,7 +81,7 @@ impl PersistentSymmetricKey {
 
         let pub_packet_header = PacketHeader::from_parts(
             packet_header.version(),
-            Tag::PublicKey,
+            Tag::PersistentSymmetricKey,
             crate::types::PacketLength::Fixed(len.try_into()?),
         )?;
 
