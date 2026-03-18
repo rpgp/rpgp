@@ -115,6 +115,9 @@ impl KeyDetails for TransferablePersistentSymmetricKey {
     }
 }
 
+/// A wrapper around `TransferablePersistentSymmetricKey` that bundles a symmetric key with a `Password`
+///
+/// This allows performing "public key operations" (i.e. encryption and signature verification) on persistent symmetric keys that are password-locked.
 pub struct UnlockablePersistentSymmetricKey {
     tpsk: TransferablePersistentSymmetricKey,
     key_pw: Password,
@@ -133,6 +136,9 @@ impl EncryptionKey for UnlockablePersistentSymmetricKey {
         plain: &[u8],
         typ: EskType,
     ) -> crate::errors::Result<PkeskBytes> {
+        // FIXME: refactor this business logic into packet::PersistentSymmetricKey,
+        // just do the unlocking here
+
         ensure!(
             matches!(typ, EskType::V6),
             "only v6 ESK supported right now"
@@ -182,42 +188,6 @@ impl EncryptionKey for UnlockablePersistentSymmetricKey {
                 encrypted,
             })
         })?
-    }
-}
-
-impl KeyDetails for UnlockablePersistentSymmetricKey {
-    fn version(&self) -> KeyVersion {
-        self.tpsk.version()
-    }
-
-    fn legacy_key_id(&self) -> KeyId {
-        self.tpsk.legacy_key_id()
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        self.tpsk.fingerprint()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.tpsk.key.algorithm()
-    }
-
-    fn created_at(&self) -> Timestamp {
-        self.tpsk.key.created_at()
-    }
-
-    fn legacy_v3_expiration_days(&self) -> Option<u16> {
-        self.tpsk.key.legacy_v3_expiration_days()
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.tpsk.key.public_params()
-    }
-}
-
-impl Debug for UnlockablePersistentSymmetricKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.tpsk.fmt(f)
     }
 }
 
@@ -273,5 +243,41 @@ impl VerifyingKey for UnlockablePersistentSymmetricKey {
 
             Ok(())
         })?
+    }
+}
+
+impl KeyDetails for UnlockablePersistentSymmetricKey {
+    fn version(&self) -> KeyVersion {
+        self.tpsk.version()
+    }
+
+    fn legacy_key_id(&self) -> KeyId {
+        self.tpsk.legacy_key_id()
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        self.tpsk.fingerprint()
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.tpsk.key.algorithm()
+    }
+
+    fn created_at(&self) -> Timestamp {
+        self.tpsk.key.created_at()
+    }
+
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        self.tpsk.key.legacy_v3_expiration_days()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.tpsk.key.public_params()
+    }
+}
+
+impl Debug for UnlockablePersistentSymmetricKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.tpsk.fmt(f)
     }
 }
