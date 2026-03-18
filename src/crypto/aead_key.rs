@@ -56,7 +56,7 @@ impl From<InfoParameter> for [u8; 4] {
 
 impl SecretKey {
     /// Signing operation for persistent symmetric keys that exposes the full algorithmic flexibility
-    pub fn sign_persistent_symmetric<RNG: Rng + CryptoRng>(
+    pub fn compute_and_wrap_persistent_mac<RNG: Rng + CryptoRng>(
         &self,
         mut rng: RNG,
         version: SignatureVersion,
@@ -82,13 +82,13 @@ impl SecretKey {
         let mut salt = [0; 32];
         rng.fill(&mut salt);
 
-        let signature = self.calculate_signature(version, sym_alg, aead, &salt, digest)?;
+        let signature = self.compute_persistent_mac(version, sym_alg, aead, &salt, digest)?;
         let tag = signature.to_vec().into();
 
         Ok(SignatureBytes::PersistentSymmetric { aead, salt, tag })
     }
 
-    pub(crate) fn calculate_signature(
+    pub(crate) fn compute_persistent_mac(
         &self,
         version: SignatureVersion,
         sym_alg: SymmetricKeyAlgorithm,
