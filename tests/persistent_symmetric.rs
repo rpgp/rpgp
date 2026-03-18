@@ -107,7 +107,7 @@ fn psk_openpgp_js_seipdv2() {
 
 #[test]
 fn psk_openpgp_js_signature() {
-    let tpsk = TransferablePersistentSymmetricKey { key: get_psk() };
+    let tpsk: TransferablePersistentSymmetricKey = get_psk().into();
 
     let signed = File::open(Path::new(
         "tests/persistent-symmetric/openpgp-js/detached.sig",

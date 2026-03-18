@@ -12,30 +12,30 @@ use std::{
 };
 
 use aead::rand_core::CryptoRng;
-use bytes::Bytes;
-use cx448::subtle::ConstantTimeEq;
 use rand::Rng;
 
 use crate::{
     armor,
     composed::ArmorOptions,
-    crypto::{
-        aead::AeadAlgorithm, aead_key::InfoParameter, hash::HashAlgorithm,
-        public_key::PublicKeyAlgorithm,
-    },
-    errors::{bail, ensure, ensure_eq},
+    crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     packet,
-    packet::{PacketTrait, SignatureVersion},
+    packet::{PacketTrait, PersistentSymmetricKey},
     ser::Serialize,
     types::{
         EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PkeskBytes,
-        PlainSecretParams, PublicParams, SignatureBytes, Tag, Timestamp, VerifyingKey,
+        PublicParams, SignatureBytes, Timestamp, VerifyingKey,
     },
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TransferablePersistentSymmetricKey {
-    pub key: packet::PersistentSymmetricKey,
+    pub(crate) key: packet::PersistentSymmetricKey,
+}
+
+impl From<PersistentSymmetricKey> for TransferablePersistentSymmetricKey {
+    fn from(key: PersistentSymmetricKey) -> Self {
+        Self { key }
+    }
 }
 
 impl TransferablePersistentSymmetricKey {
@@ -44,6 +44,14 @@ impl TransferablePersistentSymmetricKey {
             tpsk: self.clone(),
             key_pw: Password::Static(key_pw.read()),
         }
+    }
+
+    pub fn key(&self) -> &PersistentSymmetricKey {
+        &self.key
+    }
+
+    pub fn key_mut(&mut self) -> &mut PersistentSymmetricKey {
+        &mut self.key
     }
 
     pub fn to_armored_writer(
@@ -132,62 +140,20 @@ impl UnlockablePersistentSymmetricKey {
 impl EncryptionKey for UnlockablePersistentSymmetricKey {
     fn encrypt<R: CryptoRng + Rng>(
         &self,
-        mut rng: R,
+        rng: R,
         plain: &[u8],
         typ: EskType,
     ) -> crate::errors::Result<PkeskBytes> {
-        // FIXME: refactor this business logic into packet::PersistentSymmetricKey,
-        // just do the unlocking here
-
-        ensure!(
-            matches!(typ, EskType::V6),
-            "only v6 ESK supported right now"
-        );
-
         let aead = AeadAlgorithm::Ocb; // FIXME: parameter
 
-        // 32 octets of salt. The salt is used to derive the key-encryption key and MUST be
-        // securely generated (see section 13.10 of [RFC9580]).
-        let mut salt: [u8; 32] = [0; 32];
-        rng.fill(&mut salt);
-
-        self.tpsk.key.unlock(&self.key_pw, |pub_params, sec_params| {
-            let PublicParams::AEAD(public_params) = pub_params else {
-                bail!("Unsupported public parameters for persistent symmetric key: {pub_params:?}");
-            };
-
-            let PlainSecretParams::AEAD(secret) = &sec_params else {
-                bail!("Unsupported secret parameters for persistent symmetric key: {sec_params:?}");
-            };
-
-            // A symmetric key encryption of the plaintext value described in section 5.1 of [RFC9580],
-            // performed with the key-encryption key and IV computed as described in Section 7.4,
-            // using the symmetric-key cipher of the key and the indicated AEAD mode, with as
-            // additional data the empty string; including the authentication tag.
-
-            let version = self.tpsk.key.details.version().into();
-            let info = InfoParameter {
-                packet_type: Tag::PublicKeyEncryptedSessionKey,
-                version,
-                aead,
-                sym_alg: public_params.sym_alg,
-            };
-
-            let (key, iv) =
-                crate::crypto::aead_key::SecretKey::derive_key_iv(&secret.key, &salt, info);
-
-            let mut buf = plain.into();
-
-            aead.encrypt_in_place(&public_params.sym_alg, &key, &iv, &[], &mut buf)?;
-
-            let encrypted: Bytes = buf.into();
-
-            Ok(PkeskBytes::Aead {
-                aead,
-                salt,
-                encrypted,
-            })
-        })?
+        self.tpsk.key.symmetric_encrypt(
+            rng,
+            &self.key_pw,
+            plain,
+            typ,
+            aead,
+            self.tpsk.key.details.version(),
+        )
     }
 }
 
@@ -198,51 +164,9 @@ impl VerifyingKey for UnlockablePersistentSymmetricKey {
         data: &[u8],
         sig: &SignatureBytes,
     ) -> crate::errors::Result<()> {
-        let Some(digest_len) = hash.digest_size() else {
-            bail!(
-                "UnlockablePersistentSymmetricKey::verify: invalid hash algorithm: {:?}",
-                hash
-            );
-        };
-        ensure_eq!(
-            data.len(),
-            digest_len,
-            "signature data length {} doesn't match digest len {}",
-            data.len(),
-            digest_len,
-        );
-
-        let SignatureBytes::PersistentSymmetric { aead, salt, tag } = sig else {
-            bail!("Unsupported SignatureBytes for persistent symmetric key: {sig:?}");
-        };
-
-        ensure_eq!(
-            tag.len(),
-            aead.tag_size().unwrap_or(0),
-            "unexpected tag length"
-        );
-
-        self.tpsk.key.unlock(&self.key_pw, |pub_params, sec_params| {
-            let PublicParams::AEAD(public) = &pub_params else {
-                bail!("Unsupported public parameters for persistent symmetric key: {pub_params:?}");
-            };
-            let PlainSecretParams::AEAD(secret) = &sec_params else {
-                bail!("Unsupported secret parameters for persistent symmetric key: {sec_params:?}");
-            };
-
-            let version = SignatureVersion::V6; // FIXME: should not be fixed
-
-            // "buf" is the newly calculated authentication tag
-            let buf = secret.compute_persistent_mac(version, public.sym_alg, *aead, salt, data)?;
-
-            // check if the stored and calculated authentication tags match
-            if buf.ct_ne(&**tag).into() {
-                // no: the signature is invalid!
-                bail!("PersistentSymmetricKey signature mismatch");
-            }
-
-            Ok(())
-        })?
+        self.tpsk
+            .key
+            .symmetric_verify(&self.key_pw, hash, data, sig)
     }
 }
 
