@@ -293,8 +293,14 @@ impl SigningKey for PersistentSymmetricKey {
             let rng = thread_rng();
             let aead = AeadAlgorithm::Ocb;
 
-            let sig =
-                secret.sign_persistent_symmetric(rng, version, public.sym_alg, aead, hash, data)?;
+            let sig = secret.compute_and_wrap_persistent_mac(
+                rng,
+                version,
+                public.sym_alg,
+                aead,
+                hash,
+                data,
+            )?;
             signature.replace(sig);
             Ok(())
         })??;
@@ -407,7 +413,7 @@ impl VerifyingKey for UnlockablePersistentSymmetricKey {
             let version = SignatureVersion::V6; // FIXME: should not be fixed
 
             // "buf" is the newly calculated authentication tag
-            let buf = secret.calculate_signature(version, public.sym_alg, *aead, salt, data)?;
+            let buf = secret.compute_persistent_mac(version, public.sym_alg, *aead, salt, data)?;
 
             // check if the stored and calculated authentication tags match
             if buf != **tag {
