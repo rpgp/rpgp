@@ -1485,10 +1485,12 @@ const DATA: &[u8] = b"test";
 
 #[test]
 fn test_short_ed25519() -> TestResult {
+    // Weird key: short (31 byte) ed25519 legacy TSK
+
     let _ = pretty_env_logger::try_init();
 
     let (pkey, _) = SignedSecretKey::from_armor_single(File::open(
-        "./tests/ed25519-key-with-31-byte-private-key-scalar.asc",
+        "./tests/weird/ed25519-key-with-31-byte-private-key-scalar.asc",
     )?)?;
 
     let SecretParams::Plain(secret) = pkey.primary_key.secret_params() else {
@@ -1512,15 +1514,24 @@ fn test_short_ed25519() -> TestResult {
 
     sig.verify(&pkey.public_key(), DATA)?;
 
+    // signature from GnuPG
+    let gpgsig = DetachedSignature::from_file(
+        "./tests/weird/ed25519-key-with-31-byte-private-key-scalar.sig",
+    )?;
+    gpgsig.verify(&pkey.public_key(), DATA)?;
+
     Ok(())
 }
 
 #[test]
 fn test_non_standard_rsa_modulus() -> TestResult {
+    // Weird key: RSA with modulus 257
+
     let _ = pretty_env_logger::try_init();
 
-    let (pkey, _) =
-        SignedSecretKey::from_armor_single(File::open("./tests/rsa-key-with-modulus-e-257.asc")?)?;
+    let (pkey, _) = SignedSecretKey::from_armor_single(File::open(
+        "./tests/weird/rsa-key-with-modulus-e-257.asc",
+    )?)?;
 
     let PublicParams::RSA(public) = pkey.primary_key.public_params() else {
         panic!("expected RSA params");
@@ -1538,6 +1549,10 @@ fn test_non_standard_rsa_modulus() -> TestResult {
     )?;
 
     sig.verify(&pkey.public_key(), DATA)?;
+
+    // signature from GnuPG
+    let gpgsig = DetachedSignature::from_file("./tests/weird/rsa-key-with-modulus-e-257.sig")?;
+    gpgsig.verify(&pkey.public_key(), DATA)?;
 
     Ok(())
 }
