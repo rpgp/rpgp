@@ -8,7 +8,7 @@ use crate::{
     composed::{
         key::KeyDetails,
         signed_key::{SignedPublicKey, SignedSecretKey},
-        ArmorOptions, TransferablePersistentSymmetricKey,
+        ArmorOptions,
     },
     errors::Result,
     packet,
@@ -304,7 +304,7 @@ pub enum PublicOrSecret {
     Public(SignedPublicKey),
     Secret(SignedSecretKey),
     #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
-    PersistentSymmetric(TransferablePersistentSymmetricKey),
+    PersistentSymmetric(crate::composed::TransferablePersistentSymmetricKey),
 }
 
 impl PublicOrSecret {
