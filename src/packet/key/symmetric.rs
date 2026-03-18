@@ -10,6 +10,7 @@ use std::{
 };
 
 use bytes::Bytes;
+use elliptic_curve::subtle::ConstantTimeEq;
 use log::debug;
 use rand::{thread_rng, CryptoRng, Rng};
 
@@ -416,7 +417,7 @@ impl VerifyingKey for UnlockablePersistentSymmetricKey {
             let buf = secret.compute_persistent_mac(version, public.sym_alg, *aead, salt, data)?;
 
             // check if the stored and calculated authentication tags match
-            if buf != **tag {
+            if buf.ct_ne(&**tag).into() {
                 // no: the signature is invalid!
                 bail!("PersistentSymmetricKey signature mismatch");
             }
