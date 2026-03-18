@@ -2,12 +2,9 @@ use std::{io, io::BufReader, iter};
 
 use crate::{
     armor::{self, BlockType, DearmorOptions},
-    composed::{
-        signed_key::{
-            PublicOrSecret, SignedPublicKey, SignedPublicKeyParser, SignedSecretKey,
-            SignedSecretKeyParser,
-        },
-        TransferablePersistentSymmetricKey,
+    composed::signed_key::{
+        PublicOrSecret, SignedPublicKey, SignedPublicKeyParser, SignedSecretKey,
+        SignedSecretKeyParser,
     },
     errors::{bail, format_err, unimplemented_err, Result},
     packet::{Packet, PacketParser, PacketTrait},
@@ -151,17 +148,15 @@ impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for PubPrivIterator<I>
                             )
                         }
                         #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
-                        Tag::PersistentSymmetricKey => {
-                            let Some(Ok(Packet::PersistentSymmetricKey(p))) = packets.next() else {
-                                unimplemented!()
-                            };
-                            (
+                        Tag::PersistentSymmetricKey => match packets.next() {
+                            Some(Ok(Packet::PersistentSymmetricKey(key))) => (
                                 Some(Ok(PublicOrSecret::PersistentSymmetric(
-                                    TransferablePersistentSymmetricKey { key: p },
+                                    crate::composed::TransferablePersistentSymmetricKey { key },
                                 ))),
                                 packets,
-                            )
-                        }
+                            ),
+                            _ => (None, packets),
+                        },
                         _ => (None, packets),
                     };
 
