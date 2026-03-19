@@ -299,7 +299,7 @@ impl PublicKeyEncryptedSessionKey {
     pub fn forwarding_transform<K: KeyDetails>(
         &self,
         forwardee: &K,
-        proxy_parameter: ProxyParameter,
+        proxy_parameter: crate::types::ForwardingProxyParameter,
     ) -> Result<Self> {
         use crate::types::{EcdhKdfType, EcdhPublicParams, Mpi};
 
@@ -404,7 +404,10 @@ impl PublicKeyEncryptedSessionKey {
     ///   eB - the ECDH ephemeral public key decoded from the PKESK
     ///   k - the proxy transformation parameter retrieved from storage
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
-    fn transform_ecdh_ephemeral(eb: [u8; 32], k: ProxyParameter) -> Result<[u8; 32]> {
+    fn transform_ecdh_ephemeral(
+        eb: [u8; 32],
+        k: crate::types::ForwardingProxyParameter,
+    ) -> Result<[u8; 32]> {
         use curve25519_dalek::{traits::IsIdentity, MontgomeryPoint, Scalar};
 
         let ephemeral = MontgomeryPoint(eb);
@@ -547,35 +550,6 @@ fn write_len_v6(values: &PkeskBytes, fingerprint: &Option<Fingerprint>) -> usize
     sum += values.write_len();
 
     sum
-}
-
-#[cfg(feature = "draft-wussler-openpgp-forwarding")]
-#[derive(zeroize::ZeroizeOnDrop)]
-/// A proxy parameter for use in `draft-wussler-openpgp-forwarding` message transformations.
-/// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-computing-the-proxy-paramet>
-///
-/// TODO: where should this type go?
-pub struct ProxyParameter([u8; 32]);
-
-#[cfg(feature = "draft-wussler-openpgp-forwarding")]
-impl From<[u8; 32]> for ProxyParameter {
-    fn from(value: [u8; 32]) -> Self {
-        Self(value)
-    }
-}
-
-#[cfg(feature = "draft-wussler-openpgp-forwarding")]
-impl From<ProxyParameter> for [u8; 32] {
-    fn from(value: ProxyParameter) -> Self {
-        value.0
-    }
-}
-
-#[cfg(feature = "draft-wussler-openpgp-forwarding")]
-impl AsRef<[u8]> for ProxyParameter {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
 }
 
 #[cfg(test)]

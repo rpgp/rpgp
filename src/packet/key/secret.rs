@@ -222,7 +222,7 @@ impl SecretSubkey {
         forwardee: &SecretSubkey,
         password_recipient: &Password,
         password_forwardee: &Password,
-    ) -> Result<crate::packet::ProxyParameter> {
+    ) -> Result<crate::types::ForwardingProxyParameter> {
         self.unlock(
             password_recipient,
             |_, unlocked_recipient| match unlocked_recipient {
@@ -257,7 +257,7 @@ impl SecretSubkey {
     fn compute_proxy_parameter(
         mut db: [u8; 32],
         mut dc: [u8; 32],
-    ) -> Result<crate::packet::ProxyParameter> {
+    ) -> Result<crate::types::ForwardingProxyParameter> {
         use elliptic_curve::subtle::ConstantTimeEq;
         use zeroize::Zeroizing;
 

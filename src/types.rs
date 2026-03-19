@@ -48,3 +48,30 @@ pub enum EskType {
     /// V6 PKESK or SKESK (introduced in RFC 9580)
     V6,
 }
+
+#[cfg(feature = "draft-wussler-openpgp-forwarding")]
+#[derive(zeroize::ZeroizeOnDrop)]
+/// A proxy parameter for use in `draft-wussler-openpgp-forwarding` message transformations.
+/// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-computing-the-proxy-paramet>
+pub struct ForwardingProxyParameter([u8; 32]);
+
+#[cfg(feature = "draft-wussler-openpgp-forwarding")]
+impl From<[u8; 32]> for ForwardingProxyParameter {
+    fn from(value: [u8; 32]) -> Self {
+        Self(value)
+    }
+}
+
+#[cfg(feature = "draft-wussler-openpgp-forwarding")]
+impl From<ForwardingProxyParameter> for [u8; 32] {
+    fn from(value: ForwardingProxyParameter) -> Self {
+        value.0
+    }
+}
+
+#[cfg(feature = "draft-wussler-openpgp-forwarding")]
+impl AsRef<[u8]> for ForwardingProxyParameter {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
