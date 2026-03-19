@@ -223,7 +223,7 @@ fn forward_end_to_end() {
         .primary_user_id("robert".into())
         .subkey(
             SubkeyParamsBuilder::default()
-                .key_type(KeyType::ECDH(ECCCurve::Curve25519))
+                .key_type(KeyType::ECDH(ECCCurve::Curve25519Legacy))
                 .can_encrypt(EncryptionCaps::All)
                 .build()
                 .unwrap(),
@@ -243,14 +243,14 @@ fn forward_end_to_end() {
 
     let mut frederick = frederick_params.generate(&mut rng).unwrap();
 
-    let (mut public_params, secret_params) = KeyType::ECDH(ECCCurve::Curve25519)
+    let (mut public_params, secret_params) = KeyType::ECDH(ECCCurve::Curve25519Legacy)
         .generate(&mut rng)
         .unwrap();
     let mut keyflags = KeyFlags::default();
     keyflags.set_shared(true);
     keyflags.set_draft_decrypt_forwarded(true);
 
-    let PublicParams::ECDH(EcdhPublicParams::Curve25519 {
+    let PublicParams::ECDH(EcdhPublicParams::Curve25519Legacy {
         ref mut ecdh_kdf_type,
         ..
     }) = public_params
@@ -268,7 +268,7 @@ fn forward_end_to_end() {
 
     let pub_key = PubKeyInner::new(
         KeyVersion::V4,
-        KeyType::ECDH(ECCCurve::Curve25519).to_alg(),
+        KeyType::ECDH(ECCCurve::Curve25519Legacy).to_alg(),
         Timestamp::now(),
         None,
         public_params,
@@ -381,7 +381,7 @@ fn forward_locked() {
         .primary_user_id("robert".into())
         .subkey(
             SubkeyParamsBuilder::default()
-                .key_type(KeyType::ECDH(ECCCurve::Curve25519))
+                .key_type(KeyType::ECDH(ECCCurve::Curve25519Legacy))
                 .can_encrypt(EncryptionCaps::All)
                 .passphrase(Some("lock-robert".to_string()))
                 .build()
@@ -393,14 +393,14 @@ fn forward_locked() {
     let robert = robert_params.generate(&mut rng).unwrap();
 
     // Generate forwardee subkey
-    let (mut public_params, secret_params) = KeyType::ECDH(ECCCurve::Curve25519)
+    let (mut public_params, secret_params) = KeyType::ECDH(ECCCurve::Curve25519Legacy)
         .generate(&mut rng)
         .unwrap();
     let mut keyflags = KeyFlags::default();
     keyflags.set_shared(true);
     keyflags.set_draft_decrypt_forwarded(true);
 
-    let PublicParams::ECDH(EcdhPublicParams::Curve25519 {
+    let PublicParams::ECDH(EcdhPublicParams::Curve25519Legacy {
         ref mut ecdh_kdf_type,
         ..
     }) = public_params
@@ -418,7 +418,7 @@ fn forward_locked() {
 
     let forwardee_inner = PubKeyInner::new(
         KeyVersion::V4,
-        KeyType::ECDH(ECCCurve::Curve25519).to_alg(),
+        KeyType::ECDH(ECCCurve::Curve25519Legacy).to_alg(),
         Timestamp::now(),
         None,
         public_params,

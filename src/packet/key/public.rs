@@ -462,7 +462,7 @@ impl PubKeyInner {
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     fn is_forwardee_key(&self) -> bool {
         match self.public_params {
-            PublicParams::ECDH(EcdhPublicParams::Curve25519 { ecdh_kdf_type, .. }) => {
+            PublicParams::ECDH(EcdhPublicParams::Curve25519Legacy { ecdh_kdf_type, .. }) => {
                 matches!(ecdh_kdf_type, crate::types::EcdhKdfType::Replaced { .. })
             }
             _ => false,

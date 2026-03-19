@@ -321,7 +321,7 @@ impl PublicKeyEncryptedSessionKey {
         );
 
         // Check that the forwardee key uses ECDH/curve 25519
-        let PublicParams::ECDH(EcdhPublicParams::Curve25519 { ecdh_kdf_type, .. }) =
+        let PublicParams::ECDH(EcdhPublicParams::Curve25519Legacy { ecdh_kdf_type, .. }) =
             forwardee.public_params()
         else {
             bail!("Only forwardees using ECDH/Curve25519 are supported right now");

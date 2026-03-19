@@ -226,11 +226,11 @@ impl SecretSubkey {
         self.unlock(
             password_recipient,
             |_, unlocked_recipient| match unlocked_recipient {
-                PlainSecretParams::ECDH(crate::crypto::ecdh::SecretKey::Curve25519(r)) => {
+                PlainSecretParams::ECDH(crate::crypto::ecdh::SecretKey::Curve25519Legacy(r)) => {
                     forwardee.unlock(password_forwardee, |_, unlocked_forwardee| {
                         match unlocked_forwardee {
                             PlainSecretParams::ECDH(
-                                crate::crypto::ecdh::SecretKey::Curve25519(f),
+                                crate::crypto::ecdh::SecretKey::Curve25519Legacy(f),
                             ) => Self::compute_proxy_parameter(r.to_bytes_rev(), f.to_bytes_rev()),
                             _ => bail!("Only ECDH/Curve 25519 forwardee keys are supported"),
                         }
