@@ -491,6 +491,9 @@ pub struct DecryptionOptions {
     legacy: bool,
     gnupg_aead: bool,
 
+    /// Allow processing of forwarded messages.
+    ///
+    /// Also see [`DecryptionOptions::enable_draft_forwarding`].
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     draft_forwarding: bool,
 }
