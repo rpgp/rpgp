@@ -245,14 +245,15 @@ impl SecretSubkey {
     ///
     /// See <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-computing-the-proxy-paramet>
     ///
-    ///   Implements ComputeProxyParameter( dB, dC );
-    ///    Input:
-    ///     dB - the recipient's private key integer
-    ///     dC - the forwardee's private key integer
-    ///     n - the size of the field of Curve25519
+    /// Implements ComputeProxyParameter( dB, dC );
     ///
+    /// Input:
+    /// dB - the recipient's private key integer
+    /// dC - the forwardee's private key integer
+    /// n - the size of the field of Curve25519
+    ///
+    /// Output:
     /// k = dB/dC mod n
-    /// return k
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     fn compute_proxy_parameter(
         mut db: [u8; 32],

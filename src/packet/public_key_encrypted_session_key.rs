@@ -400,9 +400,10 @@ impl PublicKeyEncryptedSessionKey {
     /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-forwarding-messages>
     ///
     /// Implements TransformMessage( eB, k );
-    ///   Input:
-    ///   eB - the ECDH ephemeral public key decoded from the PKESK
-    ///   k - the proxy transformation parameter retrieved from storage
+    ///
+    /// Input:
+    /// eB - the ECDH ephemeral public key decoded from the PKESK
+    /// k - the proxy transformation parameter retrieved from storage
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     fn transform_ecdh_ephemeral(
         eb: [u8; 32],
