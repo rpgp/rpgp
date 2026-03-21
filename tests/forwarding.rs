@@ -100,8 +100,8 @@ fn forward_a_3_calculate_proxy_param() {
         .expect("generate_proxy_parameter");
 
     assert_eq!(
+        hex::decode("04b657045fc9c0759c5fd11d8ca75a2b1aa101c9c896490bcec100f941e97e0e").unwrap(),
         k.as_ref(),
-        hex::decode("04b657045fc9c0759c5fd11d8ca75a2b1aa101c9c896490bcec100f941e97e0e").unwrap()
     );
 }
 

@@ -844,9 +844,9 @@ mod tests {
         .expect("compute_proxy_parameter");
 
         assert_eq!(
-            k.as_ref(),
             hex::decode("e89786987c3a3ec761a679bc372cd11a425eda72bd5265d78ad0f5f32ee64f02")
-                .unwrap()
+                .unwrap(),
+            k.as_ref(),
         );
     }
 }

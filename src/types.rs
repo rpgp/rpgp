@@ -63,15 +63,15 @@ impl From<[u8; 32]> for ForwardingProxyParameter {
 }
 
 #[cfg(feature = "draft-wussler-openpgp-forwarding")]
-impl From<ForwardingProxyParameter> for [u8; 32] {
-    fn from(value: ForwardingProxyParameter) -> Self {
-        value.0
+impl ForwardingProxyParameter {
+    pub(crate) fn into_array(self) -> [u8; 32] {
+        self.0
     }
 }
 
 #[cfg(feature = "draft-wussler-openpgp-forwarding")]
-impl AsRef<[u8]> for ForwardingProxyParameter {
-    fn as_ref(&self) -> &[u8] {
+impl AsRef<[u8; 32]> for ForwardingProxyParameter {
+    fn as_ref(&self) -> &[u8; 32] {
         &self.0
     }
 }

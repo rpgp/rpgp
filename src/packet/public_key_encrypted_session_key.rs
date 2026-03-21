@@ -418,7 +418,7 @@ impl PublicKeyEncryptedSessionKey {
             bail!("Ephemeral public key belongs to a small subgroup");
         }
 
-        let k = Zeroizing::new(Scalar::from_bytes_mod_order(k.into()));
+        let k = Zeroizing::new(Scalar::from_bytes_mod_order(k.into_array()));
 
         // eC = k * eB
         let ec = (*k) * ephemeral;
