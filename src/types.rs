@@ -49,10 +49,10 @@ pub enum EskType {
     V6,
 }
 
-#[cfg(feature = "draft-wussler-openpgp-forwarding")]
-#[derive(zeroize::ZeroizeOnDrop)]
 /// A proxy parameter for use in `draft-wussler-openpgp-forwarding` message transformations.
 /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-computing-the-proxy-paramet>
+#[cfg(feature = "draft-wussler-openpgp-forwarding")]
+#[derive(zeroize::ZeroizeOnDrop)]
 pub struct ForwardingProxyParameter([u8; 32]);
 
 #[cfg(feature = "draft-wussler-openpgp-forwarding")]
