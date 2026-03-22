@@ -468,7 +468,7 @@ where
                             {
                                 return Err(io::Error::new(
                                     io::ErrorKind::InvalidInput,
-                                    "invalid MDC ",
+                                    "invalid MDC",
                                 ));
                             }
                         }
