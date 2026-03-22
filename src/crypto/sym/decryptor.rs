@@ -122,6 +122,7 @@ where
     pub fn new(
         alg: SymmetricKeyAlgorithm,
         protected: bool,
+        allow_unauthenticated_streaming: bool,
         key: &[u8],
         ciphertext: R,
     ) -> Result<Self> {
@@ -130,38 +131,89 @@ where
                 bail!("'Plaintext' is not a legal cipher for encrypted data")
             }
             SymmetricKeyAlgorithm::IDEA => Ok(StreamDecryptor::Idea(StreamDecryptorInner::new(
-                protected, ciphertext, key,
+                protected,
+                allow_unauthenticated_streaming,
+                ciphertext,
+                key,
             )?)),
-            SymmetricKeyAlgorithm::TripleDES => Ok(StreamDecryptor::TripleDes(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
-            )),
+            SymmetricKeyAlgorithm::TripleDES => {
+                Ok(StreamDecryptor::TripleDes(StreamDecryptorInner::new(
+                    protected,
+                    allow_unauthenticated_streaming,
+                    ciphertext,
+                    key,
+                )?))
+            }
             SymmetricKeyAlgorithm::CAST5 => Ok(StreamDecryptor::Cast5(StreamDecryptorInner::new(
-                protected, ciphertext, key,
+                protected,
+                allow_unauthenticated_streaming,
+                ciphertext,
+                key,
             )?)),
-            SymmetricKeyAlgorithm::Blowfish => Ok(StreamDecryptor::Blowfish(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
-            )),
-            SymmetricKeyAlgorithm::AES128 => Ok(StreamDecryptor::Aes128(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
-            )),
-            SymmetricKeyAlgorithm::AES192 => Ok(StreamDecryptor::Aes192(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
-            )),
-            SymmetricKeyAlgorithm::AES256 => Ok(StreamDecryptor::Aes256(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
-            )),
-            SymmetricKeyAlgorithm::Twofish => Ok(StreamDecryptor::Twofish(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
-            )),
-            SymmetricKeyAlgorithm::Camellia128 => Ok(StreamDecryptor::Camellia128(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
-            )),
-            SymmetricKeyAlgorithm::Camellia192 => Ok(StreamDecryptor::Camellia192(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
-            )),
-            SymmetricKeyAlgorithm::Camellia256 => Ok(StreamDecryptor::Camellia256(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
-            )),
+            SymmetricKeyAlgorithm::Blowfish => {
+                Ok(StreamDecryptor::Blowfish(StreamDecryptorInner::new(
+                    protected,
+                    allow_unauthenticated_streaming,
+                    ciphertext,
+                    key,
+                )?))
+            }
+            SymmetricKeyAlgorithm::AES128 => {
+                Ok(StreamDecryptor::Aes128(StreamDecryptorInner::new(
+                    protected,
+                    allow_unauthenticated_streaming,
+                    ciphertext,
+                    key,
+                )?))
+            }
+            SymmetricKeyAlgorithm::AES192 => {
+                Ok(StreamDecryptor::Aes192(StreamDecryptorInner::new(
+                    protected,
+                    allow_unauthenticated_streaming,
+                    ciphertext,
+                    key,
+                )?))
+            }
+            SymmetricKeyAlgorithm::AES256 => {
+                Ok(StreamDecryptor::Aes256(StreamDecryptorInner::new(
+                    protected,
+                    allow_unauthenticated_streaming,
+                    ciphertext,
+                    key,
+                )?))
+            }
+            SymmetricKeyAlgorithm::Twofish => {
+                Ok(StreamDecryptor::Twofish(StreamDecryptorInner::new(
+                    protected,
+                    allow_unauthenticated_streaming,
+                    ciphertext,
+                    key,
+                )?))
+            }
+            SymmetricKeyAlgorithm::Camellia128 => {
+                Ok(StreamDecryptor::Camellia128(StreamDecryptorInner::new(
+                    protected,
+                    allow_unauthenticated_streaming,
+                    ciphertext,
+                    key,
+                )?))
+            }
+            SymmetricKeyAlgorithm::Camellia192 => {
+                Ok(StreamDecryptor::Camellia192(StreamDecryptorInner::new(
+                    protected,
+                    allow_unauthenticated_streaming,
+                    ciphertext,
+                    key,
+                )?))
+            }
+            SymmetricKeyAlgorithm::Camellia256 => {
+                Ok(StreamDecryptor::Camellia256(StreamDecryptorInner::new(
+                    protected,
+                    allow_unauthenticated_streaming,
+                    ciphertext,
+                    key,
+                )?))
+            }
             SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
                 bail!("SymmetricKeyAlgorithm {} is unsupported", u8::from(alg))
             }
@@ -222,6 +274,11 @@ pub enum MaybeProtected {
     Protected {
         // We use regular sha1 for MDC, not sha1_checked. Collisions are not currently a concern with MDC.
         hasher: Sha1,
+
+        // By default, seipdv1 encrypted data is read in one go, so that plaintext
+        // is only released after the MDC has been checked.
+        // This flag enables streaming.
+        allow_unauthenticated_streaming: bool,
     },
     Unprotected {
         key: Zeroizing<Vec<u8>>,
@@ -271,7 +328,12 @@ where
     BufDecryptor<M>: KeyIvInit,
     R: BufRead,
 {
-    fn new(protected: bool, source: R, key: &[u8]) -> Result<Self> {
+    fn new(
+        protected: bool,
+        allow_unauthenticated_streaming: bool,
+        source: R,
+        key: &[u8],
+    ) -> Result<Self> {
         debug!("protected decrypt stream");
 
         let bs = <M as BlockSizeUser>::block_size();
@@ -285,7 +347,10 @@ where
         let protected = if protected {
             // checksum over unencrypted data
             let hasher = Sha1::default();
-            MaybeProtected::Protected { hasher }
+            MaybeProtected::Protected {
+                hasher,
+                allow_unauthenticated_streaming,
+            }
         } else {
             MaybeProtected::Unprotected {
                 key: key.to_vec().into(),
@@ -328,10 +393,6 @@ where
     }
 
     fn fill_inner(&mut self) -> io::Result<()> {
-        /// By default, seipdv1 encrypted data is read in one go, so that plaintext
-        /// is only released after the MDC has been checked.
-        const ALLOW_SEIPDV1_UNAUTHENTICATED_STREAM: bool = false;
-
         loop {
             let (needs_replacing, should_return) = match self {
                 Self::Prefix { .. } => (true, false),
@@ -342,23 +403,30 @@ where
                     source,
                     protected,
                 } => {
+                    let allow_seipdv1_unauthenticated_streaming = match protected {
+                        MaybeProtected::Protected {
+                            ref allow_unauthenticated_streaming,
+                            ..
+                        } => *allow_unauthenticated_streaming,
+                        _ => false,
+                    };
+
                     // need to keep at least a full mdc len in the buffer, to make sure we process
                     // that at the end, and to return it
-
                     if (protected.is_protected()
-                        && ALLOW_SEIPDV1_UNAUTHENTICATED_STREAM
+                        && allow_seipdv1_unauthenticated_streaming
                         && buffer.remaining() > MDC_LEN)
                         || (!protected.is_protected() && buffer.has_remaining())
                     {
                         (
                             false,
-                            !protected.is_protected() || ALLOW_SEIPDV1_UNAUTHENTICATED_STREAM,
+                            !protected.is_protected() || allow_seipdv1_unauthenticated_streaming,
                         )
                     } else {
                         // fill buffer
                         let current_len = buffer.remaining();
 
-                        let is_last_read = if ALLOW_SEIPDV1_UNAUTHENTICATED_STREAM {
+                        let is_last_read = if allow_seipdv1_unauthenticated_streaming {
                             // read until BUFFER_SIZE is reached
                             let buf_size = BUFFER_SIZE;
                             let to_read = buf_size - current_len;
@@ -379,7 +447,10 @@ where
 
                         match protected {
                             MaybeProtected::Protected { .. } if is_last_read => (true, true),
-                            MaybeProtected::Protected { ref mut hasher } => {
+                            MaybeProtected::Protected {
+                                ref mut hasher,
+                                ref allow_unauthenticated_streaming,
+                            } => {
                                 let start = *data_available;
                                 debug_assert!(buffer.len() >= MDC_LEN);
                                 let end = buffer.len() - MDC_LEN;
@@ -388,7 +459,7 @@ where
                                     *data_available += end - start;
                                 }
 
-                                (false, ALLOW_SEIPDV1_UNAUTHENTICATED_STREAM)
+                                (false, *allow_unauthenticated_streaming)
                             }
                             MaybeProtected::Unprotected { .. } => {
                                 if is_last_read {
@@ -440,7 +511,7 @@ where
                                             io::Error::new(io::ErrorKind::InvalidInput, e)
                                         })?;
                             }
-                            MaybeProtected::Protected { ref mut hasher } => {
+                            MaybeProtected::Protected { ref mut hasher, .. } => {
                                 encryptor.decrypt(&mut prefix);
                                 hasher.update(&prefix);
                             }
@@ -467,7 +538,11 @@ where
                         protected,
                         ..
                     } => {
-                        if let MaybeProtected::Protected { mut hasher } = protected {
+                        if let MaybeProtected::Protected {
+                            mut hasher,
+                            allow_unauthenticated_streaming,
+                        } = protected
+                        {
                             // last read
                             if buffer.remaining() < MDC_LEN {
                                 return Err(io::Error::new(
@@ -480,7 +555,7 @@ where
                             // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
                             let mdc = buffer.split_off(buffer.len() - MDC_LEN);
 
-                            if ALLOW_SEIPDV1_UNAUTHENTICATED_STREAM {
+                            if allow_unauthenticated_streaming {
                                 hasher.update(&buffer); // FIXME: why is this needed?
                             }
                             hasher.update(&mdc[..2]);

@@ -56,7 +56,11 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
         })
     }
 
-    pub fn decrypt(&mut self, session_key: &PlainSessionKey) -> Result<()> {
+    pub fn decrypt(
+        &mut self,
+        session_key: &PlainSessionKey,
+        allow_unauthenticated_streaming: bool, // only applies for seipdv1
+    ) -> Result<()> {
         ensure!(
             matches!(self.source, Source::Init(_)),
             "cannot decrypt after starting to read"
@@ -81,7 +85,12 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                         let Source::Init(source) = source else {
                             unreachable!("checked");
                         };
-                        match StreamDecryptor::v1(*sym_alg, session_key.as_ref(), source) {
+                        match StreamDecryptor::v1(
+                            *sym_alg,
+                            allow_unauthenticated_streaming,
+                            session_key.as_ref(),
+                            source,
+                        ) {
                             Ok(dec) => (Ok(()), Source::BodyDecryptor(dec)),
                             Err(err) => (Err(err), Source::Error),
                         }
