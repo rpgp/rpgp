@@ -491,6 +491,8 @@ pub struct DecryptionOptions {
     legacy: bool,
     gnupg_aead: bool,
 
+    seipdv1_unauthenticated_streaming: bool,
+
     /// Allow processing of forwarded messages.
     ///
     /// Also see [`DecryptionOptions::enable_draft_forwarding`].
@@ -525,6 +527,17 @@ impl DecryptionOptions {
     /// This format is not part of the IETF-specified OpenPGP standard!
     pub fn enable_gnupg_aead(mut self) -> Self {
         self.gnupg_aead = true;
+        self
+    }
+
+    /// When decrypting a SEIPDv1 encrypted data packet, enable streaming.
+    /// This means that the caller may read unauthenticated plaintext from the decryptor
+    /// (which will only be notified at a later point, once the streaming reader has processed
+    /// the entire data packet and arrived at the message digest).
+    ///
+    /// This mode is not recommended, it can bring risks for the user.
+    pub fn enable_seipdv1_unauthenticated_streaming(mut self) -> Self {
+        self.seipdv1_unauthenticated_streaming = true;
         self
     }
 
@@ -640,7 +653,7 @@ impl<'a> Edata<'a> {
 
         match self {
             Self::SymEncryptedProtectedData { reader } => {
-                reader.decrypt(key)?;
+                reader.decrypt(key, options.seipdv1_unauthenticated_streaming)?;
             }
             Self::SymEncryptedData { reader } => {
                 if options.legacy {
@@ -653,7 +666,7 @@ impl<'a> Edata<'a> {
             }
             Self::GnupgAeadData { reader } => {
                 if options.gnupg_aead {
-                    reader.decrypt(key)?;
+                    reader.decrypt(key, false)?;
                 } else {
                     bail!(
                         "GnuPG's AEAD packet (type 20) is non-standard, 'DecryptionOptions' allows opting into it"

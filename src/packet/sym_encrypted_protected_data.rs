@@ -223,11 +223,17 @@ impl SymEncryptedProtectedData {
         &self,
         session_key: &[u8],
         sym_alg: Option<SymmetricKeyAlgorithm>,
+        allow_unauthenticated_streaming: bool,
     ) -> Result<Vec<u8>> {
         match &self.config {
             Config::V1 => {
                 let sym_alg = sym_alg.expect("v1");
-                let mut decryptor = StreamDecryptor::v1(sym_alg, session_key, &self.data[..])?;
+                let mut decryptor = StreamDecryptor::v1(
+                    sym_alg,
+                    allow_unauthenticated_streaming,
+                    session_key,
+                    &self.data[..],
+                )?;
                 let mut out = Vec::new();
                 decryptor.read_to_end(&mut out)?;
                 Ok(out)
@@ -352,8 +358,14 @@ impl<R: BufRead> Read for StreamDecryptor<R> {
 }
 
 impl<R: BufRead> StreamDecryptor<R> {
-    pub fn v1(sym_alg: SymmetricKeyAlgorithm, key: &[u8], source: R) -> Result<Self> {
-        let decryptor = sym_alg.stream_decryptor_protected(key, source)?;
+    pub fn v1(
+        sym_alg: SymmetricKeyAlgorithm,
+        allow_unauthenticated_streaming: bool,
+        key: &[u8],
+        source: R,
+    ) -> Result<Self> {
+        let decryptor =
+            sym_alg.stream_decryptor_protected(allow_unauthenticated_streaming, key, source)?;
         Ok(Self::V1(decryptor))
     }
 
@@ -453,7 +465,9 @@ mod tests {
                 )
                 .expect("encrypt");
 
-                let dec = enc.decrypt(&session_key, Some(SYM_ALG)).expect("decrypt");
+                let dec = enc
+                    .decrypt(&session_key, Some(SYM_ALG), false)
+                    .expect("decrypt");
                 assert_eq!(message, dec);
 
                 // write test
