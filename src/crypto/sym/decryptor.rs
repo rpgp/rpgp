@@ -328,6 +328,10 @@ where
     }
 
     fn fill_inner(&mut self) -> io::Result<()> {
+        /// By default, seipdv1 encrypted data is read in one go, so that plaintext
+        /// is only released after the MDC has been checked.
+        const ALLOW_SEIPDV1_UNAUTHENTICATED_STREAM: bool = false;
+
         loop {
             let (needs_replacing, should_return) = match self {
                 Self::Prefix { .. } => (true, false),
@@ -341,17 +345,36 @@ where
                     // need to keep at least a full mdc len in the buffer, to make sure we process
                     // that at the end, and to return it
 
-                    if protected.is_protected() && buffer.remaining() > MDC_LEN
-                        || !protected.is_protected() && buffer.has_remaining()
+                    if (protected.is_protected()
+                        && ALLOW_SEIPDV1_UNAUTHENTICATED_STREAM
+                        && buffer.remaining() > MDC_LEN)
+                        || (!protected.is_protected() && buffer.has_remaining())
                     {
-                        (false, true)
+                        (
+                            false,
+                            !protected.is_protected() || ALLOW_SEIPDV1_UNAUTHENTICATED_STREAM,
+                        )
                     } else {
                         // fill buffer
                         let current_len = buffer.remaining();
-                        let buf_size = BUFFER_SIZE;
-                        let to_read = buf_size - current_len;
-                        let read = fill_buffer_bytes(source, buffer, buf_size)?;
-                        let is_last_read = read < to_read;
+
+                        let is_last_read = if ALLOW_SEIPDV1_UNAUTHENTICATED_STREAM {
+                            // read until BUFFER_SIZE is reached
+                            let buf_size = BUFFER_SIZE;
+                            let to_read = buf_size - current_len;
+                            let read = fill_buffer_bytes(source, buffer, buf_size)?;
+
+                            read < to_read
+                        } else {
+                            // read as much as possible
+
+                            // TODO: set a fixed limit and fail if the message is longer
+                            let read = fill_buffer_bytes(source, buffer, usize::MAX)?;
+
+                            // we reached the end of the stream if we received no new data
+                            read == 0
+                        };
+
                         decryptor.decrypt(&mut buffer[current_len..]);
 
                         match protected {
@@ -365,7 +388,7 @@ where
                                     *data_available += end - start;
                                 }
 
-                                (false, true)
+                                (false, ALLOW_SEIPDV1_UNAUTHENTICATED_STREAM)
                             }
                             MaybeProtected::Unprotected { .. } => {
                                 if is_last_read {
@@ -457,7 +480,9 @@ where
                             // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
                             let mdc = buffer.split_off(buffer.len() - MDC_LEN);
 
-                            hasher.update(&buffer);
+                            if ALLOW_SEIPDV1_UNAUTHENTICATED_STREAM {
+                                hasher.update(&buffer); // FIXME: why is this needed?
+                            }
                             hasher.update(&mdc[..2]);
 
                             let sha1: [u8; 20] = hasher.finalize().into();
@@ -474,6 +499,7 @@ where
                         }
 
                         *self = Self::Done { buffer, source };
+                        return Ok(());
                     }
                     Self::Done { .. } => unreachable!("not changed"),
                     Self::Error => panic!("error state"),
