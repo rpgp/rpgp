@@ -1,3 +1,8 @@
+//! Decryption for SEIPDv1 encrypted data packets and SED legacy encrypted data packets.
+//!
+//! See <https://www.rfc-editor.org/rfc/rfc9580#name-version-1-symmetrically-enc>
+//! and <https://www.rfc-editor.org/rfc/rfc9580#name-symmetrically-encrypted-dat>
+
 use std::io::{self, BufRead, Read};
 
 use aes::{Aes128, Aes192, Aes256};
@@ -22,6 +27,10 @@ use crate::{
 
 const MDC_LEN: usize = 22;
 const BUFFER_SIZE: usize = 1024 * 8;
+
+/// The maximum message length that we're willing to decrypt in non-streaming SEIPDv1 mode
+// TODO: maybe make this configurable?
+const MAX_UNSTREAMED_MSG_SIZE: usize = 1024 * 1024 * 1024;
 
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
@@ -269,6 +278,19 @@ where
     }
 }
 
+/// The three modes of operation of StreamDecryptorInner:
+/// - SEIPDv1 packets are read in "check first" mode by default (`Seipdv1CheckFirst`).
+///   This mode only releases plaintext after the MDC check.
+/// - SEIPDv1 packets can be read in streaming mode (`Seipdv1Streaming`).
+///   This may release unauthenticated plaintext before the MDC check.
+/// - SED packets are read in streaming mode (`Sed`).
+#[derive(PartialEq)]
+enum DecryptionMode {
+    Seipdv1CheckFirst,
+    Seipdv1Streaming,
+    Sed,
+}
+
 #[derive(derive_more::Debug)]
 pub enum MaybeProtected {
     Protected {
@@ -286,11 +308,37 @@ pub enum MaybeProtected {
 }
 
 impl MaybeProtected {
-    fn is_protected(&self) -> bool {
-        matches!(self, Self::Protected { .. })
+    fn mode(&self) -> DecryptionMode {
+        match self {
+            Self::Protected {
+                allow_unauthenticated_streaming: false,
+                ..
+            } => DecryptionMode::Seipdv1CheckFirst,
+            Self::Protected {
+                allow_unauthenticated_streaming: true,
+                ..
+            } => DecryptionMode::Seipdv1Streaming,
+            Self::Unprotected { .. } => DecryptionMode::Sed,
+        }
     }
 }
 
+/// State machine that reads from the encrypted input stream and performs decryption.
+///
+/// The state models which part of the input stream is currently being read:
+///
+/// - In the `Prefix` state, the block-size sized random octets plus two repeated octets are read
+///   for SEIPDv1 (or the "random prefix" for SED).
+/// - In the `Data` state, the encrypted plaintext is read from the input stream.
+/// - In the `Done` state, the input stream has been fully processed.
+///   For SEIPDv1 packets, in this state, the MDC has also been read and checked.
+///
+/// The decrypted plaintext can be obtained by a caller when reading from this object via
+/// `std::io::Read` (this happens in the `Done` state for non-streaming SEIPDv1 mode.
+/// In streaming modes, reading happens in both the `Data` and `Done` states).
+///
+/// In both the `Data` and `Done` state, `buffer` can contain decrypted plaintext that has
+/// not yet been consumed by the reader.
 #[derive(derive_more::Debug)]
 pub enum StreamDecryptorInner<M, R>
 where
@@ -403,76 +451,80 @@ where
                     source,
                     protected,
                 } => {
-                    let allow_seipdv1_unauthenticated_streaming = match protected {
-                        MaybeProtected::Protected {
-                            ref allow_unauthenticated_streaming,
-                            ..
-                        } => *allow_unauthenticated_streaming,
-                        _ => false,
-                    };
+                    let mode = protected.mode();
 
-                    // need to keep at least a full mdc len in the buffer, to make sure we process
-                    // that at the end, and to return it
-                    if (protected.is_protected()
-                        && allow_seipdv1_unauthenticated_streaming
-                        && buffer.remaining() > MDC_LEN)
-                        || (!protected.is_protected() && buffer.has_remaining())
+                    if (mode == DecryptionMode::Seipdv1Streaming && buffer.remaining() > MDC_LEN)
+                        || (mode == DecryptionMode::Sed && buffer.has_remaining())
                     {
-                        (
-                            false,
-                            !protected.is_protected() || allow_seipdv1_unauthenticated_streaming,
-                        )
+                        // We're in a streaming mode, and still have some data that we can return
+                        // in the next Read call, so we don't need to fill the buffer further and
+                        // can return now.
+
+                        // (Note: For `ProtectedStreaming`, we need to keep at least a full MDC_LEN
+                        // in the buffer, to process at the end in the "Done" state)
+
+                        (false, true)
                     } else {
                         // fill buffer
                         let current_len = buffer.remaining();
 
-                        let is_last_read = if allow_seipdv1_unauthenticated_streaming {
-                            // read until BUFFER_SIZE is reached
-                            let buf_size = BUFFER_SIZE;
-                            let to_read = buf_size - current_len;
-                            let read = fill_buffer_bytes(source, buffer, buf_size)?;
+                        let is_last_read = match mode {
+                            DecryptionMode::Seipdv1Streaming | DecryptionMode::Sed => {
+                                // Streaming operation, read until `buffer` reaches BUFFER_SIZE
 
-                            read < to_read
-                        } else {
-                            // read as much as possible
+                                let buf_size = BUFFER_SIZE;
+                                let to_read = buf_size - current_len;
+                                let read = fill_buffer_bytes(source, buffer, buf_size)?;
 
-                            // TODO: set a fixed limit and fail if the message is longer
-                            let read = fill_buffer_bytes(source, buffer, usize::MAX)?;
+                                read < to_read
+                            }
+                            DecryptionMode::Seipdv1CheckFirst => {
+                                // Try to read the entire input stream in one go
+                                // (we ask for MAX+1 bytes to see if the input stream is too long)
+                                let read =
+                                    fill_buffer_bytes(source, buffer, MAX_UNSTREAMED_MSG_SIZE + 1)?;
 
-                            // we reached the end of the stream if we received no new data
-                            read == 0
+                                // If the message is longer than `MAX_UNSTREAMED_MSG_SIZE`,
+                                // error out (to protect against OOM crashes)
+                                if read > MAX_UNSTREAMED_MSG_SIZE {
+                                    return Err(io::Error::other(
+                                        "Input stream too long for ProtectedCheckFirst mode",
+                                    ));
+                                }
+
+                                // We have read the entire input stream
+                                true
+                            }
                         };
 
                         decryptor.decrypt(&mut buffer[current_len..]);
 
                         match protected {
-                            MaybeProtected::Protected { .. } if is_last_read => (true, true),
-                            MaybeProtected::Protected {
-                                ref mut hasher,
-                                ref allow_unauthenticated_streaming,
-                            } => {
+                            MaybeProtected::Protected { ref mut hasher, .. } => {
                                 let start = *data_available;
                                 debug_assert!(buffer.len() >= MDC_LEN);
                                 let end = buffer.len() - MDC_LEN;
                                 if start < end {
                                     hasher.update(&buffer[start..end]);
-                                    *data_available += end - start;
+
+                                    if !is_last_read {
+                                        *data_available += end - start;
+                                    }
                                 }
 
-                                (false, *allow_unauthenticated_streaming)
+                                (is_last_read, true)
                             }
                             MaybeProtected::Unprotected { .. } => {
-                                if is_last_read {
-                                    (true, true)
-                                } else {
+                                if !is_last_read {
                                     let start = *data_available;
                                     let end = buffer.len();
 
                                     if start < end {
                                         *data_available += end - start;
                                     }
-                                    (false, true)
                                 }
+
+                                (is_last_read, true)
                             }
                         }
                     }
@@ -484,7 +536,7 @@ where
             if needs_replacing {
                 match std::mem::replace(self, Self::Error) {
                     Self::Prefix {
-                        decryptor: mut encryptor,
+                        mut decryptor,
                         mut prefix,
                         mut source,
                         mut protected,
@@ -504,15 +556,15 @@ where
                             MaybeProtected::Unprotected { ref key } => {
                                 // legacy resyncing
                                 let encrypted_prefix = prefix[2..].to_vec();
-                                encryptor.decrypt(&mut prefix);
-                                encryptor =
+                                decryptor.decrypt(&mut prefix);
+                                decryptor =
                                     BufDecryptor::<M>::new_from_slices(key, &encrypted_prefix)
                                         .map_err(|e| {
                                             io::Error::new(io::ErrorKind::InvalidInput, e)
                                         })?;
                             }
                             MaybeProtected::Protected { ref mut hasher, .. } => {
-                                encryptor.decrypt(&mut prefix);
+                                decryptor.decrypt(&mut prefix);
                                 hasher.update(&prefix);
                             }
                         }
@@ -525,7 +577,7 @@ where
 
                         *self = Self::Data {
                             data_available: 0,
-                            decryptor: encryptor,
+                            decryptor,
                             buffer: BytesMut::with_capacity(BUFFER_SIZE),
                             source,
                             protected,
@@ -538,11 +590,7 @@ where
                         protected,
                         ..
                     } => {
-                        if let MaybeProtected::Protected {
-                            mut hasher,
-                            allow_unauthenticated_streaming,
-                        } = protected
-                        {
+                        if let MaybeProtected::Protected { mut hasher, .. } = protected {
                             // last read
                             if buffer.remaining() < MDC_LEN {
                                 return Err(io::Error::new(
@@ -555,9 +603,6 @@ where
                             // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
                             let mdc = buffer.split_off(buffer.len() - MDC_LEN);
 
-                            if allow_unauthenticated_streaming {
-                                hasher.update(&buffer); // FIXME: why is this needed?
-                            }
                             hasher.update(&mdc[..2]);
 
                             let sha1: [u8; 20] = hasher.finalize().into();
