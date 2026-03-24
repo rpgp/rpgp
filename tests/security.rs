@@ -362,8 +362,7 @@ fn oom_signature_1() {
 
 #[test]
 fn pr662_crash1() {
-    // https://github.com/rpgp/rpgp/pull/662
-    // tested against commit 48f92d28a32a91a536b367d8539a5c96a72ad7a2
+    // Crash for an intermediate state of https://github.com/rpgp/rpgp/pull/662
     let bad_input = [
         193, 192, 204, 3, 124, 47, 170, 77, 249, 60, 55, 178, 1, 12, 0, 208, 100, 161, 141, 75,
         159, 113, 34, 116, 60, 162, 234, 101, 121, 180, 166, 145, 180, 141, 129, 118, 249, 252,
@@ -395,7 +394,14 @@ fn pr662_crash1() {
 
     let message = Message::from_bytes(Cursor::new(bad_input)).unwrap();
 
-    // this should assert (debug build) as "assertion failed: buffer.len() >= MDC_LEN"
-    // or panic (release build)
-    let _decryption_res = message.decrypt(&Password::empty(), &decrypt_key);
+    let res = message
+        .decrypt(&Password::empty(), &decrypt_key)
+        .err()
+        .unwrap();
+
+    // Expected result: `Error::MdcError` wrapped in `io::Error::other`
+    assert_eq!(
+        res.to_string(),
+        "IO error: Modification Detection Code error"
+    );
 }
