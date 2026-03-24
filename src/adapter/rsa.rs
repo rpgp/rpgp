@@ -113,7 +113,7 @@ where
     T: PrehashSigner<Signature>,
     D: Digest + KnownDigest,
 {
-    fn sign(
+    fn sign_prehash(
         &self,
         _key_pw: &Password,
         hash: HashAlgorithm,
