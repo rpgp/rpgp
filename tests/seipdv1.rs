@@ -247,7 +247,10 @@ pub fn seipdv1_test_error_uniformity() {
                 let src = e.as_error_source();
                 let s = src.to_string();
 
-                assert_eq!(&s, "IO error: invalid MDC", "Unexpected error '{s}'");
+                assert_eq!(
+                    &s, "IO error: Modification Detection Code error",
+                    "Unexpected error '{s}'"
+                );
             }
         }
     }

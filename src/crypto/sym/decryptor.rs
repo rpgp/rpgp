@@ -21,7 +21,7 @@ use zeroize::Zeroizing;
 
 use crate::{
     crypto::sym::SymmetricKeyAlgorithm,
-    errors::{bail, Result},
+    errors::{bail, Error, Result},
     types::Seipdv1ReadMode,
     util::{fill_buffer, fill_buffer_bytes},
 };
@@ -522,7 +522,7 @@ where
             MaybeProtected::Protected { ref mut hasher, .. } => {
                 // For any valid input, the buffer must contain at least MDC_LEN bytes here
                 if buffer.remaining() < MDC_LEN {
-                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid MDC"));
+                    return Err(io::Error::other(Error::MdcError));
                 }
 
                 let start = *data_available;
@@ -571,7 +571,7 @@ where
                         mdc[1] != 0x14 || // Invalid MDC length
                         mdc[2..] != sha1[..]
                     {
-                        return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid MDC"));
+                        return Err(io::Error::other(Error::MdcError));
                     }
                 }
 
