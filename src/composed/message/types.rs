@@ -18,8 +18,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        DecryptionKey, EskType, KeyDetails, Password, PkeskVersion, SecretParams, SkeskVersion,
-        Tag, VerifyingKey,
+        DecryptionKey, EskType, KeyDetails, Password, PkeskVersion, SecretParams, Seipdv1ReadMode,
+        SkeskVersion, Tag, VerifyingKey,
     },
     util::impl_try_from_into,
 };
@@ -491,7 +491,10 @@ pub struct DecryptionOptions {
     legacy: bool,
     gnupg_aead: bool,
 
-    seipdv1_unauthenticated_streaming: bool,
+    /// Choose between defensively checking the MDC first, or streaming decryption (for SEIPDv1).
+    ///
+    /// Also see [`DecryptionOptions::set_seipdv1_read_mode`].
+    seipdv1_read_mode: Seipdv1ReadMode,
 
     /// Allow processing of forwarded messages.
     ///
@@ -530,14 +533,25 @@ impl DecryptionOptions {
         self
     }
 
-    /// When decrypting a SEIPDv1 encrypted data packet, enable streaming.
-    /// This means that the caller may read unauthenticated plaintext from the decryptor
-    /// (which will only be notified at a later point, once the streaming reader has processed
-    /// the entire data packet and arrived at the message digest).
+    /// Change the mode of decryption of SEIPDv1 encrypted data packets from the default.
     ///
-    /// This mode is not recommended, it can bring risks for the user.
-    pub fn enable_seipdv1_unauthenticated_streaming(mut self) -> Self {
-        self.seipdv1_unauthenticated_streaming = true;
+    /// By default, (in `CheckFirst` mode), the message is first read in full, and integrity is
+    /// checked. In this mode, is the ciphertext has been altered, an error is raised before any
+    /// plaintext is released from decryption.
+    ///
+    /// Message size in `CheckFirst` is limited to 1GB by default.
+    ///
+    /// By changing the mode, decryption of SEIPDv1 messages can be configured to use a different
+    /// size limit in `CheckFirst` mode, or changed to perform `Streaming` decryption.
+    ///
+    /// In streaming mode, the caller may read unauthenticated plaintext from the decryptor.
+    /// If the ciphertext has been altered, the released plaintext will be incorrect (and may be
+    /// attacker-controlled to some degree). In streaming mode, an error about modified ciphertext
+    /// is only raised *after* incorrect plaintext has been released.
+    ///
+    /// `Streaming` mode is not recommended.
+    pub fn set_seipdv1_read_mode(mut self, mode: Seipdv1ReadMode) -> Self {
+        self.seipdv1_read_mode = mode;
         self
     }
 
@@ -653,7 +667,7 @@ impl<'a> Edata<'a> {
 
         match self {
             Self::SymEncryptedProtectedData { reader } => {
-                reader.decrypt(key, options.seipdv1_unauthenticated_streaming)?;
+                reader.decrypt(key, options.seipdv1_read_mode)?;
             }
             Self::SymEncryptedData { reader } => {
                 if options.legacy {
@@ -666,7 +680,7 @@ impl<'a> Edata<'a> {
             }
             Self::GnupgAeadData { reader } => {
                 if options.gnupg_aead {
-                    reader.decrypt(key, false)?;
+                    reader.decrypt(key, Seipdv1ReadMode::Streaming)?;
                 } else {
                     bail!(
                         "GnuPG's AEAD packet (type 20) is non-standard, 'DecryptionOptions' allows opting into it"

@@ -49,6 +49,39 @@ pub enum EskType {
     V6,
 }
 
+/// Specifies how SEIPDv1 encrypted messages are processed during decryption.
+///
+/// There is an inherent tradeoff when decrypting SEIPDv1 data:
+/// Decryption be performed either in streaming mode, which releases plaintext before the message's
+/// integrity has been checked. Or decryption first checks the integrity of the message, which
+/// requires reading the complete message into memory first. This can be prohibitive for messages
+/// that exceed the available memory.
+///
+/// The default mode is `CheckFirst`, since it is the more defensive choice.
+/// In `CheckFirst` mode, the maximum message size (in bytes) can be specified. If an
+/// encrypted message exceeds this limit, decryption returns an error (to avoid running out of
+/// memory).
+///
+/// If decryption of prohibitively large SEIPDv1 messages is required, and the application can
+/// safely process plaintext that is released before the integrity has been checked, then the
+/// alternative `Streaming` mode can be used.
+#[derive(derive_more::Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Seipdv1ReadMode {
+    CheckFirst { max_message_size: usize },
+    Streaming,
+}
+
+/// The maximum message length that we're willing to decrypt in non-streaming SEIPDv1 mode
+const MAX_DEFAULT_UNSTREAMED_MSG_SIZE: usize = 1024 * 1024 * 1024;
+
+impl Default for Seipdv1ReadMode {
+    fn default() -> Self {
+        Self::CheckFirst {
+            max_message_size: MAX_DEFAULT_UNSTREAMED_MSG_SIZE,
+        }
+    }
+}
+
 /// A proxy parameter for use in `draft-wussler-openpgp-forwarding` message transformations.
 /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-computing-the-proxy-paramet>
 #[cfg(feature = "draft-wussler-openpgp-forwarding")]

@@ -18,6 +18,7 @@ use zeroize::Zeroizing;
 use crate::{
     composed::RawSessionKey,
     errors::{bail, unimplemented_err, Result},
+    types::Seipdv1ReadMode,
 };
 
 mod decryptor;
@@ -537,14 +538,14 @@ impl SymmetricKeyAlgorithm {
     /// Protected decryption stream
     pub fn stream_decryptor_protected<R>(
         self,
-        allow_unauthenticated_streaming: bool,
+        seipdv1_read_mode: Seipdv1ReadMode,
         key: &[u8],
         ciphertext: R,
     ) -> Result<StreamDecryptor<R>>
     where
         R: std::io::BufRead,
     {
-        StreamDecryptor::new(self, true, allow_unauthenticated_streaming, key, ciphertext)
+        StreamDecryptor::new(self, true, seipdv1_read_mode, key, ciphertext)
     }
 
     /// Unprotected decryption stream
@@ -556,7 +557,7 @@ impl SymmetricKeyAlgorithm {
     where
         R: std::io::BufRead,
     {
-        StreamDecryptor::new(self, false, false, key, ciphertext)
+        StreamDecryptor::new(self, false, Seipdv1ReadMode::Streaming, key, ciphertext)
     }
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
@@ -866,7 +867,13 @@ mod tests {
                         dbg!(ciphertext.len(), $alg.cfb_prefix_size());
                         let mut input = std::io::Cursor::new(&ciphertext);
                         let mut decryptor = $alg
-                            .stream_decryptor_protected(false, &key, &mut input)
+                            .stream_decryptor_protected(
+                                Seipdv1ReadMode::CheckFirst {
+                                    max_message_size: 1_000_000,
+                                },
+                                &key,
+                                &mut input,
+                            )
                             .unwrap();
                         let mut plaintext = Vec::new();
                         decryptor.read_to_end(&mut plaintext).unwrap();
@@ -881,7 +888,11 @@ mod tests {
                         dbg!(ciphertext.len(), $alg.cfb_prefix_size());
                         let mut input = std::io::Cursor::new(&ciphertext);
                         let mut decryptor = $alg
-                            .stream_decryptor_protected(true, &key, &mut input)
+                            .stream_decryptor_protected(
+                                Seipdv1ReadMode::Streaming,
+                                &key,
+                                &mut input,
+                            )
                             .unwrap();
                         let mut plaintext = Vec::new();
                         decryptor.read_to_end(&mut plaintext).unwrap();
@@ -965,6 +976,8 @@ mod tests {
 
     use rand::RngCore;
 
+    use crate::types::Seipdv1ReadMode;
+
     #[ignore]
     #[test]
     fn bench_aes_256_protected() {
@@ -992,7 +1005,13 @@ mod tests {
         let now = Instant::now();
 
         let mut decryptor = SymmetricKeyAlgorithm::AES256
-            .stream_decryptor_protected(false, &key, &output[..])
+            .stream_decryptor_protected(
+                Seipdv1ReadMode::CheckFirst {
+                    max_message_size: 100_000_000,
+                },
+                &key,
+                &output[..],
+            )
             .unwrap();
         let mut res = Vec::with_capacity(SIZE);
         decryptor.read_to_end(&mut res).unwrap();
