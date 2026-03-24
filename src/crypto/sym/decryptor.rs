@@ -22,15 +22,12 @@ use zeroize::Zeroizing;
 use crate::{
     crypto::sym::SymmetricKeyAlgorithm,
     errors::{bail, Result},
+    types::Seipdv1ReadMode,
     util::{fill_buffer, fill_buffer_bytes},
 };
 
 const MDC_LEN: usize = 22;
 const BUFFER_SIZE: usize = 1024 * 8;
-
-/// The maximum message length that we're willing to decrypt in non-streaming SEIPDv1 mode
-// TODO: maybe make this configurable?
-const MAX_UNSTREAMED_MSG_SIZE: usize = 1024 * 1024 * 1024;
 
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
@@ -131,7 +128,7 @@ where
     pub fn new(
         alg: SymmetricKeyAlgorithm,
         protected: bool,
-        allow_unauthenticated_streaming: bool,
+        seipdv1_read_mode: Seipdv1ReadMode,
         key: &[u8],
         ciphertext: R,
     ) -> Result<Self> {
@@ -141,88 +138,43 @@ where
             }
             SymmetricKeyAlgorithm::IDEA => Ok(StreamDecryptor::Idea(StreamDecryptorInner::new(
                 protected,
-                allow_unauthenticated_streaming,
+                seipdv1_read_mode,
                 ciphertext,
                 key,
             )?)),
-            SymmetricKeyAlgorithm::TripleDES => {
-                Ok(StreamDecryptor::TripleDes(StreamDecryptorInner::new(
-                    protected,
-                    allow_unauthenticated_streaming,
-                    ciphertext,
-                    key,
-                )?))
-            }
+            SymmetricKeyAlgorithm::TripleDES => Ok(StreamDecryptor::TripleDes(
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
+            )),
             SymmetricKeyAlgorithm::CAST5 => Ok(StreamDecryptor::Cast5(StreamDecryptorInner::new(
                 protected,
-                allow_unauthenticated_streaming,
+                seipdv1_read_mode,
                 ciphertext,
                 key,
             )?)),
-            SymmetricKeyAlgorithm::Blowfish => {
-                Ok(StreamDecryptor::Blowfish(StreamDecryptorInner::new(
-                    protected,
-                    allow_unauthenticated_streaming,
-                    ciphertext,
-                    key,
-                )?))
-            }
-            SymmetricKeyAlgorithm::AES128 => {
-                Ok(StreamDecryptor::Aes128(StreamDecryptorInner::new(
-                    protected,
-                    allow_unauthenticated_streaming,
-                    ciphertext,
-                    key,
-                )?))
-            }
-            SymmetricKeyAlgorithm::AES192 => {
-                Ok(StreamDecryptor::Aes192(StreamDecryptorInner::new(
-                    protected,
-                    allow_unauthenticated_streaming,
-                    ciphertext,
-                    key,
-                )?))
-            }
-            SymmetricKeyAlgorithm::AES256 => {
-                Ok(StreamDecryptor::Aes256(StreamDecryptorInner::new(
-                    protected,
-                    allow_unauthenticated_streaming,
-                    ciphertext,
-                    key,
-                )?))
-            }
-            SymmetricKeyAlgorithm::Twofish => {
-                Ok(StreamDecryptor::Twofish(StreamDecryptorInner::new(
-                    protected,
-                    allow_unauthenticated_streaming,
-                    ciphertext,
-                    key,
-                )?))
-            }
-            SymmetricKeyAlgorithm::Camellia128 => {
-                Ok(StreamDecryptor::Camellia128(StreamDecryptorInner::new(
-                    protected,
-                    allow_unauthenticated_streaming,
-                    ciphertext,
-                    key,
-                )?))
-            }
-            SymmetricKeyAlgorithm::Camellia192 => {
-                Ok(StreamDecryptor::Camellia192(StreamDecryptorInner::new(
-                    protected,
-                    allow_unauthenticated_streaming,
-                    ciphertext,
-                    key,
-                )?))
-            }
-            SymmetricKeyAlgorithm::Camellia256 => {
-                Ok(StreamDecryptor::Camellia256(StreamDecryptorInner::new(
-                    protected,
-                    allow_unauthenticated_streaming,
-                    ciphertext,
-                    key,
-                )?))
-            }
+            SymmetricKeyAlgorithm::Blowfish => Ok(StreamDecryptor::Blowfish(
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
+            )),
+            SymmetricKeyAlgorithm::AES128 => Ok(StreamDecryptor::Aes128(
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
+            )),
+            SymmetricKeyAlgorithm::AES192 => Ok(StreamDecryptor::Aes192(
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
+            )),
+            SymmetricKeyAlgorithm::AES256 => Ok(StreamDecryptor::Aes256(
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
+            )),
+            SymmetricKeyAlgorithm::Twofish => Ok(StreamDecryptor::Twofish(
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
+            )),
+            SymmetricKeyAlgorithm::Camellia128 => Ok(StreamDecryptor::Camellia128(
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
+            )),
+            SymmetricKeyAlgorithm::Camellia192 => Ok(StreamDecryptor::Camellia192(
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
+            )),
+            SymmetricKeyAlgorithm::Camellia256 => Ok(StreamDecryptor::Camellia256(
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
+            )),
             SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
                 bail!("SymmetricKeyAlgorithm {} is unsupported", u8::from(alg))
             }
@@ -278,29 +230,18 @@ where
     }
 }
 
-/// The three modes of operation of StreamDecryptorInner:
-/// - SEIPDv1 packets are read in "check first" mode by default (`Seipdv1CheckFirst`).
-///   This mode only releases plaintext after the MDC check.
-/// - SEIPDv1 packets can be read in streaming mode (`Seipdv1Streaming`).
-///   This may release unauthenticated plaintext before the MDC check.
-/// - SED packets are read in streaming mode (`Sed`).
-#[derive(PartialEq)]
-enum DecryptionMode {
-    Seipdv1CheckFirst,
-    Seipdv1Streaming,
-    Sed,
-}
-
 #[derive(derive_more::Debug)]
 pub enum MaybeProtected {
     Protected {
-        // We use regular sha1 for MDC, not sha1_checked. Collisions are not currently a concern with MDC.
+        /// We use regular sha1 for MDC, not sha1_checked.
+        /// Collisions are not currently a concern with MDC.
         hasher: Sha1,
 
-        // By default, seipdv1 encrypted data is read in one go, so that plaintext
-        // is only released after the MDC has been checked.
-        // This flag enables streaming.
-        allow_unauthenticated_streaming: bool,
+        /// The read mode for seipdv1 encrypted data.
+        ///
+        /// By default, the data packet is read in one go, so that plaintext is only released
+        /// after the MDC has been checked.
+        mode: Seipdv1ReadMode,
     },
     Unprotected {
         key: Zeroizing<Vec<u8>>,
@@ -308,22 +249,30 @@ pub enum MaybeProtected {
 }
 
 impl MaybeProtected {
-    fn mode(&self) -> DecryptionMode {
-        match self {
-            Self::Protected {
-                allow_unauthenticated_streaming: false,
+    fn is_seipdv1_streaming(&self) -> bool {
+        matches!(
+            self,
+            MaybeProtected::Protected {
+                mode: Seipdv1ReadMode::Streaming,
                 ..
-            } => DecryptionMode::Seipdv1CheckFirst,
-            Self::Protected {
-                allow_unauthenticated_streaming: true,
-                ..
-            } => DecryptionMode::Seipdv1Streaming,
-            Self::Unprotected { .. } => DecryptionMode::Sed,
-        }
+            }
+        )
+    }
+
+    fn is_sed(&self) -> bool {
+        matches!(self, MaybeProtected::Unprotected { .. })
     }
 }
 
 /// State machine that reads from the encrypted input stream and performs decryption.
+///
+///
+/// StreamDecryptorInner support three modes of operation:
+/// - SEIPDv1 packets are read in "check first" mode by default (`Protected/Seipdv1CheckFirst`).
+///   This mode only releases plaintext after the MDC check.
+/// - SEIPDv1 packets can be read in streaming mode (`Protected/Seipdv1Streaming`).
+///   This may release unauthenticated plaintext before the MDC check.
+/// - SED packets are read in streaming mode (`Unprotected`).
 ///
 /// The state models which part of the input stream is currently being read:
 ///
@@ -378,7 +327,7 @@ where
 {
     fn new(
         protected: bool,
-        allow_unauthenticated_streaming: bool,
+        seipdv1_read_mode: Seipdv1ReadMode,
         source: R,
         key: &[u8],
     ) -> Result<Self> {
@@ -397,7 +346,7 @@ where
             let hasher = Sha1::default();
             MaybeProtected::Protected {
                 hasher,
-                allow_unauthenticated_streaming,
+                mode: seipdv1_read_mode,
             }
         } else {
             MaybeProtected::Unprotected {
@@ -524,37 +473,46 @@ where
             unreachable!("fill_data called in non-data state")
         };
 
-        let mode = protected.mode();
-
-        // In streaming modes, if we already have buffered data to return, don't read more yet.
+        // In streaming modes, if we still have any buffered data to return, don't read more now.
         // (For `Seipdv1Streaming`, keep at least MDC_LEN bytes back for the MDC check at the end)
-        if (mode == DecryptionMode::Seipdv1Streaming && buffer.remaining() > MDC_LEN)
-            || (mode == DecryptionMode::Sed && buffer.has_remaining())
+        if (protected.is_seipdv1_streaming() && buffer.remaining() > MDC_LEN)
+            || (protected.is_sed() && buffer.has_remaining())
         {
             return Ok(false);
         }
 
         let current_len = buffer.remaining();
 
-        let is_last_read = match mode {
-            DecryptionMode::Seipdv1Streaming | DecryptionMode::Sed => {
-                // Streaming: read until `buffer` reaches BUFFER_SIZE
+        let is_last_read = match protected {
+            MaybeProtected::Protected {
+                mode: Seipdv1ReadMode::CheckFirst { max_message_size },
+                ..
+            } => {
+                // Non-Streaming decryption: Read the entire input stream in one go.
+
+                // Note: BytesMut grows as needed to hold all the data.
+                let read = fill_buffer_bytes(&mut *source, buffer, *max_message_size)?;
+
+                if read == *max_message_size {
+                    // If the source yields more data, the message exceeds the supported size
+                    // and we error out
+                    if fill_buffer_bytes(source, buffer, 1)? > 0 {
+                        return Err(io::Error::other(
+                            "Input stream too long for ProtectedCheckFirst mode",
+                        ));
+                    }
+                }
+
+                true
+            }
+
+            _ => {
+                // Streaming decryption: read until `buffer` contains BUFFER_SIZE bytes
                 let buf_size = BUFFER_SIZE;
                 let to_read = buf_size - current_len;
                 let read = fill_buffer_bytes(source, buffer, buf_size)?;
+
                 read < to_read
-            }
-            DecryptionMode::Seipdv1CheckFirst => {
-                // Read the entire input stream in one go.
-                // Ask for MAX+1 bytes to detect if the stream is too long.
-                // Note: BytesMut grows as needed to hold all the data.
-                let read = fill_buffer_bytes(source, buffer, MAX_UNSTREAMED_MSG_SIZE + 1)?;
-                if read > MAX_UNSTREAMED_MSG_SIZE {
-                    return Err(io::Error::other(
-                        "Input stream too long for ProtectedCheckFirst mode",
-                    ));
-                }
-                true
             }
         };
 
