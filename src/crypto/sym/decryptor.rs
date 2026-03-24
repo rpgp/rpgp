@@ -562,6 +562,11 @@ where
 
         match protected {
             MaybeProtected::Protected { ref mut hasher, .. } => {
+                // For any valid input, the buffer must contain at least MDC_LEN bytes here
+                if buffer.remaining() < MDC_LEN {
+                    return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid MDC"));
+                }
+
                 let start = *data_available;
                 debug_assert!(buffer.len() >= MDC_LEN);
                 let end = buffer.len() - MDC_LEN;
@@ -597,10 +602,6 @@ where
                 ..
             } => {
                 if let MaybeProtected::Protected { mut hasher, .. } = protected {
-                    if buffer.remaining() < MDC_LEN {
-                        return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid MDC"));
-                    }
-
                     // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
                     let mdc = buffer.split_off(buffer.len() - MDC_LEN);
 
