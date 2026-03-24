@@ -9,7 +9,7 @@ use crate::{
         GnupgAeadDataConfig, PacketHeader, ProtectedDataConfig, StreamDecryptor,
         SymEncryptedProtectedDataConfig,
     },
-    types::Tag,
+    types::{Seipdv1ReadMode, Tag},
 };
 
 /// Reads and decrypts a [`SymEncryptedProtectedData`](crate::packet::SymEncryptedProtectedData)
@@ -59,7 +59,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
     pub fn decrypt(
         &mut self,
         session_key: &PlainSessionKey,
-        allow_unauthenticated_streaming: bool, // only applies for seipdv1
+        seipdv1_read_mode: Seipdv1ReadMode, // only applies for seipdv1
     ) -> Result<()> {
         ensure!(
             matches!(self.source, Source::Init(_)),
@@ -87,7 +87,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                         };
                         match StreamDecryptor::v1(
                             *sym_alg,
-                            allow_unauthenticated_streaming,
+                            seipdv1_read_mode,
                             session_key.as_ref(),
                             source,
                         ) {
