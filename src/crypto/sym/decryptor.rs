@@ -446,12 +446,17 @@ where
         }
         match self {
             Self::Prefix { .. } => unreachable!("advance_prefix must transition away from Prefix"),
-            Self::Data { .. } => {
-                let is_last_read = self.fill_data()?;
-                if is_last_read {
-                    self.finalize_data()?;
+            Self::Data { .. } => match self.fill_data() {
+                Ok(is_last_read) => {
+                    if is_last_read {
+                        self.finalize_data()?;
+                    }
                 }
-            }
+                Err(e) => {
+                    *self = Self::Error;
+                    return Err(e);
+                }
+            },
             Self::Done { .. } => {}
             Self::Error => panic!("error state"),
         }
