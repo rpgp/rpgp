@@ -407,7 +407,7 @@ where
                 }
             },
             Self::Done { .. } => {}
-            Self::Error => panic!("error state"),
+            Self::Error => return Err(io::Error::other("decryptor is in error state")),
         }
         Ok(())
     }
