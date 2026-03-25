@@ -31,8 +31,8 @@ impl DetachedSignature {
 
     /// Create a detached data signature over `data`, with [SignatureType::Binary].
     pub fn sign_binary_data<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
-        key: &impl SigningKey,
+        rng: &mut RNG,
+        key: &impl SigningKey<RNG>,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,
@@ -53,8 +53,8 @@ impl DetachedSignature {
     ///
     /// This gives callers full control of the hashed and unhashed subpacket areas.
     pub fn sign_binary_data_with_subpackets<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
-        key: &impl SigningKey,
+        rng: &mut RNG,
+        key: &impl SigningKey<RNG>,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,
@@ -77,8 +77,8 @@ impl DetachedSignature {
     /// encodings. The signature is not invalidated if the plaintext is e.g. changed between using
     /// "LF" line endings or "CR+LF" line endings.
     pub fn sign_text_data<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
-        key: &impl SigningKey,
+        rng: &mut RNG,
+        key: &impl SigningKey<RNG>,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,
@@ -103,8 +103,8 @@ impl DetachedSignature {
     /// encodings. The signature is not invalidated if the plaintext is e.g. changed between using
     /// "LF" line endings or "CR+LF" line endings.
     pub fn sign_text_data_with_subpackets<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
-        key: &impl SigningKey,
+        rng: &mut RNG,
+        key: &impl SigningKey<RNG>,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,
@@ -122,9 +122,9 @@ impl DetachedSignature {
     }
 
     fn sign_data<RNG: Rng + CryptoRng, R: Read>(
-        rng: RNG,
+        mut rng: &mut RNG,
         typ: SignatureType,
-        key: &impl SigningKey,
+        key: &impl SigningKey<RNG>,
         key_pw: &Password,
         hash_algorithm: HashAlgorithm,
         data: R,
@@ -132,7 +132,7 @@ impl DetachedSignature {
     ) -> Result<DetachedSignature> {
         let mut config = match key.version() {
             KeyVersion::V4 => SignatureConfig::v4(typ, key.algorithm(), hash_algorithm),
-            KeyVersion::V6 => SignatureConfig::v6(rng, typ, key.algorithm(), hash_algorithm)?,
+            KeyVersion::V6 => SignatureConfig::v6(&mut rng, typ, key.algorithm(), hash_algorithm)?,
             v => bail!("unsupported key version: {:?}", v),
         };
 
@@ -140,7 +140,7 @@ impl DetachedSignature {
         config.hashed_subpackets = hashed;
         config.unhashed_subpackets = unhashed;
 
-        let sig = config.sign(key, key_pw, data)?;
+        let sig = config.sign(rng, key, key_pw, data)?;
 
         Ok(DetachedSignature::new(sig))
     }
@@ -246,14 +246,14 @@ mod tests {
 
     #[test]
     fn detached_signature_binary() {
-        let rng = ChaCha20Rng::seed_from_u64(1);
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
 
         let (alice, _) =
             SignedSecretKey::from_armor_file("./tests/autocrypt/alice@autocrypt.example.sec.asc")
                 .unwrap();
 
         let sig = DetachedSignature::sign_binary_data(
-            rng,
+            &mut rng,
             &alice.primary_key,
             &Password::empty(),
             HashAlgorithm::Sha256,
@@ -287,7 +287,7 @@ mod tests {
                 .unwrap();
 
         let sig = DetachedSignature::sign_text_data(
-            rng,
+            &mut rng,
             &alice.primary_key,
             &Password::empty(),
             HashAlgorithm::Sha256,
@@ -327,7 +327,7 @@ mod tests {
         ];
 
         let sig = DetachedSignature::sign_binary_data_with_subpackets(
-            rng,
+            &mut rng,
             &alice.primary_key,
             &Password::empty(),
             HashAlgorithm::Sha256,
@@ -368,7 +368,7 @@ mod tests {
         ];
 
         let sig = DetachedSignature::sign_text_data_with_subpackets(
-            rng,
+            &mut rng,
             &alice.primary_key,
             &Password::empty(),
             HashAlgorithm::Sha256,

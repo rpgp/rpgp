@@ -1,11 +1,13 @@
 use std::marker::PhantomData;
 
+use aead::rand_core::CryptoRng;
 use digest::{typenum::Unsigned, OutputSizeUser};
 use ecdsa::{
     elliptic_curve::{generic_array::ArrayLength, CurveArithmetic},
     hazmat::DigestPrimitive,
     PrimeCurve, SignatureSize,
 };
+use rand::Rng;
 use signature::{hazmat::PrehashSigner, Keypair};
 
 use crate::{
@@ -124,15 +126,17 @@ where
     }
 }
 
-impl<C, T> SigningKey for EcdsaSigner<T, C>
+impl<C, T, RNG> SigningKey<RNG> for EcdsaSigner<T, C>
 where
     C: PrimeCurve + DigestPrimitive,
     SignatureSize<C>: ArrayLength<u8>,
     T: PrehashSigner<ecdsa::Signature<C>>,
     C::Digest: KnownDigest,
+    RNG: CryptoRng + Rng,
 {
     fn sign(
         &self,
+        _rng: &mut RNG,
         _key_pw: &Password,
         hash: HashAlgorithm,
         prehashed_data: &[u8],

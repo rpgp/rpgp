@@ -194,7 +194,7 @@ impl PublicSubkey {
     /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
     pub fn sign<R: CryptoRng + Rng, S, K>(
         &self,
-        rng: R,
+        rng: &mut R,
         primary_sec_key: &S,
         primary_pub_key: &K,
         key_pw: &Password,
@@ -202,7 +202,7 @@ impl PublicSubkey {
         embedded: Option<Signature>,
     ) -> Result<Signature>
     where
-        S: SigningKey,
+        S: SigningKey<R>,
         K: KeyDetails + Serialize,
     {
         let mut config =
@@ -232,7 +232,7 @@ impl PublicSubkey {
             ))?];
         }
 
-        config.sign_subkey_binding(primary_sec_key, primary_pub_key, key_pw, &self)
+        config.sign_subkey_binding(rng, primary_sec_key, primary_pub_key, key_pw, &self)
     }
 
     /// True, if this key packet is a forwardee key as defined in draft-wussler-openpgp-forwarding
@@ -434,15 +434,15 @@ impl PubKeyInner {
     // TODO: Expose in public API
     fn sign<R: CryptoRng + Rng, S>(
         &self,
-        mut rng: R,
+        rng: &mut R,
         key: &S,
         key_pw: &Password,
         sig_type: SignatureType,
     ) -> Result<Signature>
     where
-        S: SigningKey + Serialize,
+        S: SigningKey<R> + Serialize,
     {
-        let mut config = SignatureConfig::from_key(&mut rng, key, sig_type)?;
+        let mut config = SignatureConfig::from_key(rng, key, sig_type)?;
         config.hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
@@ -453,7 +453,7 @@ impl PubKeyInner {
             ))?];
         }
 
-        config.sign_key(key, key_pw, &self)
+        config.sign_key(rng, key, key_pw, &self)
     }
 
     /// True, if this key packet is a forwardee key as defined in draft-wussler-openpgp-forwarding

@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use digest::{typenum::Unsigned, OutputSizeUser};
+use rand::{CryptoRng, Rng};
 use rsa::{
     pkcs1v15::{self, Signature},
     RsaPublicKey,
@@ -108,13 +109,15 @@ where
     }
 }
 
-impl<D, T> SigningKey for RsaSigner<T, D>
+impl<D, T, RNG> SigningKey<RNG> for RsaSigner<T, D>
 where
     T: PrehashSigner<Signature>,
     D: Digest + KnownDigest,
+    RNG: CryptoRng + Rng,
 {
     fn sign(
         &self,
+        _rng: &mut RNG,
         _key_pw: &Password,
         hash: HashAlgorithm,
         prehashed_data: &[u8],
