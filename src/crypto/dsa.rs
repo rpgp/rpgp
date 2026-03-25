@@ -85,7 +85,7 @@ impl Serialize for SecretKey {
 }
 
 impl Signer for SecretKey {
-    fn sign(&self, hash_algorithm: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
+    fn sign_prehash(&self, hash_algorithm: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
         let signing_key = &self.key;
         let signature = match hash_algorithm {
             HashAlgorithm::Md5 => signing_key.sign_prehashed_rfc6979::<md5::Md5>(digest),
@@ -181,8 +181,9 @@ mod tests {
                 let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
                 let key = SecretKey { key };
 
-                let SignatureBytes::Mpis(res) =
-                    key.sign(hash_algorithm, &hashed).expect("failed to sign")
+                let SignatureBytes::Mpis(res) = key
+                    .sign_prehash(hash_algorithm, &hashed)
+                    .expect("failed to sign")
                 else {
                     panic!("invalid sig format");
                 };
@@ -316,8 +317,9 @@ mod tests {
                 let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
                 let key = SecretKey { key };
 
-                let SignatureBytes::Mpis(res) =
-                    key.sign(hash_algorithm, &hashed).expect("failed to sign")
+                let SignatureBytes::Mpis(res) = key
+                    .sign_prehash(hash_algorithm, &hashed)
+                    .expect("failed to sign")
                 else {
                     panic!("invalid sig format");
                 };

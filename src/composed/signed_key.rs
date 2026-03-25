@@ -63,7 +63,7 @@
 //!
 //! // creates the cryptographic core of the signature without any metadata
 //! let signature = signing_key
-//!     .sign(&passwd, HashAlgorithm::Sha256, digest)
+//!     .sign_prehash(&passwd, HashAlgorithm::Sha256, digest)
 //!     .expect("Failed to crate signature");
 //!
 //! // the signature can already be verified
