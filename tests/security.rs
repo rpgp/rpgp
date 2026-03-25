@@ -1,5 +1,3 @@
-use std::io::Cursor;
-
 use pgp::{
     composed::{Deserializable, Message, SignedSecretKey},
     types::{EncryptionKey, Password},
@@ -363,7 +361,7 @@ fn oom_signature_1() {
 #[test]
 fn pr662_crash1() {
     // Crash for an intermediate state of https://github.com/rpgp/rpgp/pull/662
-    let bad_input = [
+    let bad_input: &[u8] = &[
         193, 192, 204, 3, 124, 47, 170, 77, 249, 60, 55, 178, 1, 12, 0, 208, 100, 161, 141, 75,
         159, 113, 34, 116, 60, 162, 234, 101, 121, 180, 166, 145, 180, 141, 129, 118, 249, 252,
         233, 3, 138, 5, 161, 253, 89, 240, 169, 110, 130, 20, 110, 161, 161, 254, 101, 101, 133,
@@ -392,7 +390,7 @@ fn pr662_crash1() {
     let key_input = include_str!("draft-bre-openpgp-samples-00/bob.sec.asc");
     let (decrypt_key, _headers) = SignedSecretKey::from_string(key_input).unwrap();
 
-    let message = Message::from_bytes(Cursor::new(bad_input)).unwrap();
+    let message = Message::from_bytes(bad_input).unwrap();
 
     let res = message
         .decrypt(&Password::empty(), &decrypt_key)
