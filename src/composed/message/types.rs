@@ -913,11 +913,10 @@ impl<'a> Message<'a> {
                     return Err(Error::MissingKey);
                 };
 
-                if decrypt_options.legacy || decrypt_options.gnupg_aead {
-                    edata.decrypt_permissive(&session_key, decrypt_options)?;
-                } else {
-                    edata.decrypt(&session_key)?;
-                }
+                // Note: `decrypt_permissive` is a partial misnomer now, this fn is just a flexible
+                // way to cause decryption, including with a non-standard seipdv1 read mode.
+                edata.decrypt_permissive(&session_key, decrypt_options)?;
+
                 let message = Message::from_edata(edata, is_nested)?;
                 Ok((message, result))
             }
