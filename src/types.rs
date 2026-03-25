@@ -52,10 +52,12 @@ pub enum EskType {
 /// Specifies how SEIPDv1 encrypted messages are processed during decryption.
 ///
 /// There is an inherent tradeoff when decrypting SEIPDv1 data:
-/// Decryption be performed either in streaming mode, which releases plaintext before the message's
-/// integrity has been checked. Or decryption first checks the integrity of the message, which
-/// requires reading the complete message into memory first. This can be prohibitive for messages
-/// that exceed the available memory.
+///
+/// - Decryption can be performed either in streaming mode, which releases plaintext before the
+///   message's integrity has been checked.
+/// - Alternatively, decryption can first check the integrity of the message. However, this
+///   requires reading the complete message into memory first. This is prohibitive for messages
+///   that exceed the available memory.
 ///
 /// The default mode is `CheckFirst`, since it is the more defensive choice.
 /// In `CheckFirst` mode, the maximum message size (in bytes) can be specified. If an
