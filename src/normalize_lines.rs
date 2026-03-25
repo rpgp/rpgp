@@ -1,13 +1,10 @@
 //! # Line ending normalization module
 
-use std::sync::LazyLock;
+use std::borrow::Cow;
 
 use bytes::{Buf, BufMut, BytesMut};
 
 use crate::{line_writer::LineBreak, util::fill_buffer};
-
-static RE: LazyLock<regex::bytes::Regex> =
-    LazyLock::new(|| regex::bytes::Regex::new(r"(\r\n|\n)").expect("valid regex"));
 
 /// This struct wraps a reader and normalize line endings.
 pub struct NormalizedReader<R>
@@ -77,7 +74,7 @@ impl<R: std::io::Read> NormalizedReader<R> {
         match (edge_case, read > 0) {
             ([CR, LF], true) => {
                 // Edge case, we need to normalize this pair of bytes separately.
-                let res = RE.replace_all(&edge_case, self.line_break.as_ref());
+                let res = replace_newlines(&edge_case, self.line_break.as_ref());
                 self.replaced.extend_from_slice(&res);
 
                 // We already processed the leading LF in `self.in_buffer`,  so it’s omitted from the final normalization step.
@@ -91,7 +88,7 @@ impl<R: std::io::Read> NormalizedReader<R> {
         }
 
         // Normalize the remaining part of the buffer ...
-        let res = RE.replace_all(&self.in_buffer[start..end], self.line_break.as_ref());
+        let res = replace_newlines(&self.in_buffer[start..end], self.line_break.as_ref());
         // ... and copy it into `self.replaced`.
         self.replaced.extend_from_slice(&res);
     }
@@ -112,16 +109,40 @@ impl<R: std::io::Read> std::io::Read for NormalizedReader<R> {
     }
 }
 
-pub(crate) fn normalize_lines(s: &str, line_break: LineBreak) -> std::borrow::Cow<'_, str> {
-    let bytes = RE.replace_all(s.as_bytes(), line_break.as_ref());
+pub(crate) fn normalize_lines(s: &str, line_break: LineBreak) -> Cow<'_, str> {
+    let bytes = replace_newlines(s.as_bytes(), line_break.as_ref());
     match bytes {
-        std::borrow::Cow::Borrowed(bytes) => {
-            std::borrow::Cow::Borrowed(std::str::from_utf8(bytes).expect("valid bytes in"))
-        }
-        std::borrow::Cow::Owned(bytes) => {
-            std::borrow::Cow::Owned(std::string::String::from_utf8(bytes).expect("valid bytes in"))
+        Cow::Borrowed(bytes) => Cow::Borrowed(std::str::from_utf8(bytes).expect("valid bytes in")),
+        Cow::Owned(bytes) => {
+            Cow::Owned(std::string::String::from_utf8(bytes).expect("valid bytes in"))
         }
     }
+}
+
+/// Replaces `\r\n`, `\n` in `input` with `replacement`.
+fn replace_newlines<'a>(input: &'a [u8], replacement: &[u8]) -> Cow<'a, [u8]> {
+    let mut newlines = memchr::memchr_iter(b'\n', input).peekable();
+    if newlines.peek().is_none() {
+        return Cow::Borrowed(input);
+    }
+
+    let mut out = Vec::with_capacity(input.len());
+    let mut position = 0;
+
+    for newline in newlines {
+        let start = if newline > 0 && input[newline - 1] == b'\r' {
+            newline - 1
+        } else {
+            newline
+        };
+
+        out.extend_from_slice(&input[position..start]);
+        out.extend_from_slice(replacement);
+        position = newline + 1;
+    }
+
+    out.extend_from_slice(&input[position..]);
+    Cow::Owned(out)
 }
 
 // tests
