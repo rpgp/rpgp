@@ -289,6 +289,147 @@ impl PublicKeyEncryptedSessionKey {
             Self::Other { version, .. } => PkeskVersion::Other(*version),
         }
     }
+
+    /// Transform PKESK to forward a message to a 'forwardee'.
+    ///
+    /// The underlying forwarding mechanism only supports ECDH with Curve 25519.
+    ///
+    /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-forwarding-messages>
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+    pub fn forwarding_transform<K: KeyDetails>(
+        &self,
+        forwardee: &K,
+        proxy_parameter: crate::types::ForwardingProxyParameter,
+    ) -> Result<Self> {
+        use crate::types::{EcdhKdfType, EcdhPublicParams, Mpi};
+
+        let PublicKeyEncryptedSessionKey::V3 {
+            packet_header,
+            id,
+            values,
+            pk_algo,
+            ..
+        } = self
+        else {
+            bail!("Only V3 PKESK are supported right now");
+        };
+
+        ensure_eq!(
+            *pk_algo,
+            PublicKeyAlgorithm::ECDH,
+            "PKESK algorithm is not ECDH"
+        );
+
+        // Check that the forwardee key uses ECDH/curve 25519
+        let PublicParams::ECDH(EcdhPublicParams::Curve25519Legacy { ecdh_kdf_type, .. }) =
+            forwardee.public_params()
+        else {
+            bail!("Only forwardees using ECDH/Curve25519 are supported right now");
+        };
+
+        let EcdhKdfType::Replaced {
+            replacement_fingerprint,
+            ..
+        } = ecdh_kdf_type
+        else {
+            bail!("Unexpected forwardee ecdh_kdf_type {:?}", ecdh_kdf_type)
+        };
+
+        // Prepare to replace PKESK values with transformed public point
+        let mut values = values.clone();
+
+        let PkeskBytes::Ecdh {
+            ref mut public_point,
+            ..
+        } = values
+        else {
+            bail!("Forwarding is only supported for PKESK based on ECDH right now");
+        };
+
+        // Check that the value of public_point looks reasonable for ECDH/curve25519
+        ensure_eq!(
+            public_point.len(),
+            33,
+            "Unexpected public point length {} in PKESK",
+            public_point.len()
+        );
+        ensure_eq!(
+            public_point.as_ref().first(),
+            Some(&0x40),
+            "Public point in PKESK has no 0x40 prefix",
+        );
+
+        // Strip 0x40 prefix for proxy transformation
+        let public_point_data = &public_point.as_ref()[1..33];
+
+        let mut forwarded_point = [0u8; 33];
+        forwarded_point[0] = 0x40;
+        forwarded_point[1..].copy_from_slice(&Self::transform_ecdh_ephemeral(
+            public_point_data.try_into().expect("32 bytes"),
+            proxy_parameter,
+        )?);
+
+        *public_point = Mpi::from_slice(&forwarded_point);
+
+        // Replace recipient Key ID in Pkesk
+        let id = if id == &KeyId::WILDCARD {
+            KeyId::WILDCARD
+        } else {
+            // the `replacement_fingerprint` in the forwardee key must match the key id in this pkesk
+            ensure_eq!(
+                id.as_ref(),
+                &replacement_fingerprint[12..],
+                "Key ID in PKESK {:02x?} doesn't match the replacement fingerprint of the forwardee key {:02x?}",
+                id.as_ref(),
+                &replacement_fingerprint[12..]
+            );
+
+            forwardee.legacy_key_id()
+        };
+
+        Ok(Self::V3 {
+            packet_header: *packet_header,
+            id,
+            pk_algo: *pk_algo,
+            values,
+        })
+    }
+
+    /// The message forwarding transformation from draft-wussler-openpgp-forwarding
+    ///
+    /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-forwarding-messages>
+    ///
+    /// Implements TransformMessage( eB, k );
+    ///
+    /// Input:
+    /// eB - the ECDH ephemeral public key decoded from the PKESK
+    /// k - the proxy transformation parameter retrieved from storage
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+    fn transform_ecdh_ephemeral(
+        eb: [u8; 32],
+        k: crate::types::ForwardingProxyParameter,
+    ) -> Result<[u8; 32]> {
+        use curve25519_dalek::{traits::IsIdentity, MontgomeryPoint, Scalar};
+
+        let ephemeral = MontgomeryPoint(eb);
+
+        // if 0x08 * eB == 0 then abort
+        if (Scalar::from(8u8) * ephemeral).is_identity() {
+            bail!("Ephemeral public key belongs to a small subgroup");
+        }
+
+        let k = Zeroizing::new(Scalar::from_bytes_mod_order(k.into_array()));
+
+        // eC = k * eB
+        let ec = (*k) * ephemeral;
+
+        if ec.is_identity() {
+            bail!("Transformed ephemeral is the identity point");
+        }
+
+        // return eC
+        Ok(ec.to_bytes())
+    }
 }
 
 impl Serialize for PublicKeyEncryptedSessionKey {
@@ -513,5 +654,51 @@ mod tests {
             let new_packet = PublicKeyEncryptedSessionKey::try_from_reader(*packet.packet_header(), &mut &buf[..]).unwrap();
             prop_assert_eq!(packet, new_packet);
         }
+    }
+
+    #[test]
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+    fn forward_transform_success_a_2() {
+        // Successful transformation test from
+        // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-message-transformation>
+
+        let proxy_param: [u8; 32] =
+            hex::decode("83c57cbe645a132477af55d5020281305860201608e81a1de43ff83f245fb302")
+                .expect("decode")
+                .try_into()
+                .unwrap();
+
+        let eph = hex::decode("aaea7b3bb92f5f545d023ccb15b50f84ba1bdd53be7f5cfadcfb0106859bf77e")
+            .expect("decode");
+
+        let Ok(transf) = PublicKeyEncryptedSessionKey::transform_ecdh_ephemeral(
+            eph.try_into().unwrap(),
+            proxy_param.into(),
+        ) else {
+            unimplemented!()
+        };
+
+        let expect_transformed =
+            hex::decode("ec31bb937d7ef08c451d516be1d7976179aa7171eea598370661d1152b85005a")
+                .unwrap();
+
+        std::assert_eq!(transf.as_slice(), expect_transformed.as_slice())
+    }
+
+    #[test]
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+    fn forward_transform_small_subgroup_a_2() {
+        // Small subgroup detection test from
+        // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-message-transformation>
+
+        let small = hex::decode("ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f")
+            .unwrap();
+
+        let res = PublicKeyEncryptedSessionKey::transform_ecdh_ephemeral(
+            small.try_into().unwrap(),
+            [0x11; 32].into(),
+        );
+
+        assert!(matches!(res, Err(crate::errors::Error::Message { .. })));
     }
 }

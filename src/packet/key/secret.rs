@@ -214,6 +214,77 @@ impl SecretSubkey {
     pub fn public_key(&self) -> &super::PublicSubkey {
         &self.details
     }
+
+    /// Given recipient and forwardee encryption subkeys, compute proxy transformation parameter.
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+    pub fn generate_proxy_parameter(
+        &self,
+        forwardee: &SecretSubkey,
+        password_recipient: &Password,
+        password_forwardee: &Password,
+    ) -> Result<crate::types::ForwardingProxyParameter> {
+        self.unlock(
+            password_recipient,
+            |_, unlocked_recipient| match unlocked_recipient {
+                PlainSecretParams::ECDH(crate::crypto::ecdh::SecretKey::Curve25519Legacy(r)) => {
+                    forwardee.unlock(password_forwardee, |_, unlocked_forwardee| {
+                        match unlocked_forwardee {
+                            PlainSecretParams::ECDH(
+                                crate::crypto::ecdh::SecretKey::Curve25519Legacy(f),
+                            ) => Self::compute_proxy_parameter(r.to_bytes_rev(), f.to_bytes_rev()),
+                            _ => bail!("Only ECDH/Curve 25519 forwardee keys are supported"),
+                        }
+                    })?
+                }
+                _ => bail!("Only ECDH/Curve 25519 recipient keys are supported"),
+            },
+        )?
+    }
+
+    /// Given the recipient and forwardee private key integers, compute the proxy transformation parameter.
+    ///
+    /// See <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-computing-the-proxy-paramet>
+    ///
+    /// Implements ComputeProxyParameter( dB, dC );
+    ///
+    /// Input:
+    /// dB - the recipient's private key integer
+    /// dC - the forwardee's private key integer
+    /// n - the size of the field of Curve25519
+    ///
+    /// Output:
+    /// k = dB/dC mod n
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+    fn compute_proxy_parameter(
+        mut db: [u8; 32],
+        mut dc: [u8; 32],
+    ) -> Result<crate::types::ForwardingProxyParameter> {
+        use elliptic_curve::subtle::ConstantTimeEq;
+        use zeroize::Zeroizing;
+
+        // reverse the bytes for little-endian encoding
+        db.reverse();
+        dc.reverse();
+
+        let recipient = Zeroizing::new(curve25519_dalek::Scalar::from_bytes_mod_order(
+            curve25519_dalek::scalar::clamp_integer(db),
+        ));
+        let forwardee = Zeroizing::new(curve25519_dalek::Scalar::from_bytes_mod_order(
+            curve25519_dalek::scalar::clamp_integer(dc),
+        ));
+
+        // ensure forwardee is not zero (precondition for calling `invert`)
+        if forwardee.ct_eq(&curve25519_dalek::Scalar::ZERO).into() {
+            bail!("Forwardee private key is zero");
+        }
+
+        let forwardee_inverted = Zeroizing::new(forwardee.invert());
+
+        // k is implicitly reduced to the group order
+        let k = (*recipient) * (*forwardee_inverted);
+
+        Ok(k.to_bytes().into())
+    }
 }
 
 impl SigningKey for SecretKey {
@@ -751,5 +822,31 @@ mod tests {
         alice_sec
             .sign(&"bar".into(), hash_algo, DATA)
             .expect("failed to sign");
+    }
+
+    #[test]
+    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+    fn forward_proxy_param_a_1() {
+        // Test vectors from
+        // <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-proxy-parameter>
+
+        let rec_integer =
+            hex::decode("5989216365053dcf9e35a04b2a1fc19b83328426be6bb7d0a2ae78105e2e3188")
+                .expect("decode");
+        let forw_integer =
+            hex::decode("684da6225bcd44d880168fc5bec7d2f746217f014c8019005f144cc148f16a00")
+                .expect("decode");
+
+        let k = crate::packet::SecretSubkey::compute_proxy_parameter(
+            rec_integer.try_into().unwrap(),
+            forw_integer.try_into().unwrap(),
+        )
+        .expect("compute_proxy_parameter");
+
+        assert_eq!(
+            hex::decode("e89786987c3a3ec761a679bc372cd11a425eda72bd5265d78ad0f5f32ee64f02")
+                .unwrap(),
+            k.as_ref(),
+        );
     }
 }
