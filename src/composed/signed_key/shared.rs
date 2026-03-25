@@ -303,6 +303,8 @@ impl Serialize for SignedKeyDetails {
 pub enum PublicOrSecret {
     Public(SignedPublicKey),
     Secret(SignedSecretKey),
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+    PersistentSymmetric(crate::composed::TransferablePersistentSymmetricKey),
 }
 
 impl PublicOrSecret {
@@ -310,6 +312,9 @@ impl PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.verify_bindings(),
             PublicOrSecret::Secret(k) => k.verify_bindings(),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            PublicOrSecret::PersistentSymmetric(_) => Ok(()), // PSK have no binding signatures
         }
     }
 
@@ -321,6 +326,9 @@ impl PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.to_armored_writer(writer, opts),
             PublicOrSecret::Secret(k) => k.to_armored_writer(writer, opts),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            PublicOrSecret::PersistentSymmetric(k) => k.to_armored_writer(writer, opts),
         }
     }
 
@@ -328,6 +336,9 @@ impl PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.to_armored_bytes(opts),
             PublicOrSecret::Secret(k) => k.to_armored_bytes(opts),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            PublicOrSecret::PersistentSymmetric(k) => k.to_armored_bytes(opts),
         }
     }
 
@@ -335,6 +346,9 @@ impl PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.to_armored_string(opts),
             PublicOrSecret::Secret(k) => k.to_armored_string(opts),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            PublicOrSecret::PersistentSymmetric(k) => k.to_armored_string(opts),
         }
     }
 
@@ -360,6 +374,9 @@ impl PublicOrSecret {
         match self {
             PublicOrSecret::Secret(_) => false,
             PublicOrSecret::Public(_) => true,
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            PublicOrSecret::PersistentSymmetric(_) => true, // FIXME: what should this do?
         }
     }
 
@@ -367,6 +384,9 @@ impl PublicOrSecret {
         match self {
             PublicOrSecret::Secret(_) => true,
             PublicOrSecret::Public(_) => false,
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            PublicOrSecret::PersistentSymmetric(_) => true, // FIXME: what should this do?
         }
     }
 }
@@ -384,6 +404,9 @@ impl TryFrom<PublicOrSecret> for SignedPublicKey {
         match public_or_secret {
             PublicOrSecret::Public(k) => Ok(k),
             PublicOrSecret::Secret(_) => Err(TryFromPublicOrSecretError),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            PublicOrSecret::PersistentSymmetric(_) => Err(TryFromPublicOrSecretError),
         }
     }
 }
@@ -395,6 +418,9 @@ impl TryFrom<PublicOrSecret> for SignedSecretKey {
         match public_or_secret {
             PublicOrSecret::Public(_) => Err(TryFromPublicOrSecretError),
             PublicOrSecret::Secret(k) => Ok(k),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            PublicOrSecret::PersistentSymmetric(_) => Err(TryFromPublicOrSecretError),
         }
     }
 }
@@ -404,6 +430,9 @@ impl Serialize for PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.to_writer(writer),
             PublicOrSecret::Secret(k) => k.to_writer(writer),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            PublicOrSecret::PersistentSymmetric(k) => k.to_writer(writer),
         }
     }
 
@@ -411,6 +440,9 @@ impl Serialize for PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.write_len(),
             PublicOrSecret::Secret(k) => k.write_len(),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            PublicOrSecret::PersistentSymmetric(k) => k.write_len(),
         }
     }
 }

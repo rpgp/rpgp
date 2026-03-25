@@ -67,6 +67,10 @@ jobs:
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       run: cargo nextest run --lib --bins --tests --all --features draft-wussler-openpgp-forwarding
 
+    - name: psk
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
+      run: cargo nextest run --lib --bins --tests --all --features draft-ietf-openpgp-persistent-symmetric-keys
+
     - name: all-features
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       run: cargo nextest run --lib --bins --tests --all --all-features
@@ -79,6 +83,9 @@ jobs:
 
     - name: pqc ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-pqc
+
+    - name: psk ignored
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-ietf-openpgp-persistent-symmetric-keys
 
   build_and_test_windows:
     name: Build and test (Windows)
@@ -113,11 +120,17 @@ jobs:
     - name: tests - pqc
       run: cargo nextest run --lib --bins --tests --all --features draft-pqc
 
+    - name: tests - psk
+      run: cargo nextest run --lib --bins --tests --all --features draft-ietf-openpgp-persistent-symmetric-keys
+
     - name: tests ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
 
     - name: tests ignored - pqc
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-pqc
+
+    - name: tests ignored - psk
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-ietf-openpgp-persistent-symmetric-keys
 
   cross:
     name: Cross compile
@@ -153,6 +166,9 @@ jobs:
 
     - name: test - pqc
       run: cross test --release --all --target ${{ matrix.target }} --features draft-pqc
+
+    - name: test - psk
+      run: cross test --release --all --target ${{ matrix.target }} --features draft-ietf-openpgp-persistent-symmetric-keys
 
   check_wasm:
     name: Check wasm targets
@@ -190,6 +206,12 @@ jobs:
       with:
         command: check
         args: --target wasm32-unknown-unknown --no-default-features --features wasm,draft-pqc
+
+    - name: check - psk
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+        args: --target wasm32-unknown-unknown --no-default-features --features wasm,draft-ietf-openpgp-persistent-symmetric-keys
 
   check_fmt:
     name: Checking fmt
