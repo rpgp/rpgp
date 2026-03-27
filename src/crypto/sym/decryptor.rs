@@ -16,6 +16,7 @@ use des::TdesEde3;
 use idea::Idea;
 use log::debug;
 use sha1::{Digest, Sha1};
+use subtle::ConstantTimeEq;
 use twofish::Twofish;
 use zeroize::Zeroizing;
 
@@ -560,17 +561,23 @@ where
                 ..
             } => {
                 if let MaybeProtected::Protected { mut hasher, .. } = protected {
+                    // Check the validity of the MDC in the message
+
+                    // The MDC as found in the message.
                     // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
-                    let mdc = buffer.split_off(buffer.len() - MDC_LEN);
+                    let msg_mdc = buffer.split_off(buffer.len() - MDC_LEN);
 
-                    hasher.update(&mdc[..2]);
+                    hasher.update(&msg_mdc[..2]);
+                    let hash: [u8; 20] = hasher.finalize().into();
 
-                    let sha1: [u8; 20] = hasher.finalize().into();
+                    // The value for the MDC we expect.
+                    let mut expect_mdc = [0; 22];
+                    expect_mdc[0] = 0xD3; // MDC tag
+                    expect_mdc[1] = 0x14; // MDC length
+                    expect_mdc[2..].copy_from_slice(&hash);
 
-                    if mdc[0] != 0xD3 || // Invalid MDC tag
-                        mdc[1] != 0x14 || // Invalid MDC length
-                        mdc[2..] != sha1[..]
-                    {
+                    // constant-time comparison of expected MDC and MDC from message
+                    if expect_mdc.ct_ne(&msg_mdc).into() {
                         return Err(io::Error::other(Error::MdcError));
                     }
                 }
