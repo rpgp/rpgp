@@ -515,6 +515,7 @@ impl DecryptionOptions {
     ///
     /// This packet type is historical! (RFC 4880 from 11/2007 discourages emitting this format).
     /// Decrypting it should not be necessary in most contexts, except for historical data.
+    #[must_use]
     pub fn enable_legacy(mut self) -> Self {
         self.legacy = true;
         self
@@ -528,6 +529,7 @@ impl DecryptionOptions {
     /// "OCB encrypted data").
     ///
     /// This format is not part of the IETF-specified OpenPGP standard!
+    #[must_use]
     pub fn enable_gnupg_aead(mut self) -> Self {
         self.gnupg_aead = true;
         self
@@ -550,6 +552,7 @@ impl DecryptionOptions {
     /// is only raised *after* incorrect plaintext has been released.
     ///
     /// `Streaming` mode is not recommended.
+    #[must_use]
     pub fn set_seipdv1_read_mode(mut self, mode: Seipdv1ReadMode) -> Self {
         self.seipdv1_read_mode = mode;
         self
