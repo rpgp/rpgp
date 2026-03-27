@@ -270,11 +270,11 @@ impl MaybeProtected {
 ///
 ///
 /// StreamDecryptorInner support three modes of operation:
-/// - SEIPDv1 packets are read in "check first" mode by default (`Protected/Seipdv1CheckFirst`).
-///   This mode only releases plaintext after the MDC check.
-/// - SEIPDv1 packets can be read in streaming mode (`Protected/Seipdv1Streaming`).
+/// - SEIPDv1 packets are read in "check first" mode by default (`Seipdv1ReadMode::CheckFirst`).
+///   This mode only ever releases plaintext after the MDC check.
+/// - SEIPDv1 packets can be read in "streaming" mode (`Seipdv1ReadMode::Streaming`).
 ///   This may release unauthenticated plaintext before the MDC check.
-/// - SED packets are read in streaming mode (`Unprotected`).
+/// - SED packets are always read in streaming mode (`Unprotected`).
 ///
 /// The state models which part of the input stream is currently being read:
 ///
@@ -285,11 +285,12 @@ impl MaybeProtected {
 ///   For SEIPDv1 packets, in this state, the MDC has also been read and checked.
 ///
 /// The decrypted plaintext can be obtained by a caller when reading from this object via
-/// `std::io::Read` (this happens in the `Done` state for non-streaming SEIPDv1 mode.
-/// In streaming modes, reading happens in both the `Data` and `Done` states).
+/// `std::io::Read`.
+/// This happens only in the `Done` state for non-streaming SEIPDv1 mode.
+/// In streaming modes, reading can happen in both the `Data` and `Done` states.
 ///
-/// In both the `Data` and `Done` state, `buffer` can contain decrypted plaintext that has
-/// not yet been consumed by the reader.
+/// If any decrypted plaintext is currently available, it is stored in `buffer`, and can be
+/// consumed by the reader from there.
 #[derive(derive_more::Debug)]
 pub enum StreamDecryptorInner<M, R>
 where
