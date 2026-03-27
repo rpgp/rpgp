@@ -184,11 +184,8 @@ pub fn mdc_test() {
 
 /// Decrypt SEIPDv1 EData with (random) wrong session keys.
 ///
-/// This should not leak specific error from parsing the resulting (wrong and unauthenticated)
-/// plaintext as a message.
-///
-/// The mal-decrypted and unauthenticated  "plaintext" is handled via `Message::from_edata` and
-/// `Message::internal_from_bytes`.
+/// In the default "check first" decryption mode, this should not leak specific error from parsing
+/// the resulting (wrong and unauthenticated) plaintext as a message.
 #[test]
 pub fn seipdv1_test_error_uniformity() {
     let mut rng = ChaCha8Rng::seed_from_u64(0);
