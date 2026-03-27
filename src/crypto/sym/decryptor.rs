@@ -23,6 +23,7 @@ use zeroize::Zeroizing;
 use crate::{
     crypto::sym::SymmetricKeyAlgorithm,
     errors::{bail, Error, Result},
+    parsing_reader::BufReadParsing,
     types::Seipdv1ReadMode,
     util::{fill_buffer, fill_buffer_bytes},
 };
@@ -497,7 +498,7 @@ where
                 if read == *max_message_size {
                     // If the source yields more data, the message exceeds the supported size
                     // and we error out
-                    if fill_buffer_bytes(source, buffer, 1)? > 0 {
+                    if source.read_u8().is_ok() {
                         return Err(io::Error::other(
                             "Input stream too long for ProtectedCheckFirst mode",
                         ));
