@@ -286,6 +286,7 @@ fn subpacket<B: BufRead>(
         PreferredEncryptionModes => preferred_encryption_modes(body),
         IntendedRecipientFingerprint => intended_recipient_fingerprint(body),
         PreferredAead => pref_aead_alg(body),
+        ReplacementKey => replacement_key(body),
         Experimental(n) => Ok(SubpacketData::Experimental(n, body.rest()?.freeze())),
         Other(n) => Ok(SubpacketData::Other(n, body.rest()?.freeze())),
     };
@@ -405,6 +406,15 @@ fn pref_aead_alg<B: BufRead>(mut i: B) -> Result<SubpacketData> {
     }
 
     Ok(SubpacketData::PreferredAeadAlgorithms(list))
+}
+
+/// Parse a Replacement Key Subpacket
+///
+/// Ref: https://www.ietf.org/archive/id/draft-ietf-openpgp-replacementkey-06.html#name-format-of-the-replacement-k
+fn replacement_key<B: BufRead>(mut i: B) -> Result<SubpacketData> {
+    unimplemented!()
+
+    // Ok(SubpacketData::ReplacementKeyData(replacement))
 }
 
 /// Parse a Preferred Hash Algorithms subpacket

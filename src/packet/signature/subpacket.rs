@@ -9,7 +9,7 @@ use crate::{
         aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::Result,
+    errors::{bail, Result},
     packet::{Features, KeyFlags, Notation, RevocationCode, Signature},
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -54,6 +54,7 @@ pub enum SubpacketType {
     // AttestedCertifications, // non-RFC
     // KeyBlock,               // non-RFC
     PreferredAead,
+    ReplacementKey,
     Experimental(u8),
     Other(u8),
 }
@@ -90,6 +91,7 @@ impl SubpacketType {
             // SubpacketType::AttestedCertifications => 37,
             // SubpacketType::KeyBlock => 38,
             SubpacketType::PreferredAead => 39,
+            SubpacketType::ReplacementKey => 100,
             SubpacketType::Experimental(n) => *n,
             SubpacketType::Other(n) => *n,
         };
@@ -138,7 +140,8 @@ impl SubpacketType {
             // 37 => SubpacketType::AttestedCertifications,
             // 38 => SubpacketType::KeyBlock,
             39 => SubpacketType::PreferredAead,
-            100..=110 => SubpacketType::Experimental(n),
+            100 => SubpacketType::ReplacementKey,
+            101..=110 => SubpacketType::Experimental(n), // TODO: re-add 100 when ReplacementKey has a final id
             _ => SubpacketType::Other(n),
         };
 
@@ -316,6 +319,7 @@ pub enum SubpacketData {
     PreferredEncryptionModes(SmallVec<[AeadAlgorithm; 2]>),
     IntendedRecipientFingerprint(Fingerprint),
     PreferredAeadAlgorithms(SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>),
+    ReplacementKeyData(ReplacementKey),
     Experimental(u8, #[debug("{}", hex::encode(_1))] Bytes),
     Other(u8, #[debug("{}", hex::encode(_1))] Bytes),
     SignatureTarget(
@@ -323,6 +327,83 @@ pub enum SubpacketData {
         HashAlgorithm,
         #[debug("{}", hex::encode(_2))] Bytes,
     ),
+}
+
+#[derive(derive_more::Debug, PartialEq, Eq, Clone)]
+pub struct ReplacementKeyTarget {
+    fingerprint: Fingerprint,
+
+    /// Imprint of the target key.
+    ///
+    /// Uses the digest algorithm of the signature packet that contained this replacement key
+    /// target.
+    imprint: Box<[u8]>,
+}
+
+impl Serialize for ReplacementKeyTarget {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        use byteorder::WriteBytesExt;
+
+        if let Some(version) = self.fingerprint.version() {
+            writer.write_u8(version.into())?;
+            writer.write_all(self.fingerprint.as_bytes())?;
+        } else {
+            bail!("IntendedRecipientFingerprint: needs versioned fingerprint")
+        }
+
+        writer.write_all(&self.imprint)?;
+
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        unimplemented!()
+    }
+}
+
+/// The information contained in one Replacement Key Subpacket.
+///
+/// It contains either:
+///
+/// - one ("forward") target key that replaces the current key, or
+/// - a list of ("backward") keys that are replaced by the current key.
+#[derive(derive_more::Debug, PartialEq, Eq, Clone)]
+pub enum ReplacementKey {
+    /// The target key is the replacement primary key for the current primary key.
+    Forward(ReplacementKeyTarget),
+
+    /// The target key(s) are primary keys for which the current primary key is the replacement
+    /// primary key.
+    Backward(Vec<ReplacementKeyTarget>),
+}
+
+impl Serialize for ReplacementKey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        use byteorder::WriteBytesExt;
+
+        match self {
+            ReplacementKey::Forward(target) => {
+                // Forward reference
+                writer.write_u8(0x00)?;
+
+                target.to_writer(writer)?;
+            }
+            ReplacementKey::Backward(targets) => {
+                // Backward reference
+                writer.write_u8(0x01)?;
+
+                for target in targets {
+                    target.to_writer(writer)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        unimplemented!()
+    }
 }
 
 #[cfg(test)]
