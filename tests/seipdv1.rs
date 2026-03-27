@@ -1,22 +1,23 @@
 use std::io::Read;
 
 use pgp::{
-    composed::{Edata, Message, MessageBuilder, PlainSessionKey, RawSessionKey},
+    composed::{Edata, Message, MessageBuilder, PlainSessionKey, RawSessionKey, TheRing},
     crypto::sym::SymmetricKeyAlgorithm,
     packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
+    types::Seipdv1ReadMode,
 };
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use snafu::AsErrorSource;
 
 const SYM_ALG: SymmetricKeyAlgorithm = SymmetricKeyAlgorithm::AES256;
 
-fn make_seipdv1_msg<RAND>(mut rng: RAND) -> Vec<u8>
+fn make_seipdv1_msg<RAND>(mut rng: RAND, len: usize) -> (Vec<u8>, RawSessionKey)
 where
     RAND: CryptoRng + Rng,
 {
-    let input_data = b"hello world".repeat(1024);
+    let input_data: Vec<u8> = b"hello world".iter().cycle().cloned().take(len).collect();
 
     eprintln!("input len: {}", input_data.len());
 
@@ -27,14 +28,14 @@ where
 
     let mut builder =
         MessageBuilder::from_bytes("plaintext.txt", input_data).seipd_v1(&mut rng, SYM_ALG);
-    builder.set_session_key(raw).expect("ok");
+    builder.set_session_key(raw.clone()).expect("ok");
 
     let mut encrypted_data = Vec::new();
     builder
         .to_writer(&mut rng, &mut encrypted_data)
         .expect("ok");
 
-    encrypted_data
+    (encrypted_data, raw)
 }
 
 fn random_session_key<RAND>(mut rng: RAND) -> RawSessionKey
@@ -53,7 +54,7 @@ pub fn mdc_test_fast() {
     pretty_env_logger::try_init().ok();
 
     let mut rng = ChaCha8Rng::seed_from_u64(1);
-    let encrypted_data = make_seipdv1_msg(&mut rng);
+    let (encrypted_data, _) = make_seipdv1_msg(&mut rng, 11264);
 
     let bad_key: RawSessionKey = vec![
         0x1c, 0xab, 0x4b, 0x64, 0x2c, 0x12, 0xec, 0x86, 0x7b, 0x1f, 0xd9, 0x1b, 0x6c, 0x0f, 0x69,
@@ -86,7 +87,7 @@ pub fn mdc_test_fast_2() {
     pretty_env_logger::try_init().ok();
 
     let mut rng = ChaCha8Rng::seed_from_u64(1);
-    let encrypted_data = make_seipdv1_msg(&mut rng);
+    let (encrypted_data, _) = make_seipdv1_msg(&mut rng, 11264);
 
     let bad_key: RawSessionKey = vec![
         0xcb, 0x3e, 0x1c, 0x71, 0x7d, 0xd2, 0xd6, 0x71, 0xf6, 0x36, 0x2f, 0x77, 0xbc, 0xab, 0x93,
@@ -121,7 +122,7 @@ pub fn mdc_test() {
 
     let encrypted_data: &[u8] = &{
         let mut rng = ChaCha8Rng::seed_from_u64(1);
-        make_seipdv1_msg(&mut rng)
+        make_seipdv1_msg(&mut rng, 11264).0
     };
 
     let total_iterations: u64 = 2_500_000;
@@ -191,7 +192,7 @@ pub fn seipdv1_test_error_uniformity() {
     let mut rng = ChaCha8Rng::seed_from_u64(0);
 
     // Produce an encrypted message, once
-    let encrypted_data = make_seipdv1_msg(&mut rng);
+    let (encrypted_data, _) = make_seipdv1_msg(&mut rng, 11264);
 
     // Attempt decryption with a series of (wrong) session keys and observe the resulting errors
     for _ in 0..10_000 {
@@ -252,6 +253,104 @@ pub fn seipdv1_test_error_uniformity() {
                     "Unexpected error '{s}'"
                 );
             }
+        }
+    }
+}
+
+/// Decrypt SEIPDv1 EData in streaming mode.
+///
+/// The message is sized a bit over 3x 8192 buffering blocks.
+///
+/// Context for message size:
+/// There are three layers of buffering readers at play (that are relevant for this scenario):
+//
+/// - the SEIPDv1 decryptor (StreamDecryptorInner)
+/// - a PacketBodyReader that processes the decrypted stream that comes out of the SEIPD packet
+/// - a LiteralDataReader that will yield decrypted data via `Message::read` on the decrypted
+///   message.
+///
+/// Each of these layers wants to fill its 8192 bytes of buffer. And the outermost of the three
+/// (the StreamDecryptorInner) will check the MDC if it's reached by the time the two inner
+/// readers have filled their respective 8192 byte buffers.
+///
+/// So in streaming mode, the first unauthenticated byte of plaintext is only released after
+/// ~24 kbyte have been read, and only if the MDC hasn't been reached within that amount of data.
+///
+///
+/// NOTE: The assumptions in this test are tied to internal details of the current implementation.
+/// If the implementation of streaming decryption changes (e.g. the buffer sizes), then this test
+/// may fail, and need to be adjusted.
+#[test]
+pub fn seipdv1_modes() {
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    // Produce an encrypted message.
+    //
+    // The size is calibrated to allow reading the first part of a corrupted message in streaming
+    // mode, without triggering the MDC check.
+    //
+    // We corrupt the end of the message, so the streaming decryption mode shouldn't run into
+    // issues where the parser for the decrypted inner message encounters invalid decrypted data.
+    // (The parser should consider the decrypted data part of the literal packet, and accept it).
+    //
+    // Streaming decryption in rpgp currently requires a literal payload of at least 24498 in order
+    // to be able to read the first byte/block. (For shorter messages, the MDC is encountered and
+    // checked before releasing any plaintext, even in streaming mode.)
+    let (encrypted_data, raw) = make_seipdv1_msg(&mut rng, 24500);
+
+    let sk = PlainSessionKey::V3_4 {
+        key: raw.clone(),
+        sym_alg: SYM_ALG,
+    };
+
+    // corrupt message (overwrite the last 8000 bytes of the encrypted message)
+    let mut corrupted_encrypted = encrypted_data.clone();
+    let pos = corrupted_encrypted.len() - 8000;
+    rng.fill_bytes(&mut corrupted_encrypted[pos..]);
+
+    // -- test with default check-first seipdv1 decryption --
+    let encrypted = Message::from_bytes(&*corrupted_encrypted).expect("ok");
+
+    let res = encrypted.decrypt_with_session_key(sk.clone());
+
+    // in the default decryption mode, we expect an immediate MDC error
+    assert_eq!(
+        res.err().unwrap().to_string(),
+        "IO error: Modification Detection Code error"
+    );
+
+    // -- test with streaming seipdv1 decryption --
+    let encrypted = Message::from_bytes(&*corrupted_encrypted).expect("ok");
+
+    let mut ring = TheRing::default();
+    ring.session_keys.push(sk.clone());
+
+    ring.decrypt_options = ring
+        .decrypt_options
+        .set_seipdv1_read_mode(Seipdv1ReadMode::Streaming);
+
+    let res = encrypted.decrypt_the_ring(ring, false);
+
+    match res {
+        Ok((mut decrypted, _)) => {
+            // in streaming mode, reading the first 8192 byte block shouldn't trigger the MDC check
+            let mut out = [0; 8192];
+            let res = decrypted.read(&mut out);
+
+            assert!(matches!(res, Ok(8192)));
+
+            // reading from the second 8192 byte block should trigger the MDC check
+            // (based on the message length and buffer sizes in rpgp)
+            let res = decrypted.read(&mut out);
+
+            assert_eq!(
+                res.err().unwrap().to_string(),
+                "Modification Detection Code error"
+            );
+        }
+
+        Err(_) => {
+            panic!("unexpected decryption error");
         }
     }
 }
