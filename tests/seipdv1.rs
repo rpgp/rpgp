@@ -1,7 +1,9 @@
 use std::io::Read;
 
 use pgp::{
-    composed::{Edata, Message, MessageBuilder, PlainSessionKey, RawSessionKey, TheRing},
+    composed::{
+        DecryptionOptions, Edata, Message, MessageBuilder, PlainSessionKey, RawSessionKey, TheRing,
+    },
     crypto::sym::SymmetricKeyAlgorithm,
     packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
     types::Seipdv1ReadMode,
@@ -319,38 +321,48 @@ pub fn seipdv1_modes() {
         "IO error: Modification Detection Code error"
     );
 
+    // -- test with check-first seipdv1 decryption, and insufficient size limit --
+    let encrypted = Message::from_bytes(&*corrupted_encrypted).expect("ok");
+
+    let ring = TheRing {
+        decrypt_options: DecryptionOptions::new().set_seipdv1_read_mode(
+            Seipdv1ReadMode::CheckFirst {
+                max_message_size: 20_000,
+            },
+        ),
+        session_keys: vec![sk.clone()],
+        ..Default::default()
+    };
+
+    let res = encrypted.decrypt_the_ring(ring, false);
+    assert_eq!(
+        res.err().unwrap().to_string(),
+        "IO error: Input stream too long for ProtectedCheckFirst mode"
+    );
+
     // -- test with streaming seipdv1 decryption --
     let encrypted = Message::from_bytes(&*corrupted_encrypted).expect("ok");
 
-    let mut ring = TheRing::default();
-    ring.session_keys.push(sk.clone());
+    let ring = TheRing {
+        decrypt_options: DecryptionOptions::new().set_seipdv1_read_mode(Seipdv1ReadMode::Streaming),
+        session_keys: vec![sk.clone()],
+        ..Default::default()
+    };
 
-    ring.decrypt_options = ring
-        .decrypt_options
-        .set_seipdv1_read_mode(Seipdv1ReadMode::Streaming);
+    let (mut decrypted, _) = encrypted.decrypt_the_ring(ring, false).expect("decrypt");
 
-    let res = encrypted.decrypt_the_ring(ring, false);
+    // in streaming mode, reading the first 8192 byte block shouldn't trigger the MDC check
+    let mut out = [0; 8192];
+    let res = decrypted.read(&mut out);
 
-    match res {
-        Ok((mut decrypted, _)) => {
-            // in streaming mode, reading the first 8192 byte block shouldn't trigger the MDC check
-            let mut out = [0; 8192];
-            let res = decrypted.read(&mut out);
+    assert!(matches!(res, Ok(8192)));
 
-            assert!(matches!(res, Ok(8192)));
+    // reading from the second 8192 byte block should trigger the MDC check
+    // (based on the message length and buffer sizes in rpgp)
+    let res = decrypted.read(&mut out);
 
-            // reading from the second 8192 byte block should trigger the MDC check
-            // (based on the message length and buffer sizes in rpgp)
-            let res = decrypted.read(&mut out);
-
-            assert_eq!(
-                res.err().unwrap().to_string(),
-                "Modification Detection Code error"
-            );
-        }
-
-        Err(_) => {
-            panic!("unexpected decryption error");
-        }
-    }
+    assert_eq!(
+        res.err().unwrap().to_string(),
+        "Modification Detection Code error"
+    );
 }
