@@ -56,10 +56,11 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
         })
     }
 
+    /// `seipdv1_read_mode` only applies if the encrypted data is seipdv1
     pub fn decrypt(
         &mut self,
         session_key: &PlainSessionKey,
-        seipdv1_read_mode: Seipdv1ReadMode, // only applies for seipdv1
+        seipdv1_read_mode: Seipdv1ReadMode,
     ) -> Result<()> {
         ensure!(
             matches!(self.source, Source::Init(_)),
