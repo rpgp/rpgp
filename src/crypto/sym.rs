@@ -825,7 +825,7 @@ mod tests {
                 const MAX_SIZE: usize = 2048;
 
                 // Protected
-                for i in 1..MAX_SIZE {
+                for i in (1..MAX_SIZE).chain([10_000, 100_000, 1_000_000]) {
                     info!("Size {}", i);
                     let mut data = vec![0u8; i];
                     data_rng.fill(&mut data[..]);
@@ -869,7 +869,7 @@ mod tests {
                         let mut decryptor = $alg
                             .stream_decryptor_protected(
                                 Seipdv1ReadMode::CheckFirst {
-                                    max_message_size: 1_000_000,
+                                    max_message_size: 2_000_000,
                                 },
                                 &key,
                                 &mut input,
