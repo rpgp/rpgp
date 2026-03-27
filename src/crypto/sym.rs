@@ -1005,13 +1005,7 @@ mod tests {
         let now = Instant::now();
 
         let mut decryptor = SymmetricKeyAlgorithm::AES256
-            .stream_decryptor_protected(
-                Seipdv1ReadMode::CheckFirst {
-                    max_message_size: 100_000_000,
-                },
-                &key,
-                &output[..],
-            )
+            .stream_decryptor_protected(Seipdv1ReadMode::default(), &key, &output[..])
             .unwrap();
         let mut res = Vec::with_capacity(SIZE);
         decryptor.read_to_end(&mut res).unwrap();
