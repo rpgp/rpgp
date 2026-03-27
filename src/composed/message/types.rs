@@ -646,10 +646,10 @@ impl<'a> Edata<'a> {
     /// Decrypts only SEIPD (v1 or v2) packets.
     ///
     /// Throws errors if any other encryption containers are encountered in the message
-    /// (also see [Self::decrypt_permissive])
+    /// (also see [Self::decrypt_with_options])
     pub fn decrypt(&mut self, key: &PlainSessionKey) -> Result<()> {
         debug!("Edata::decrypt");
-        self.decrypt_permissive(key, DecryptionOptions::default())
+        self.decrypt_with_options(key, DecryptionOptions::default())
     }
 
     /// Decrypt encryption packets, including (optionally) non-standard ones.
@@ -660,7 +660,7 @@ impl<'a> Edata<'a> {
     ///
     /// HAZMAT: Depending on the `options` settings, this decrypts malleable SED packets.
     /// Also see <https://www.rfc-editor.org/rfc/rfc9580.html#name-avoiding-ciphertext-malleab>
-    pub fn decrypt_permissive(
+    pub fn decrypt_with_options(
         &mut self,
         key: &PlainSessionKey,
         options: DecryptionOptions,
@@ -916,9 +916,7 @@ impl<'a> Message<'a> {
                     return Err(Error::MissingKey);
                 };
 
-                // Note: `decrypt_permissive` is a partial misnomer now, this fn is just a flexible
-                // way to cause decryption, including with a non-standard seipdv1 read mode.
-                edata.decrypt_permissive(&session_key, decrypt_options)?;
+                edata.decrypt_with_options(&session_key, decrypt_options)?;
 
                 let message = Message::from_edata(edata, is_nested)?;
                 Ok((message, result))
