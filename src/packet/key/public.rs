@@ -114,6 +114,9 @@ impl PublicKey {
     /// True, if this key packet is a forwardee key as defined in draft-wussler-openpgp-forwarding
     ///
     /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke>
+    ///
+    /// NOTE: A primary key packet can not currently ever be a forwardee key.
+    /// (This function is only available on this type to facilitate abstractions that handle both `PublicKey` and `PublicSubkey`.)
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     pub fn is_forwardee_key(&self) -> bool {
         self.inner.is_forwardee_key()
@@ -238,6 +241,11 @@ impl PublicSubkey {
     /// True, if this key packet is a forwardee key as defined in draft-wussler-openpgp-forwarding
     ///
     /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke>
+    ///
+    /// NOTE: this function can only check forwardee properties that exist on a key packet.
+    /// However, in composed TPKs (transferable public key), draft-wussler-openpgp-forwarding
+    /// additionally mandates the presence of key flags (see the link above) on binding self-signatures.
+    /// Applications that deal with forwardee keys need to check these key flags separately!
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     pub fn is_forwardee_key(&self) -> bool {
         self.inner.is_forwardee_key()

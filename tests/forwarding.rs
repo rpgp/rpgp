@@ -215,7 +215,7 @@ fn forward_end_to_end() {
 
     let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-    // # Generate keys for recipient and forwarder
+    // # Generate keys for recipient and forwardee
 
     // ## Robert, the recipient
     let robert_params = SecretKeyParamsBuilder::default()
