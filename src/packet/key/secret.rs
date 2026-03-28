@@ -215,7 +215,14 @@ impl SecretSubkey {
         &self.details
     }
 
-    /// Given recipient and forwardee encryption subkeys, compute proxy transformation parameter.
+    /// Given recipient (aka forwarder) and forwardee encryption subkeys, compute proxy transformation parameter.
+    ///
+    /// Note that <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-generating-the-forwardee-ke>
+    /// gives extensive guidance on key generation for forwarding setups.
+    /// Users of this function should ensure that their generation of forwarding setups conforms to this guidance.
+    ///
+    /// Caution: The proxy parameter is a sensitive secret, it must be handled securely!
+    /// Also see <https://datatracker.ietf.org/doc/html/draft-wussler-openpgp-forwarding#name-computing-the-proxy-paramet>
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     pub fn generate_proxy_parameter(
         &self,
@@ -231,7 +238,10 @@ impl SecretSubkey {
                         match unlocked_forwardee {
                             PlainSecretParams::ECDH(
                                 crate::crypto::ecdh::SecretKey::Curve25519Legacy(f),
-                            ) => Self::compute_proxy_parameter(r.to_bytes_rev(), f.to_bytes_rev()),
+                            ) => Self::compute_proxy_parameter(
+                                zeroize::Zeroizing::new(r.to_bytes_rev()),
+                                zeroize::Zeroizing::new(f.to_bytes_rev()),
+                            ),
                             _ => bail!("Only ECDH/Curve 25519 forwardee keys are supported"),
                         }
                     })?
@@ -241,23 +251,25 @@ impl SecretSubkey {
         )?
     }
 
-    /// Given the recipient and forwardee private key integers, compute the proxy transformation parameter.
+    /// Given the recipient (aka forwarder) and forwardee private key integers `db` and `dc` (in big endian form),
+    /// compute the proxy transformation parameter.
     ///
     /// See <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-computing-the-proxy-paramet>
     ///
-    /// Implements ComputeProxyParameter( dB, dC );
+    /// This implements ComputeProxyParameter( dB, dC );
     ///
     /// Input:
     /// dB - the recipient's private key integer
     /// dC - the forwardee's private key integer
-    /// n - the size of the field of Curve25519
     ///
     /// Output:
     /// k = dB/dC mod n
+    ///
+    /// (where n is the size of the field of Curve25519)
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
     fn compute_proxy_parameter(
-        mut db: [u8; 32],
-        mut dc: [u8; 32],
+        mut db: zeroize::Zeroizing<[u8; 32]>,
+        mut dc: zeroize::Zeroizing<[u8; 32]>,
     ) -> Result<crate::types::ForwardingProxyParameter> {
         use elliptic_curve::subtle::ConstantTimeEq;
         use zeroize::Zeroizing;
@@ -267,10 +279,10 @@ impl SecretSubkey {
         dc.reverse();
 
         let recipient = Zeroizing::new(curve25519_dalek::Scalar::from_bytes_mod_order(
-            curve25519_dalek::scalar::clamp_integer(db),
+            *Zeroizing::new(curve25519_dalek::scalar::clamp_integer(*db)),
         ));
         let forwardee = Zeroizing::new(curve25519_dalek::Scalar::from_bytes_mod_order(
-            curve25519_dalek::scalar::clamp_integer(dc),
+            *Zeroizing::new(curve25519_dalek::scalar::clamp_integer(*dc)),
         ));
 
         // ensure forwardee is not zero (precondition for calling `invert`)
@@ -281,7 +293,7 @@ impl SecretSubkey {
         let forwardee_inverted = Zeroizing::new(forwardee.invert());
 
         // k is implicitly reduced to the group order
-        let k = (*recipient) * (*forwardee_inverted);
+        let k = Zeroizing::new((*recipient) * (*forwardee_inverted));
 
         Ok(k.to_bytes().into())
     }
@@ -838,8 +850,8 @@ mod tests {
                 .expect("decode");
 
         let k = crate::packet::SecretSubkey::compute_proxy_parameter(
-            rec_integer.try_into().unwrap(),
-            forw_integer.try_into().unwrap(),
+            zeroize::Zeroizing::new(rec_integer.try_into().unwrap()),
+            zeroize::Zeroizing::new(forw_integer.try_into().unwrap()),
         )
         .expect("compute_proxy_parameter");
 

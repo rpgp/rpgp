@@ -371,7 +371,7 @@ impl PublicKeyEncryptedSessionKey {
 
         *public_point = Mpi::from_slice(&forwarded_point);
 
-        // Replace recipient Key ID in Pkesk
+        // Replace recipient (aka forwarder) Key ID in Pkesk
         let id = if id == &KeyId::WILDCARD {
             KeyId::WILDCARD
         } else {
