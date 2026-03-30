@@ -1,3 +1,8 @@
+//! Decryption for SEIPDv1 encrypted data packets and SED legacy encrypted data packets.
+//!
+//! See <https://www.rfc-editor.org/rfc/rfc9580#name-version-1-symmetrically-enc>
+//! and <https://www.rfc-editor.org/rfc/rfc9580#name-symmetrically-encrypted-dat>
+
 use std::io::{self, BufRead, Read};
 
 use aes::{Aes128, Aes192, Aes256};
@@ -11,12 +16,15 @@ use des::TdesEde3;
 use idea::Idea;
 use log::debug;
 use sha1::{Digest, Sha1};
+use subtle::ConstantTimeEq;
 use twofish::Twofish;
 use zeroize::Zeroizing;
 
 use crate::{
     crypto::sym::SymmetricKeyAlgorithm,
-    errors::{bail, Result},
+    errors::{bail, Error, Result},
+    parsing_reader::BufReadParsing,
+    types::Seipdv1ReadMode,
     util::{fill_buffer, fill_buffer_bytes},
 };
 
@@ -122,6 +130,7 @@ where
     pub fn new(
         alg: SymmetricKeyAlgorithm,
         protected: bool,
+        seipdv1_read_mode: Seipdv1ReadMode,
         key: &[u8],
         ciphertext: R,
     ) -> Result<Self> {
@@ -130,37 +139,43 @@ where
                 bail!("'Plaintext' is not a legal cipher for encrypted data")
             }
             SymmetricKeyAlgorithm::IDEA => Ok(StreamDecryptor::Idea(StreamDecryptorInner::new(
-                protected, ciphertext, key,
+                protected,
+                seipdv1_read_mode,
+                ciphertext,
+                key,
             )?)),
             SymmetricKeyAlgorithm::TripleDES => Ok(StreamDecryptor::TripleDes(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::CAST5 => Ok(StreamDecryptor::Cast5(StreamDecryptorInner::new(
-                protected, ciphertext, key,
+                protected,
+                seipdv1_read_mode,
+                ciphertext,
+                key,
             )?)),
             SymmetricKeyAlgorithm::Blowfish => Ok(StreamDecryptor::Blowfish(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::AES128 => Ok(StreamDecryptor::Aes128(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::AES192 => Ok(StreamDecryptor::Aes192(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::AES256 => Ok(StreamDecryptor::Aes256(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::Twofish => Ok(StreamDecryptor::Twofish(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::Camellia128 => Ok(StreamDecryptor::Camellia128(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::Camellia192 => Ok(StreamDecryptor::Camellia192(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::Camellia256 => Ok(StreamDecryptor::Camellia256(
-                StreamDecryptorInner::new(protected, ciphertext, key)?,
+                StreamDecryptorInner::new(protected, seipdv1_read_mode, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
                 bail!("SymmetricKeyAlgorithm {} is unsupported", u8::from(alg))
@@ -220,8 +235,15 @@ where
 #[derive(derive_more::Debug)]
 pub enum MaybeProtected {
     Protected {
-        // We use regular sha1 for MDC, not sha1_checked. Collisions are not currently a concern with MDC.
+        /// We use regular sha1 for MDC, not sha1_checked.
+        /// Collisions are not currently a concern with MDC.
         hasher: Sha1,
+
+        /// The read mode for seipdv1 encrypted data.
+        ///
+        /// By default, the data packet is read in one go, so that plaintext is only released
+        /// after the MDC has been checked.
+        mode: Seipdv1ReadMode,
     },
     Unprotected {
         key: Zeroizing<Vec<u8>>,
@@ -229,11 +251,46 @@ pub enum MaybeProtected {
 }
 
 impl MaybeProtected {
-    fn is_protected(&self) -> bool {
-        matches!(self, Self::Protected { .. })
+    fn is_seipdv1_streaming(&self) -> bool {
+        matches!(
+            self,
+            MaybeProtected::Protected {
+                mode: Seipdv1ReadMode::Streaming,
+                ..
+            }
+        )
+    }
+
+    fn is_sed(&self) -> bool {
+        matches!(self, MaybeProtected::Unprotected { .. })
     }
 }
 
+/// State machine that reads from the encrypted input stream and performs decryption.
+///
+///
+/// StreamDecryptorInner support three modes of operation:
+/// - SEIPDv1 packets are read in "check first" mode by default (`Seipdv1ReadMode::CheckFirst`).
+///   This mode only ever releases plaintext after the MDC check.
+/// - SEIPDv1 packets can be read in "streaming" mode (`Seipdv1ReadMode::Streaming`).
+///   This may release unauthenticated plaintext before the MDC check.
+/// - SED packets are always read in streaming mode (`Unprotected`).
+///
+/// The state models which part of the input stream is currently being read:
+///
+/// - In the `Prefix` state, the block-size sized random octets plus two repeated octets are read
+///   for SEIPDv1 (or the "random prefix" for SED).
+/// - In the `Data` state, the encrypted plaintext is read from the input stream.
+/// - In the `Done` state, the input stream has been fully processed.
+///   For SEIPDv1 packets, in this state, the MDC has also been read and checked.
+///
+/// The decrypted plaintext can be obtained by a caller when reading from this object via
+/// `std::io::Read`.
+/// This happens only in the `Done` state for non-streaming SEIPDv1 mode.
+/// In streaming modes, reading can happen in both the `Data` and `Done` states.
+///
+/// If any decrypted plaintext is currently available, it is stored in `buffer`, and can be
+/// consumed by the reader from there.
 #[derive(derive_more::Debug)]
 pub enum StreamDecryptorInner<M, R>
 where
@@ -271,7 +328,12 @@ where
     BufDecryptor<M>: KeyIvInit,
     R: BufRead,
 {
-    fn new(protected: bool, source: R, key: &[u8]) -> Result<Self> {
+    fn new(
+        protected: bool,
+        seipdv1_read_mode: Seipdv1ReadMode,
+        source: R,
+        key: &[u8],
+    ) -> Result<Self> {
         debug!("protected decrypt stream");
 
         let bs = <M as BlockSizeUser>::block_size();
@@ -285,7 +347,10 @@ where
         let protected = if protected {
             // checksum over unencrypted data
             let hasher = Sha1::default();
-            MaybeProtected::Protected { hasher }
+            MaybeProtected::Protected {
+                hasher,
+                mode: seipdv1_read_mode,
+            }
         } else {
             MaybeProtected::Unprotected {
                 key: key.to_vec().into(),
@@ -328,161 +393,198 @@ where
     }
 
     fn fill_inner(&mut self) -> io::Result<()> {
-        loop {
-            let (needs_replacing, should_return) = match self {
-                Self::Prefix { .. } => (true, false),
-                Self::Data {
-                    data_available,
+        if matches!(self, Self::Prefix { .. }) {
+            self.advance_prefix()?;
+        }
+        match self {
+            Self::Prefix { .. } => unreachable!("advance_prefix must transition away from Prefix"),
+            Self::Data { .. } => match self.fill_data() {
+                Ok(is_last_read) => {
+                    if is_last_read {
+                        self.finalize_data()?;
+                    }
+                }
+                Err(e) => {
+                    *self = Self::Error;
+                    return Err(e);
+                }
+            },
+            Self::Done { .. } => {}
+            Self::Error => return Err(io::Error::other("decryptor is in error state")),
+        }
+        Ok(())
+    }
+
+    /// Reads and decrypts the CFB prefix, then transitions to the `Data` state.
+    fn advance_prefix(&mut self) -> io::Result<()> {
+        match std::mem::replace(self, Self::Error) {
+            Self::Prefix {
+                mut decryptor,
+                mut prefix,
+                mut source,
+                mut protected,
+            } => {
+                let bs = <M as BlockSizeUser>::block_size();
+
+                let read = fill_buffer(&mut source, &mut prefix, Some(bs + 2))?;
+                if read < bs + 2 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        "missing quick check",
+                    ));
+                }
+
+                match protected {
+                    MaybeProtected::Unprotected { ref key } => {
+                        // legacy resyncing
+                        let encrypted_prefix = prefix[2..].to_vec();
+                        decryptor.decrypt(&mut prefix);
+                        decryptor = BufDecryptor::<M>::new_from_slices(key, &encrypted_prefix)
+                            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+                    }
+                    MaybeProtected::Protected { ref mut hasher, .. } => {
+                        decryptor.decrypt(&mut prefix);
+                        hasher.update(&prefix);
+                    }
+                }
+
+                *self = Self::Data {
+                    data_available: 0,
                     decryptor,
-                    buffer,
+                    buffer: BytesMut::with_capacity(BUFFER_SIZE),
                     source,
                     protected,
-                } => {
-                    // need to keep at least a full mdc len in the buffer, to make sure we process
-                    // that at the end, and to return it
+                };
+                Ok(())
+            }
+            _ => unreachable!("advance_prefix called in non-prefix state"),
+        }
+    }
 
-                    if protected.is_protected() && buffer.remaining() > MDC_LEN
-                        || !protected.is_protected() && buffer.has_remaining()
-                    {
-                        (false, true)
-                    } else {
-                        // fill buffer
-                        let current_len = buffer.remaining();
-                        let buf_size = BUFFER_SIZE;
-                        let to_read = buf_size - current_len;
-                        let read = fill_buffer_bytes(source, buffer, buf_size)?;
-                        let is_last_read = read < to_read;
-                        decryptor.decrypt(&mut buffer[current_len..]);
+    /// Fills the buffer with the next chunk of decrypted data.
+    ///
+    /// Returns `true` if the source is exhausted (last read).
+    fn fill_data(&mut self) -> io::Result<bool> {
+        let Self::Data {
+            data_available,
+            decryptor,
+            buffer,
+            source,
+            protected,
+        } = self
+        else {
+            unreachable!("fill_data called in non-data state")
+        };
 
-                        match protected {
-                            MaybeProtected::Protected { .. } if is_last_read => (true, true),
-                            MaybeProtected::Protected { ref mut hasher } => {
-                                let start = *data_available;
-                                debug_assert!(buffer.len() >= MDC_LEN);
-                                let end = buffer.len() - MDC_LEN;
-                                if start < end {
-                                    hasher.update(&buffer[start..end]);
-                                    *data_available += end - start;
-                                }
+        // In streaming modes, if we still have any buffered data to return, don't read more now.
+        // (For `Seipdv1Streaming`, keep at least MDC_LEN bytes back for the MDC check at the end)
+        if (protected.is_seipdv1_streaming() && buffer.remaining() > MDC_LEN)
+            || (protected.is_sed() && buffer.has_remaining())
+        {
+            return Ok(false);
+        }
 
-                                (false, true)
-                            }
-                            MaybeProtected::Unprotected { .. } => {
-                                if is_last_read {
-                                    (true, true)
-                                } else {
-                                    let start = *data_available;
-                                    let end = buffer.len();
+        let current_len = buffer.remaining();
 
-                                    if start < end {
-                                        *data_available += end - start;
-                                    }
-                                    (false, true)
-                                }
-                            }
-                        }
+        let is_last_read = match protected {
+            MaybeProtected::Protected {
+                mode: Seipdv1ReadMode::CheckFirst { max_message_size },
+                ..
+            } => {
+                // Non-Streaming decryption: Read the entire input stream in one go.
+
+                // Note: BytesMut grows as needed to hold all the data.
+                let read = fill_buffer_bytes(&mut *source, buffer, *max_message_size)?;
+
+                if read == *max_message_size {
+                    // If the source yields more data, the message exceeds the supported size
+                    // and we error out
+                    if source.read_u8().is_ok() {
+                        return Err(io::Error::other(
+                            "Input stream too long for ProtectedCheckFirst mode",
+                        ));
                     }
                 }
-                Self::Done { .. } => (false, true),
-                Self::Error => panic!("error state"),
-            };
 
-            if needs_replacing {
-                match std::mem::replace(self, Self::Error) {
-                    Self::Prefix {
-                        decryptor: mut encryptor,
-                        mut prefix,
-                        mut source,
-                        mut protected,
-                    } => {
-                        let bs = <M as BlockSizeUser>::block_size();
+                true
+            }
 
-                        // reading the prefix
-                        let read = fill_buffer(&mut source, &mut prefix, Some(bs + 2))?;
-                        if read < bs + 2 {
-                            return Err(io::Error::new(
-                                io::ErrorKind::UnexpectedEof,
-                                "missing quick check",
-                            ));
-                        }
+            _ => {
+                // Streaming decryption: read until `buffer` contains BUFFER_SIZE bytes
+                let buf_size = BUFFER_SIZE;
+                let to_read = buf_size - current_len;
+                let read = fill_buffer_bytes(source, buffer, buf_size)?;
 
-                        match protected {
-                            MaybeProtected::Unprotected { ref key } => {
-                                // legacy resyncing
-                                let encrypted_prefix = prefix[2..].to_vec();
-                                encryptor.decrypt(&mut prefix);
-                                encryptor =
-                                    BufDecryptor::<M>::new_from_slices(key, &encrypted_prefix)
-                                        .map_err(|e| {
-                                            io::Error::new(io::ErrorKind::InvalidInput, e)
-                                        })?;
-                            }
-                            MaybeProtected::Protected { ref mut hasher } => {
-                                encryptor.decrypt(&mut prefix);
-                                hasher.update(&prefix);
-                            }
-                        }
+                read < to_read
+            }
+        };
 
-                        // We do not do use "quick check" here.
-                        // See the "Security Considerations" section
-                        // in <https://www.rfc-editor.org/rfc/rfc9580.html#name-risks-of-a-quick-check-orac>
-                        // and the paper <https://eprint.iacr.org/2005/033>
-                        // for details.
+        decryptor.decrypt(&mut buffer[current_len..]);
 
-                        *self = Self::Data {
-                            data_available: 0,
-                            decryptor: encryptor,
-                            buffer: BytesMut::with_capacity(BUFFER_SIZE),
-                            source,
-                            protected,
-                        };
-                        // continue to data
+        match protected {
+            MaybeProtected::Protected { ref mut hasher, .. } => {
+                // For any valid input, the buffer must contain at least MDC_LEN bytes here
+                if buffer.remaining() < MDC_LEN {
+                    return Err(io::Error::other(Error::MdcError));
+                }
+
+                let start = *data_available;
+                debug_assert!(buffer.len() >= MDC_LEN);
+                let end = buffer.len() - MDC_LEN;
+                if start < end {
+                    hasher.update(&buffer[start..end]);
+
+                    if !is_last_read {
+                        *data_available += end - start;
                     }
-                    Self::Data {
-                        mut buffer,
-                        source,
-                        protected,
-                        ..
-                    } => {
-                        if let MaybeProtected::Protected { mut hasher } = protected {
-                            // last read
-                            if buffer.remaining() < MDC_LEN {
-                                return Err(io::Error::new(
-                                    io::ErrorKind::UnexpectedEof,
-                                    "missing MDC",
-                                ));
-                            }
-
-                            // grab the MDC from the end
-                            // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
-                            let mdc = buffer.split_off(buffer.len() - MDC_LEN);
-
-                            hasher.update(&buffer);
-                            hasher.update(&mdc[..2]);
-
-                            let sha1: [u8; 20] = hasher.finalize().into();
-
-                            if mdc[0] != 0xD3 || // Invalid MDC tag
-                                mdc[1] != 0x14 || // Invalid MDC length
-                                mdc[2..] != sha1[..]
-                            {
-                                return Err(io::Error::new(
-                                    io::ErrorKind::InvalidInput,
-                                    "invalid MDC ",
-                                ));
-                            }
-                        }
-
-                        *self = Self::Done { buffer, source };
-                    }
-                    Self::Done { .. } => unreachable!("not changed"),
-                    Self::Error => panic!("error state"),
                 }
             }
-
-            if should_return {
-                return Ok(());
+            MaybeProtected::Unprotected { .. } => {
+                if !is_last_read {
+                    let start = *data_available;
+                    let end = buffer.len();
+                    if start < end {
+                        *data_available += end - start;
+                    }
+                }
             }
+        }
+
+        Ok(is_last_read)
+    }
+
+    /// Verifies the MDC and transitions from the `Data` state to `Done`.
+    fn finalize_data(&mut self) -> io::Result<()> {
+        match std::mem::replace(self, Self::Error) {
+            Self::Data {
+                mut buffer,
+                source,
+                protected,
+                ..
+            } => {
+                if let MaybeProtected::Protected { mut hasher, .. } = protected {
+                    // Check the validity of the MDC in the message
+
+                    // The MDC as found in the message.
+                    // MDC is: 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
+                    let msg_mdc = buffer.split_off(buffer.len() - MDC_LEN);
+
+                    hasher.update(&msg_mdc[..2]);
+                    let hash: [u8; 20] = hasher.finalize().into();
+
+                    // Constant-time comparison of MDC from message against expected values
+                    let mdc_ok = msg_mdc[0].ct_eq(&0xD3) // MDC tag
+                        & msg_mdc[1].ct_eq(&0x14) // MDC length
+                        & msg_mdc[2..].ct_eq(hash.as_slice());
+                    if bool::from(!mdc_ok) {
+                        return Err(io::Error::other(Error::MdcError));
+                    }
+                }
+
+                *self = Self::Done { buffer, source };
+                Ok(())
+            }
+            _ => unreachable!("finalize_data called in non-Data state"),
         }
     }
 }
