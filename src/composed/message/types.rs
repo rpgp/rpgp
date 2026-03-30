@@ -18,8 +18,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        DecryptionKey, EskType, KeyDetails, Password, PkeskVersion, SecretParams, SkeskVersion,
-        Tag, VerifyingKey,
+        DecryptionKey, EskType, KeyDetails, Password, PkeskBytes, PkeskVersion, SkeskVersion, Tag,
+        VerifyingKey,
     },
     util::impl_try_from_into,
 };
@@ -1101,7 +1101,7 @@ impl TheRing<'_> {
             }
         }
 
-        // Search ESKs
+        // Search ESKs, grouping them by type first
 
         let mut pkesks = Vec::new();
         let mut skesks = Vec::new();
@@ -1122,6 +1122,7 @@ impl TheRing<'_> {
             }
         }
 
+        // search asymmetrically encrypted esks
         let mut pkesk_session_keys = Vec::new();
 
         for esk in &pkesks {
@@ -1138,85 +1139,62 @@ impl TheRing<'_> {
                     }
                 };
 
-                macro_rules! try_key {
-                    ($skey:expr, $pkey:expr, $values:expr) => {
+                let values = esk.values()?;
 
-                        #[allow(unused_mut)]
-                        let mut forwardee_not_allowed_error = false;
-
-                        // Detect and reject forwardee keys if DecryptionOptions::draft_forwarding is unset
-                        #[cfg(feature = "draft-wussler-openpgp-forwarding")]
-                        if !self.decrypt_options.draft_forwarding && $pkey.is_forwardee_key() {
-                            forwardee_not_allowed_error = true;
-                        }
-
-                        if forwardee_not_allowed_error {
-                            debug!("draft_forwarding unset in DecryptionOptions, not trying forwardee key: {:?}", $pkey.fingerprint());
-                            result.secret_keys[i] = InnerRingResult::Invalid;
-                        } else {
-                            debug!(
-                                "found matching key {:?}, trying to decrypt",
-                                $skey.fingerprint()
-                            );
-                            match $skey.secret_params() {
-                                SecretParams::Encrypted(_) => {
-                                    // unlock
-                                    for pw in &self.key_passwords {
-                                        match $skey.decrypt(pw, $values, typ) {
-                                            Ok(Ok(session_key)) => {
-                                                debug!("decrypted session key");
-                                                result.secret_keys[i] = InnerRingResult::Ok;
-                                                pkesk_session_keys.push((i, session_key));
-                                                break;
-                                            }
-                                            Ok(Err(err)) => {
-                                                debug!("failed to decrypt session key: {:?}", err);
-                                                result.secret_keys[i] = InnerRingResult::Invalid;
-                                                break;
-                                            }
-                                            Err(err) => {
-                                                debug!("failed to unlock key: {:?}", err);
-                                                result.secret_keys[i] =
-                                                    InnerRingResult::InvalidPassword;
-                                            }
-                                        }
-                                    }
-                                }
-                                SecretParams::Plain(sec_params) => {
-                                    // already unlocked
-                                    debug!("key is already unlocked");
-                                    match sec_params.decrypt($pkey.public_params(), $values, typ, $pkey)
-                                    {
-                                        Ok(session_key) => {
-                                            result.secret_keys[i] = InnerRingResult::Ok;
-                                            pkesk_session_keys.push((i, session_key));
-                                        }
-                                        Err(err) => {
-                                            debug!("failed to decrypt session key: {:?}", err);
-                                            result.secret_keys[i] = InnerRingResult::Invalid;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    };
-                }
-
-                // check primary key
+                // try primary key
                 debug!(
                     "checking primary key: {:?}",
                     key.primary_key.legacy_key_id()
                 );
                 if esk.match_identity(key.primary_key.public_key()) {
-                    let values = esk.values()?;
-                    try_key!(&key.primary_key, key.primary_key.public_key(), values);
+                    let (res, session_key) = self.try_decrypt(
+                        values,
+                        typ,
+                        &key.primary_key,
+                        key.primary_key.secret_params().is_encrypted(),
+                    );
+
+                    result.secret_keys[i] = res;
+
+                    if let Some(session_key) = session_key {
+                        pkesk_session_keys.push((i, session_key));
+                    }
                 }
-                // search subkeys
+
+                // try subkeys
                 for subkey in &key.secret_subkeys {
+                    // Once we have found a session key with `key`, stop considering more subkeys.
+                    // (This avoids potentially overwriting a good decryption result with failed ones.)
+                    if result.secret_keys[i] == InnerRingResult::Ok {
+                        break;
+                    }
+
                     debug!("checking subkey: {:?}", subkey.legacy_key_id());
-                    if esk.match_identity(&subkey.public_key()) {
-                        let values = esk.values()?;
-                        try_key!(&subkey.key, subkey.key.public_key(), values);
+                    if esk.match_identity(subkey.public_key()) {
+                        // Detect and reject forwardee keys if DecryptionOptions::draft_forwarding is unset
+                        // (only subkeys can currently be forwardee keys, because only subkeys can be decryption keys)
+                        #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+                        if !self.decrypt_options.draft_forwarding
+                            && subkey.key.public_key().is_forwardee_key()
+                        {
+                            debug!("draft_forwarding unset in DecryptionOptions, not trying forwardee key: {:?}",  subkey.key.public_key().fingerprint());
+
+                            result.secret_keys[i] = InnerRingResult::Invalid;
+                            continue; // go to next subkey
+                        }
+
+                        let (res, session_key) = self.try_decrypt(
+                            values,
+                            typ,
+                            &subkey.key,
+                            subkey.secret_params().is_encrypted(),
+                        );
+
+                        result.secret_keys[i] = res;
+
+                        if let Some(session_key) = session_key {
+                            pkesk_session_keys.push((i, session_key));
+                        }
                     }
                 }
             }
@@ -1319,6 +1297,61 @@ impl TheRing<'_> {
         }
 
         Ok((None, result))
+    }
+
+    /// Attempt to decrypt `values` with `dec`.
+    ///
+    /// If `is_locked` is true, try each key_passwords entry (until decryption succeeds).
+    fn try_decrypt(
+        &self,
+        values: &PkeskBytes,
+        typ: EskType,
+        dec: &dyn DecryptionKey,
+        is_locked: bool,
+    ) -> (InnerRingResult, Option<PlainSessionKey>) {
+        debug!(
+            "found matching key {:?}, trying to decrypt",
+            dec.fingerprint()
+        );
+        if is_locked {
+            let mut res = InnerRingResult::Unchecked;
+
+            // unlock
+            for pw in &self.key_passwords {
+                match dec.decrypt(pw, values, typ) {
+                    Ok(Ok(session_key)) => {
+                        debug!("decrypted session key");
+
+                        return (InnerRingResult::Ok, Some(session_key));
+                    }
+                    Ok(Err(err)) => {
+                        debug!("failed to decrypt session key: {:?}", err);
+
+                        return (InnerRingResult::Invalid, None);
+                    }
+                    Err(err) => {
+                        debug!("failed to unlock key: {:?}", err);
+                        res = InnerRingResult::InvalidPassword;
+                    }
+                }
+            }
+
+            (res, None)
+        } else {
+            // `dec` is not locked
+            debug!("key is already unlocked");
+            match dec.decrypt(&Password::empty(), values, typ) {
+                Ok(Ok(session_key)) => {
+                    debug!("decrypted session key");
+
+                    (InnerRingResult::Ok, Some(session_key))
+                }
+                Ok(Err(err)) | Err(err) => {
+                    debug!("failed to decrypt session key: {:?}", err);
+                    (InnerRingResult::Invalid, None)
+                }
+            }
+        }
     }
 }
 
