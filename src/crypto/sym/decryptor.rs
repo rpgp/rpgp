@@ -566,20 +566,17 @@ where
                     // Check the validity of the MDC in the message
 
                     // The MDC as found in the message.
-                    // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
+                    // MDC is: 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
                     let msg_mdc = buffer.split_off(buffer.len() - MDC_LEN);
 
                     hasher.update(&msg_mdc[..2]);
                     let hash: [u8; 20] = hasher.finalize().into();
 
-                    // The value for the MDC we expect.
-                    let mut expect_mdc = [0; 22];
-                    expect_mdc[0] = 0xD3; // MDC tag
-                    expect_mdc[1] = 0x14; // MDC length
-                    expect_mdc[2..].copy_from_slice(&hash);
-
-                    // constant-time comparison of expected MDC and MDC from message
-                    if expect_mdc.ct_ne(&msg_mdc).into() {
+                    // Constant-time comparison of MDC from message against expected values
+                    let mdc_ok = msg_mdc[0].ct_eq(&0xD3) // MDC tag
+                        & msg_mdc[1].ct_eq(&0x14) // MDC length
+                        & msg_mdc[2..].ct_eq(hash.as_slice());
+                    if bool::from(!mdc_ok) {
                         return Err(io::Error::other(Error::MdcError));
                     }
                 }
