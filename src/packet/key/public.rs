@@ -110,17 +110,6 @@ impl PublicKey {
             inner,
         })
     }
-
-    /// True, if this key packet is a forwardee key as defined in draft-wussler-openpgp-forwarding
-    ///
-    /// <https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke>
-    ///
-    /// NOTE: A primary key packet can not currently ever be a forwardee key.
-    /// (This function is only available on this type to facilitate abstractions that handle both `PublicKey` and `PublicSubkey`.)
-    #[cfg(feature = "draft-wussler-openpgp-forwarding")]
-    pub fn is_forwardee_key(&self) -> bool {
-        self.inner.is_forwardee_key()
-    }
 }
 
 impl EncryptionKey for PublicKey {
