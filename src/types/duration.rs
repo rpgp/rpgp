@@ -10,6 +10,8 @@ use crate::ser::Serialize;
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Default)]
 pub struct Duration(u32);
 
+const SECONDS_PER_DAY: u32 = 24 * 60 * 60;
+
 impl fmt::Debug for Duration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let time: std::time::Duration = (*self).into();
@@ -51,6 +53,11 @@ impl Duration {
     /// Creates a new [`Duration`] from seconds.
     pub fn from_secs(secs: u32) -> Self {
         Self(secs)
+    }
+
+    /// Creates a new [`Duration`] that represents a given number of days.
+    pub fn days(days: u32) -> Self {
+        Self(days * SECONDS_PER_DAY)
     }
 }
 
