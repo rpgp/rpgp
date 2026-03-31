@@ -1,11 +1,12 @@
 use std::{
     fmt,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    ops::Add,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use byteorder::BigEndian;
 
-use crate::ser::Serialize;
+use crate::{ser::Serialize, types::Duration};
 
 /// Timestamp that refers to a moment in time after the [`UNIX_EPOCH`].
 ///
@@ -22,7 +23,7 @@ impl fmt::Debug for Timestamp {
 
 impl From<Timestamp> for SystemTime {
     fn from(value: Timestamp) -> Self {
-        UNIX_EPOCH + Duration::from_secs(u64::from(value.0))
+        UNIX_EPOCH + std::time::Duration::from_secs(u64::from(value.0))
     }
 }
 
@@ -78,6 +79,13 @@ impl Serialize for Timestamp {
 
     fn write_len(&self) -> usize {
         4
+    }
+}
+
+impl Add<Duration> for Timestamp {
+    type Output = Timestamp;
+    fn add(self, d: Duration) -> Self::Output {
+        Timestamp::from_secs(self.as_secs() + d.as_secs())
     }
 }
 
