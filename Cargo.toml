@@ -74,7 +74,7 @@ p384 = { version = "0.13", features = ["ecdsa"] }
 p521 = { version = "0.13", features = ["ecdsa", "ecdh"] }
 k256 = { version = "0.13", features = ["ecdsa"] }
 rand = "0.8.5"
-ripemd = { version = "0.1.3", features = ["oid"] }
+ripemd = { version = "0.2.0", features = ["oid"] }
 rsa = { version = "0.9.10" }
 sha1 = { version = "0.10.6", features = ["oid"] }
 sha1-asm = { version = "0.5.3", optional = true }
