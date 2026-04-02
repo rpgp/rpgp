@@ -85,7 +85,7 @@ signature = "2.2"
 twofish = "0.7"
 zeroize = { version = "1.8", features = ["zeroize_derive"] }
 getrandom = { version = "0.2", optional = true }
-hkdf = "0.12.4"
+hkdf = "0.13.0"
 aes-gcm = "0.10.3"
 eax = "0.5.0"
 ocb3 = "0.1"
