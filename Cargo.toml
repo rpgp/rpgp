@@ -20,6 +20,10 @@ rust-version = "1.88"
 [lib]
 bench = false
 
+[workspace]
+# include the fuzz tests in the workspace
+members = ["fuzz"]
+
 [dependencies]
 
 # General
