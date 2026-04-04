@@ -1,6 +1,6 @@
 use pgp::{
     composed::{Deserializable, Message},
-    types::EncryptionKey,
+    types::{EncryptionKey, KeyDetails},
 };
 
 /// RPG-022
@@ -356,4 +356,16 @@ fn oom_signature_1() {
 
     let res = pgp::composed::DetachedSignature::from_bytes(&bad_input[..]);
     assert!(res.is_err());
+}
+
+#[test]
+fn signed_public_key_legacy_key_id_crash() {
+    let bad_input = [155, 2, 23, 4, 1, 165, 0, 23, 1, 0, 1, 165, 0, 1, 23];
+
+    let res = pgp::composed::SignedPublicKey::from_bytes(&bad_input[..]);
+
+    // on affected versions:
+    // debug behavior: `attempt to subtract with overflow`
+    // release behavior: `range start index 18446744073709551609 out of range for slice of length 1`
+    res.unwrap().legacy_key_id();
 }
