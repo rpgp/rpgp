@@ -51,6 +51,7 @@ mod tests {
     use ml_dsa::KeyGen;
     use proptest::prelude::*;
     use rand::SeedableRng;
+    use signature::Keypair;
 
     use super::*;
 
@@ -60,7 +61,7 @@ mod tests {
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
             fn from_seed(seed: u64) -> MlDsa65Ed25519PublicParams {
-                let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+                let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
 
                 let x = ed25519_dalek::SigningKey::generate(&mut rng);
                 let ml = MlDsa65::key_gen(&mut rng);
