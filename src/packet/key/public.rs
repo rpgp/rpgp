@@ -807,8 +807,15 @@ impl KeyDetails for PubKeyInner {
             KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
                 PublicParams::RSA(params) => {
                     let n: Mpi = params.key.n().into();
-                    let offset = n.len() - 8;
-                    let raw: [u8; 8] = n.as_ref()[offset..].try_into().expect("fixed size");
+                    let mut raw = [0u8; 8];
+                    if n.len() >= 8 {
+                        let offset = n.len() - 8;
+                        raw.copy_from_slice(&n.as_ref()[offset..]);
+                    } else {
+                        // unreasonably short modulus, left-pad with zeros
+                        let offset = 8 - n.len();
+                        raw[offset..].copy_from_slice(n.as_ref());
+                    }
                     raw.into()
                 }
                 _ => panic!("invalid key constructed: {:?}", &self.public_params),

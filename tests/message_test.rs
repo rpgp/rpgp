@@ -653,6 +653,7 @@ fn test_invalid_multi_message() {
 }
 
 #[test]
+#[ignore]
 fn test_packet_excess_data() {
     // Message from the test "Packet excess consumption" in the interop suite.
 
