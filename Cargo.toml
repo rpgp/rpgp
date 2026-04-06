@@ -123,7 +123,7 @@ rayon = "1.10"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.47"
 criterion = { version = "0.5", features = ["html_reports"] }
-tempfile = "3.14.0"
+tempfile = "3.27.0"
 proptest = { version = "1.6.0", features = ["proptest-macro"] }
 proptest-derive = "0.8.0"
 escape_string = "0.1.2"
