@@ -10,12 +10,13 @@ use crate::{
         aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{bail, ensure, format_err, unsupported_err, Result},
+    errors::{bail, ensure, ensure_eq, format_err, unsupported_err, Result},
     packet::{
         Notation, PacketHeader, RevocationCode, Subpacket, SubpacketData, SubpacketLength,
         SubpacketType,
     },
     parsing_reader::BufReadParsing,
+    ser::Serialize,
     types::{
         CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, Mpi, PacketHeaderVersion,
         PacketLength, RevocationKey, SignatureBytes, Tag,
@@ -259,33 +260,33 @@ fn subpacket<B: BufRead>(
     debug!("parsing subpacket: {typ:?}");
 
     let res = match typ {
-        SignatureCreationTime => signature_creation_time(body),
-        SignatureExpirationTime => signature_expiration_time(body),
-        ExportableCertification => exportable_certification(body),
-        TrustSignature => trust_signature(body),
-        RegularExpression => regular_expression(body),
-        Revocable => revocable(body),
-        KeyExpirationTime => key_expiration(body),
-        PreferredSymmetricAlgorithms => pref_sym_alg(body),
-        RevocationKey => revocation_key(body),
-        IssuerKeyId => issuer(body),
-        Notation => notation_data(body),
-        PreferredHashAlgorithms => pref_hash_alg(body),
-        PreferredCompressionAlgorithms => pref_com_alg(body),
-        KeyServerPreferences => key_server_prefs(body),
-        PreferredKeyServer => preferred_key_server(body),
-        PrimaryUserId => primary_userid(body),
-        PolicyURI => policy_uri(body),
-        KeyFlags => key_flags(body),
-        SignersUserID => signers_userid(body),
-        RevocationReason => rev_reason(body),
-        Features => features(body),
-        SignatureTarget => sig_target(body),
-        EmbeddedSignature => embedded_sig(packet_version, body),
-        IssuerFingerprint => issuer_fingerprint(body),
-        PreferredEncryptionModes => preferred_encryption_modes(body),
-        IntendedRecipientFingerprint => intended_recipient_fingerprint(body),
-        PreferredAead => pref_aead_alg(body),
+        SignatureCreationTime => signature_creation_time(&mut body),
+        SignatureExpirationTime => signature_expiration_time(&mut body),
+        ExportableCertification => exportable_certification(&mut body),
+        TrustSignature => trust_signature(&mut body),
+        RegularExpression => regular_expression(&mut body),
+        Revocable => revocable(&mut body),
+        KeyExpirationTime => key_expiration(&mut body),
+        PreferredSymmetricAlgorithms => pref_sym_alg(&mut body),
+        RevocationKey => revocation_key(&mut body),
+        IssuerKeyId => issuer(&mut body),
+        Notation => notation_data(&mut body),
+        PreferredHashAlgorithms => pref_hash_alg(&mut body),
+        PreferredCompressionAlgorithms => pref_com_alg(&mut body),
+        KeyServerPreferences => key_server_prefs(&mut body),
+        PreferredKeyServer => preferred_key_server(&mut body),
+        PrimaryUserId => primary_userid(&mut body),
+        PolicyURI => policy_uri(&mut body),
+        KeyFlags => key_flags(&mut body),
+        SignersUserID => signers_userid(&mut body),
+        RevocationReason => rev_reason(&mut body),
+        Features => features(&mut body),
+        SignatureTarget => sig_target(&mut body),
+        EmbeddedSignature => embedded_sig(packet_version, &mut body),
+        IssuerFingerprint => issuer_fingerprint(&mut body),
+        PreferredEncryptionModes => preferred_encryption_modes(&mut body),
+        IntendedRecipientFingerprint => intended_recipient_fingerprint(&mut body),
+        PreferredAead => pref_aead_alg(&mut body),
         Experimental(n) => Ok(SubpacketData::Experimental(n, body.rest()?.freeze())),
         Other(n) => Ok(SubpacketData::Other(n, body.rest()?.freeze())),
     };
@@ -298,6 +299,23 @@ fn subpacket<B: BufRead>(
 
     if res.is_err() {
         warn!("invalid subpacket: {typ:?} {res:?}");
+    }
+
+    if let Ok(subpacket) = &res {
+        ensure_eq!(
+            packet_len.len(),
+            subpacket.data.write_len() + 1,
+            "Inconsistent subpacket length {} (read {} bytes of subpacket data)",
+            packet_len.len(),
+            subpacket.data.write_len()
+        );
+    }
+
+    if body.has_remaining()? {
+        bail!(
+            "Inconsistent subpacket length {} (not fully consumed)",
+            packet_len.len()
+        );
     }
 
     res
