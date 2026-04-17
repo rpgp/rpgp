@@ -305,6 +305,14 @@ fn subpacket<B: BufRead>(
 
 fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<SignatureBytes> {
     match typ {
+        #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+        PublicKeyAlgorithm::AEAD => {
+            let aead = i.read_u8()?.into();
+            let salt = i.read_arr()?;
+            let tag = i.rest()?.to_vec().into();
+            Ok(SignatureBytes::PersistentSymmetric { aead, salt, tag })
+        }
+
         PublicKeyAlgorithm::RSA | &PublicKeyAlgorithm::RSASign => {
             let v = Mpi::try_from_reader(&mut i)?;
             Ok(SignatureBytes::Mpis(vec![v]))
