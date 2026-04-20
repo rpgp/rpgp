@@ -4,6 +4,17 @@ use buffer_redux::BufReader;
 use pgp::armor::Dearmor;
 
 #[test]
+fn dearmor_fuzz_1() {
+    let input = std::fs::read("tests/unit-tests/dearmor_fuzz_1").unwrap();
+
+    let mut dearmor = Dearmor::new(BufReader::new(&input[..]));
+    let mut bytes = Vec::new();
+
+    let res = dearmor.read_to_end(&mut bytes);
+    assert!(res.is_err());
+}
+
+#[test]
 fn armor_polyglot() {
     // Test handling of the armored message from https://gpg.fail/polyglot
     //
