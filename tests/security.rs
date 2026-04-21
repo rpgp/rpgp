@@ -374,10 +374,9 @@ fn signed_public_key_legacy_key_id_crash() {
 fn signed_public_key_details_write_len_expect() {
     use pgp::ser::Serialize;
 
-    let bad_input = "
------BEGIN PGP PUBLIC KEY BLOCK-----
-
-mDMEWORRCRYJKwYBBAHaRw8BAQdAV0PcFCxCGVPNfDv2TjOWSWT9I3pwZWFzeW9wcy5jbj6IlgQTFgoAPhYhBD7FfugKnP52mHsGABmkmBubyGU//////9//SA8//////////////////////////////Y7ReEGBAheAAAoJEN8McUVoceO1xw0BAKIlWJuR2Lm5sA5fDY4Dc3bakiHdObLatc1rWqfIsRJJAP0b97Cjm4+LCM6D2kvENMbxnnysxG7BEnMra/jlaOBPBYLG-----END PGP PUBLIC KEY BLOCK-----";
+    let bad_input =
+        std::fs::read_to_string("tests/unit-tests/signed_public_key_details_write_len_expect.asc")
+            .unwrap();
     let res = pgp::composed::SignedPublicKey::from_armor_single(bad_input.as_bytes());
 
     match res {
@@ -400,10 +399,9 @@ fn signed_public_key_subkey_write_len_expect() {
     use pgp::ser::Serialize;
 
     // TODO
-    let bad_input = "-----BEGIN PGP PUBLIC KEY BLOCK-----
-
-mDMEWYVzgxYJKwYBBAHaRw8BAQdAn1+Mo/C4jAlV3mrzsp1nOy5HjgDNyPX7wiFugWfjXla0Hmx5a25vZGUgPHBncC5seWtub2RlQGNpbGcub3JnPoiNBBMWCgA1AhsD
-BQkDwmcAAh4BAheAFiEE6zCR+DRxHvQyVysgHtuqPGkmr5IFAlmFeZQCCwkCFQoCFgIACgkQHtuqPGkmr5IPnAD/UrSePIhBnDlYZljfNuKX78RJIfaG6mFSe6cIAM3s+GkA/2nmKF2DF7gzoYHtEFKbpHPf/03zbi62iV/NY07Hv/wOuDMEWYV1nxYJKwYBBAHaRw8BAQdABc8FdsuQhNLnVKfnb8xS3RvuiC1Kj9sRKV3aOkAGyRSI9QQYFgoAJhYhBOswkfg0cR70MlcrIB7bqjxpJq+SBQJZhXWfAhsCBQkDwmcAAIEJEB7bqjxpJmHsGABmkmBubyGU/////////SA8//////////////////////////////Y7ReEGeV3XM7EXAP9Tuhj94vTgHc0mZ1mIvOHpD5n+nuvChuzr9a3xihqf8QD+OA54EK38iEGU4gFAKLsR8djhCq6GwVerPR9k4CfD0wlxbwEAviOXlC3SXXT8Xm6RuaLS3WaRbMb/+27zNECgtd6ztHYA/RHAAAoJEB7bqjxpJq+SUZkBAIp/B/l0SupqkHPUMKAw-----END PGP PUBLIC KEY BLOCK-----";
+    let bad_input =
+        std::fs::read_to_string("tests/unit-tests/signed_public_key_subkey_write_len_expect.asc")
+            .unwrap();
     let res = pgp::composed::SignedPublicKey::from_armor_single(bad_input.as_bytes());
 
     match res {
