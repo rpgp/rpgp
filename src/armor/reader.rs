@@ -697,6 +697,11 @@ where
 
         match parser(&back_buffer) {
             Ok((remaining, res)) => {
+                if remaining.len() > last_buffer_len {
+                    // this should never happen for sensible armored input streams
+                    bail!("inconsistent state: less data parsed than expected");
+                }
+
                 let consumed = last_buffer_len - remaining.len();
                 b.consume(consumed);
                 return Ok(res);
