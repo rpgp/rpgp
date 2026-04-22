@@ -47,6 +47,8 @@ fuzz_target!(|data: Input| {
 
                     match k_res {
                         Err(_) => {}
+
+                        #[allow(unused_variables)]
                         Ok(proxy_parameter) => {
                             #[cfg(feature = "fuzzer_verbose1")]
                             print!("fuzzer: success, {:?}\n", proxy_parameter.as_ref());

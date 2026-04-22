@@ -96,10 +96,13 @@ fuzz_target!(|data: Input| {
                     // .forwarding_transform(forwardee_key, PROXY_PARAMETER_K.into());
 
                     match transform_result {
+                        #[allow(unused_variables)]
                         Err(err) => {
                             #[cfg(feature = "fuzzer_verbose1")]
                             println!("fuzzer: error {}", err);
                         }
+
+                        #[allow(unused_variables)]
                         Ok(pkesk) => {
                             #[cfg(feature = "fuzzer_verbose1")]
                             println!("fuzzer: successful transform result: {:?}", pkesk);

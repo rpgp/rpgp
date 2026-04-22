@@ -128,7 +128,7 @@ fuzz_target!(
             }
 
             // attempt decryption
-            let decryption_res = message.decrypt(&Password::empty(), &KEY.get().unwrap());
+            let decryption_res = message.decrypt(&Password::empty(), KEY.get().unwrap());
 
             match decryption_res {
                 // the fuzzer is not clever enough to encrypt anything to the public key
