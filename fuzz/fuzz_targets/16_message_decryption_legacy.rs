@@ -1,10 +1,8 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use pgp::composed::DecryptionOptions;
-use pgp::composed::TheRing;
 use pgp::{
-    composed::{Deserializable, Message, SignedSecretKey},
+    composed::{DecryptionOptions, Deserializable, Message, SignedSecretKey, TheRing},
     types::Password,
 };
 

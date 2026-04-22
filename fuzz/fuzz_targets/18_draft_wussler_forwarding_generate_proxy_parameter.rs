@@ -1,7 +1,10 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use pgp::{composed::Deserializable, composed::SignedSecretKey, types::Password};
+use pgp::{
+    composed::{Deserializable, SignedSecretKey},
+    types::Password,
+};
 
 // The string-focused format is likely harder for the fuzzer to mutate efficiently,
 // but easier to find existing input snippets for among existing rpgp test files

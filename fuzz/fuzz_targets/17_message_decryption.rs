@@ -1,26 +1,25 @@
 #![no_main]
 
+use std::sync::OnceLock;
+
 #[cfg(feature = "fuzzer_seed1")]
 use libfuzzer_sys::fuzz_mutator;
 use libfuzzer_sys::fuzz_target;
-use pgp::composed::Edata;
 #[cfg(feature = "fuzzer_seed1")]
 use pgp::composed::MessageBuilder;
 #[cfg(feature = "fuzzer_seed1")]
 use pgp::composed::SignedPublicKey;
 #[cfg(feature = "fuzzer_seed1")]
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
-use pgp::packet::ProtectedDataConfig;
-use pgp::packet::SymEncryptedProtectedDataConfig;
 use pgp::{
-    composed::{Deserializable, Message, SignedSecretKey},
+    composed::{Deserializable, Edata, Message, SignedSecretKey},
+    packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
     types::Password,
 };
 #[cfg(feature = "fuzzer_seed1")]
 use rand_chacha::rand_core::SeedableRng;
 #[cfg(feature = "fuzzer_seed1")]
 use rand_chacha::ChaCha8Rng;
-use std::sync::OnceLock;
 
 static KEY: OnceLock<SignedSecretKey> = OnceLock::new();
 
