@@ -398,7 +398,6 @@ fn signed_public_key_details_write_len_expect() {
 fn signed_public_key_subkey_write_len_expect() {
     use pgp::ser::Serialize;
 
-    // TODO
     let bad_input =
         std::fs::read_to_string("tests/unit-tests/signed_public_key_subkey_write_len_expect.asc")
             .unwrap();
