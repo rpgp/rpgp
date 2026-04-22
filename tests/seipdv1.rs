@@ -1,42 +1,40 @@
+use chacha20::ChaCha8Rng;
 use pgp::{
     composed::{Edata, Message, MessageBuilder, PlainSessionKey, RawSessionKey},
     crypto::sym::SymmetricKeyAlgorithm,
     packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
 };
-use rand::{CryptoRng, Rng, SeedableRng};
-use rand_chacha::ChaCha8Rng;
+use rand::{CryptoRng, SeedableRng};
 use rayon::prelude::*;
 
 const SYM_ALG: SymmetricKeyAlgorithm = SymmetricKeyAlgorithm::AES256;
 
-fn make_seipdv1_msg<RAND>(mut rng: RAND) -> Vec<u8>
+fn make_seipdv1_msg<RAND>(rng: &mut RAND) -> Vec<u8>
 where
-    RAND: CryptoRng + Rng,
+    RAND: CryptoRng + ?Sized,
 {
     let input_data = b"hello world".repeat(1024);
 
     eprintln!("input len: {}", input_data.len());
 
-    let raw = random_session_key(&mut rng);
+    let raw = random_session_key(rng);
 
     eprintln!("encrypting to session key: {:02x?}", raw.as_ref());
     eprintln!();
 
     let mut builder =
-        MessageBuilder::from_bytes("plaintext.txt", input_data).seipd_v1(&mut rng, SYM_ALG);
+        MessageBuilder::from_bytes("plaintext.txt", input_data).seipd_v1(rng, SYM_ALG);
     builder.set_session_key(raw).expect("ok");
 
     let mut encrypted_data = Vec::new();
-    builder
-        .to_writer(&mut rng, &mut encrypted_data)
-        .expect("ok");
+    builder.to_writer(rng, &mut encrypted_data).expect("ok");
 
     encrypted_data
 }
 
-fn random_session_key<RAND>(mut rng: RAND) -> RawSessionKey
+fn random_session_key<RAND>(rng: &mut RAND) -> RawSessionKey
 where
-    RAND: CryptoRng + Rng,
+    RAND: CryptoRng + ?Sized,
 {
     let mut raw = vec![0u8; SYM_ALG.key_size()];
     rng.fill_bytes(&mut raw);
