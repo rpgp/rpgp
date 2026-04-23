@@ -55,16 +55,16 @@ impl KeyDetails {
         }
     }
 
-    pub fn sign<R, S, K>(
+    pub fn sign<RNG, S, K>(
         self,
-        mut rng: R,
+        rng: &mut RNG,
         key: &S,
         pub_key: &K,
         key_pw: &Password,
     ) -> Result<SignedKeyDetails>
     where
-        R: CryptoRng + Rng,
-        S: SigningKey,
+        RNG: CryptoRng + Rng,
+        S: SigningKey<RNG>,
         K: types::KeyDetails + Serialize,
     {
         let subpackets_with_metadata = || -> Result<Vec<Subpacket>> {
@@ -97,15 +97,11 @@ impl KeyDetails {
 
         // --- Direct key signatures
         let direct_signatures = if key.version() == KeyVersion::V6 {
-            let mut config = SignatureConfig::v6(
-                &mut rng,
-                SignatureType::Key,
-                key.algorithm(),
-                key.hash_alg(),
-            )?;
+            let mut config =
+                SignatureConfig::v6(rng, SignatureType::Key, key.algorithm(), key.hash_alg())?;
             config.hashed_subpackets = subpackets_with_metadata()?;
 
-            let dks = config.sign_key(key, key_pw, pub_key)?;
+            let dks = config.sign_key(rng, key, key_pw, pub_key)?;
 
             vec![dks]
         } else {
@@ -118,7 +114,7 @@ impl KeyDetails {
         if let Some(primary_user_id) = self.primary_user_id {
             // Self-signatures use CertPositive, see
             // <https://www.ietf.org/archive/id/draft-gallagher-openpgp-signatures-01.html#name-certification-signature-typ>
-            let mut config = SignatureConfig::from_key(&mut rng, key, SignatureType::CertPositive)?;
+            let mut config = SignatureConfig::from_key(rng, key, SignatureType::CertPositive)?;
             config.hashed_subpackets = match key.version() {
                 KeyVersion::V6 => basic_subpackets()?,
                 _ => subpackets_with_metadata()?,
@@ -135,6 +131,7 @@ impl KeyDetails {
             }
 
             let sig = config.sign_certification(
+                rng,
                 key,
                 pub_key,
                 key_pw,
@@ -153,7 +150,7 @@ impl KeyDetails {
                     // Self-signatures use CertPositive, see
                     // <https://www.ietf.org/archive/id/draft-gallagher-openpgp-signatures-01.html#name-certification-signature-typ>
                     let mut config =
-                        SignatureConfig::from_key(&mut rng, key, SignatureType::CertPositive)?;
+                        SignatureConfig::from_key(rng, key, SignatureType::CertPositive)?;
 
                     config.hashed_subpackets = match key.version() {
                         KeyVersion::V6 => basic_subpackets()?,
@@ -166,7 +163,8 @@ impl KeyDetails {
                         )?];
                     }
 
-                    let sig = config.sign_certification(key, pub_key, key_pw, id.tag(), &id)?;
+                    let sig =
+                        config.sign_certification(rng, key, pub_key, key_pw, id.tag(), &id)?;
 
                     Ok(id.into_signed(sig))
                 })
@@ -177,7 +175,7 @@ impl KeyDetails {
         let user_attributes = self
             .user_attributes
             .into_iter()
-            .map(|u| u.sign(&mut rng, key, pub_key, key_pw))
+            .map(|u| u.sign(rng, key, pub_key, key_pw))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedKeyDetails {

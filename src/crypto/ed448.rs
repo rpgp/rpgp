@@ -1,3 +1,4 @@
+use aead::rand_core::RngCore;
 use rand::{CryptoRng, Rng};
 use zeroize::ZeroizeOnDrop;
 
@@ -52,7 +53,12 @@ impl SecretKey {
 }
 
 impl Signer for SecretKey {
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
+    fn sign<RNG: CryptoRng + RngCore>(
+        &self,
+        _rng: &mut RNG,
+        hash: HashAlgorithm,
+        digest: &[u8],
+    ) -> Result<SignatureBytes> {
         let Some(digest_size) = hash.digest_size() else {
             bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
         };

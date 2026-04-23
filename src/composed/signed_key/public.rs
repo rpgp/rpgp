@@ -234,7 +234,7 @@ impl SignedPublicKey {
     /// "Embedded primary key binding signature", is included.
     /// See <https://www.rfc-editor.org/rfc/rfc9580.html#sigtype-primary-binding>
     pub fn bind_with_signing_key<R, K>(
-        mut rng: R,
+        rng: &mut R,
         primary_signer: &K,
         primary_key: packet::PublicKey,
         details: composed::KeyDetails,
@@ -243,7 +243,7 @@ impl SignedPublicKey {
     ) -> Result<Self>
     where
         R: CryptoRng + Rng,
-        K: SigningKey,
+        K: SigningKey<R>,
     {
         // Prevent callers from accidentally using an unrelated signing key
         ensure_eq!(
@@ -252,7 +252,7 @@ impl SignedPublicKey {
             "Signing key fingerprint must match primary public key fingerprint"
         );
 
-        let details = details.sign(&mut rng, primary_signer, &primary_key, key_pw)?;
+        let details = details.sign(rng, primary_signer, &primary_key, key_pw)?;
         Ok(Self {
             primary_key,
             details,
