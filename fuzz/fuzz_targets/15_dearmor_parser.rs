@@ -1,9 +1,10 @@
 #![no_main]
 
+use std::io::Read;
+
 use buffer_redux::BufReader;
 use libfuzzer_sys::fuzz_target;
 use pgp::armor::Dearmor;
-use std::io::Read;
 
 fuzz_target!(|data: &[u8]| {
     // based on src/armor/reader.rs tests, see parse() function
