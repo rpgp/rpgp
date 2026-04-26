@@ -21,13 +21,10 @@ arbitrary = { version = "1", features = ["derive"], default-features = false }
 [dependencies.pgp]
 path = ".."
 
-# profile override disabled due to cargo workspace settings
-# this functionality can be enabled via the `--debug-assertions` CLI flag on `cargo fuzz run`
-#
-# [profile.release]
+[profile.release]
 # enable overflow checks to catch integer overflow and underflow behavior
 # with this, the --debug profile is not needed for testing
-# overflow-checks = true
+overflow-checks = true
 
 [features]
 # special mode to synthesize/seed some fuzz target inputs differently
