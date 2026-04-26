@@ -50,6 +50,7 @@ Additionally, it fully supports all functionality required by the [Autocrypt 1.1
 ## Notable Users & Libraries built using rPGP
 
 - [Delta Chat]: Cross-platform messaging app that works over e-mail
+- [GpgFrontend]: Cross-platform OpenPGP desktop app with optional rPGP backend
 - [`debian-packaging`]: A library crate for dealing with Debian packages
 - [`himalaya`]: CLI to manage emails (includes [`pgp-lib`] component)
 - [`oct-git`]: Git signing and verification backend (with a focus on OpenPGP cards)
@@ -236,3 +237,4 @@ shall be dual licensed as above, without any additional terms or conditions.
 [`pgp-lib`]: https://crates.io/crates/pgp-lib
 [`prs-lib`]: https://crates.io/crates/prs-lib
 [`voa-openpgp`]: https://crates.io/crates/voa-openpgp
+[GpgFrontend]: https://github.com/saturneric/GpgFrontend
