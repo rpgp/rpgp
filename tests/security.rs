@@ -369,3 +369,53 @@ fn signed_public_key_legacy_key_id_crash() {
     // release behavior: `range start index 18446744073709551609 out of range for slice of length 1`
     res.unwrap().legacy_key_id();
 }
+
+#[test]
+fn signed_public_key_details_write_len_expect() {
+    use pgp::ser::Serialize;
+
+    let bad_input =
+        std::fs::read_to_string("tests/unit-tests/signed_public_key_details_write_len_expect.asc")
+            .unwrap();
+    let res = pgp::composed::SignedPublicKey::from_armor_single(bad_input.as_bytes());
+
+    match res {
+        Ok((pubkey, _)) => {
+            // on affected versions:
+            // crash due to expect()
+            // `signature size: TryFromIntError(())`
+            let _ = pubkey.details.write_len();
+
+            unreachable!("This should not be reached");
+        }
+        Err(e) => {
+            assert!(e.to_string().contains("Inconsistent subpacket length"));
+        }
+    }
+}
+
+#[test]
+fn signed_public_key_subkey_write_len_expect() {
+    use pgp::ser::Serialize;
+
+    let bad_input =
+        std::fs::read_to_string("tests/unit-tests/signed_public_key_subkey_write_len_expect.asc")
+            .unwrap();
+    let res = pgp::composed::SignedPublicKey::from_armor_single(bad_input.as_bytes());
+
+    match res {
+        Ok((pubkey, _)) => {
+            for signedsubkey in pubkey.public_subkeys {
+                // on affected versions:
+                // crash due to expect()
+                // `signature size: TryFromIntError(())`
+                let _ = signedsubkey.write_len();
+            }
+
+            unreachable!("This should not be reached");
+        }
+        Err(e) => {
+            assert!(e.to_string().contains("Inconsistent subpacket length"));
+        }
+    }
+}
