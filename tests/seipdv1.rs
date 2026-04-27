@@ -209,8 +209,8 @@ fn run_mdc_test(mode: Seipdv1ReadMode) {
 
 /// Decrypt SEIPDv1 EData with (random) wrong session keys.
 ///
-/// In the default "check first" decryption mode, this should not leak specific error from parsing
-/// the resulting (wrong and unauthenticated) plaintext as a message.
+/// This tests that in the default "check first" decryption mode, no specific error is ever leaked
+/// from parsing the resulting (wrong and unauthenticated) plaintext as a message.
 #[test]
 pub fn seipdv1_test_error_uniformity() {
     let mut rng = ChaCha8Rng::seed_from_u64(0);
@@ -281,58 +281,10 @@ pub fn seipdv1_test_error_uniformity() {
     }
 }
 
-/// Decrypt SEIPDv1 EData in streaming mode.
-///
-/// The message is sized a bit over 3x 8192 buffering blocks.
-///
-/// Context for message size:
-/// There are three layers of buffering readers at play (that are relevant for this scenario):
-//
-/// - the SEIPDv1 decryptor (StreamDecryptorInner)
-/// - a PacketBodyReader that processes the decrypted stream that comes out of the SEIPD packet
-/// - a LiteralDataReader that will yield decrypted data via `Message::read` on the decrypted
-///   message.
-///
-/// Each of these layers wants to fill its 8192 bytes of buffer. And the outermost of the three
-/// (the StreamDecryptorInner) will check the MDC if it's reached by the time the two inner
-/// readers have filled their respective 8192 byte buffers.
-///
-/// So in streaming mode, the first unauthenticated byte of plaintext is only released after
-/// ~24 kbyte have been read, and only if the MDC hasn't been reached within that amount of data.
-///
-///
-/// NOTE: The assumptions in this test are tied to internal details of the current implementation.
-/// If the implementation of streaming decryption changes (e.g. the buffer sizes), then this test
-/// may fail, and need to be adjusted.
+/// Decrypt SEIPDv1 EData in check-first mode
 #[test]
-pub fn seipdv1_modes() {
-    let mut rng = ChaCha8Rng::seed_from_u64(0);
-
-    // Produce an encrypted message.
-    //
-    // The size is calibrated to allow reading the first part of a corrupted message in streaming
-    // mode, without triggering the MDC check.
-    //
-    // We corrupt the end of the message, so the streaming decryption mode shouldn't run into
-    // issues where the parser for the decrypted inner message encounters invalid decrypted data.
-    // (The parser should consider the decrypted data part of the literal packet, and accept it).
-    //
-    // Streaming decryption in rpgp currently requires a literal payload of at least 24498 in order
-    // to be able to read the first byte/block. (For shorter messages, the MDC is encountered and
-    // checked before releasing any plaintext, even in streaming mode.)
-    let (encrypted_data, raw) = make_seipdv1_msg(&mut rng, 24500);
-
-    let sk = PlainSessionKey::V3_4 {
-        key: raw.clone(),
-        sym_alg: SYM_ALG,
-    };
-
-    // corrupt message (overwrite the last 8000 bytes of the encrypted message)
-    let mut corrupted_encrypted = encrypted_data.clone();
-    let pos = corrupted_encrypted.len() - 8000;
-    rng.fill_bytes(&mut corrupted_encrypted[pos..]);
-
-    // -- test with default check-first seipdv1 decryption --
+pub fn seipdv1_decrypt_check_first() {
+    let (corrupted_encrypted, sk) = setup_seipdv1_test();
     let encrypted = Message::from_bytes(&*corrupted_encrypted).expect("ok");
 
     let res = encrypted.decrypt_with_session_key(sk.clone());
@@ -342,8 +294,12 @@ pub fn seipdv1_modes() {
         res.err().unwrap().to_string(),
         "IO error: Modification Detection Code error"
     );
+}
 
-    // -- test with check-first seipdv1 decryption, and insufficient size limit --
+/// Try (and fail) to decrypt SEIPDv1 EData in check-first mode, with insufficient size limit
+#[test]
+pub fn seipdv1_decrypt_check_first_insufficient_size_limit() {
+    let (corrupted_encrypted, sk) = setup_seipdv1_test();
     let encrypted = Message::from_bytes(&*corrupted_encrypted).expect("ok");
 
     let ring = TheRing {
@@ -361,8 +317,12 @@ pub fn seipdv1_modes() {
         res.err().unwrap().to_string(),
         "IO error: Input stream too long for ProtectedCheckFirst mode"
     );
+}
 
-    // -- test with streaming seipdv1 decryption --
+/// Decrypt SEIPDv1 EData in streaming mode
+#[test]
+pub fn seipdv1_decrypt_streaming() {
+    let (corrupted_encrypted, sk) = setup_seipdv1_test();
     let encrypted = Message::from_bytes(&*corrupted_encrypted).expect("ok");
 
     let ring = TheRing {
@@ -387,4 +347,58 @@ pub fn seipdv1_modes() {
         res.err().unwrap().to_string(),
         "Modification Detection Code error"
     );
+}
+
+/// Produce an encrypted message for decryption mode tests.
+///
+/// The size is calibrated to allow reading the first part of a corrupted message in streaming
+/// mode, without triggering the MDC check.
+///
+/// We corrupt the end of the message, so the streaming decryption mode shouldn't run into
+/// issues where the parser for the decrypted inner message encounters invalid decrypted data.
+/// (The parser should consider the decrypted data part of the literal packet, and accept it).
+///
+/// Streaming decryption in rpgp currently requires a literal payload of at least 24498 in order
+/// to be able to read the first byte/block. (For shorter messages, the MDC is encountered and
+/// checked before releasing any plaintext, even in streaming mode.)
+///
+/// ---
+///
+/// The message is sized a bit over 3x 8192 buffering blocks.
+///
+/// Context for message size:
+/// There are three layers of buffering readers at play (that are relevant for this scenario):
+//
+/// - the SEIPDv1 decryptor (StreamDecryptorInner)
+/// - a PacketBodyReader that processes the decrypted stream that comes out of the SEIPD packet
+/// - a LiteralDataReader that will yield decrypted data via `Message::read` on the decrypted
+///   message.
+///
+/// Each of these layers wants to fill its 8192 bytes of buffer. And the outermost of the three
+/// (the StreamDecryptorInner) will check the MDC if it's reached by the time the two inner
+/// readers have filled their respective 8192 byte buffers.
+///
+/// So in streaming mode, the first unauthenticated byte of plaintext is only released after
+/// ~24 kbyte have been read, and only if the MDC hasn't been reached within that amount of data.
+///
+///
+/// NOTE: The assumptions of this test methodology are tied to internal details of the current
+/// implementation. If the implementation of streaming decryption changes (e.g. the buffer sizes),
+/// then this test may fail, and need to be adjusted.
+fn setup_seipdv1_test() -> (Vec<u8>, PlainSessionKey) {
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    let (encrypted_data, raw) = make_seipdv1_msg(&mut rng, 24500);
+
+    let sk = PlainSessionKey::V3_4 {
+        key: raw.clone(),
+        sym_alg: SYM_ALG,
+    };
+
+    // corrupt message (overwrite the last 8000 bytes of the encrypted message)
+    let mut corrupted_encrypted = encrypted_data.clone();
+    let pos = corrupted_encrypted.len() - 8000;
+    rng.fill_bytes(&mut corrupted_encrypted[pos..]);
+
+    (corrupted_encrypted, sk)
 }
