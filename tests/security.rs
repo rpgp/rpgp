@@ -1,7 +1,25 @@
+use std::io::BufReader;
+
 use pgp::{
     composed::{Deserializable, Message},
-    types::{EncryptionKey, KeyDetails},
+    packet::{NewPacketHeader, PacketHeader, Signature},
+    types::{EncryptionKey, KeyDetails, PacketLength},
 };
+
+/// Test case from https://github.com/rpgp/rpgp/issues/146
+#[test]
+fn malformed_signature_146() {
+    let data: &[u8] = &[5, 2, 2, 11, 0, 2, 0, 0];
+    let res = Signature::try_from_reader(
+        PacketHeader::New {
+            header: NewPacketHeader::new(),
+            length: PacketLength::Fixed(99),
+        },
+        BufReader::new(data),
+    );
+
+    assert!(res.is_ok());
+}
 
 /// RPG-022
 #[test]
