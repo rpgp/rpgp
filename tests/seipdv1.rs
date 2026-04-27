@@ -116,84 +116,95 @@ pub fn mdc_test_fast_2() {
     };
 }
 
-/// Fuzz: random wrong keys must never bypass MDC verification.
-///
-/// This is tested for both the `Seipdv1ReadMode::CheckedFirst` and `Seipdv1ReadMode::Streaming` mode
+/// Fuzz: random wrong keys must never bypass MDC verification
+/// (tests in `Seipdv1ReadMode::CheckedFirst` mode).
 #[test]
 #[ignore] // ~30s in release
-pub fn mdc_test() {
+pub fn mdc_test_checked_first() {
     pretty_env_logger::try_init().ok();
 
+    run_mdc_test(Seipdv1ReadMode::default())
+}
+
+/// Fuzz: random wrong keys must never bypass MDC verification
+/// (tests in `Seipdv1ReadMode::Streaming` mode).
+#[test]
+#[ignore] // ~30s in release
+pub fn mdc_test_streaming() {
+    pretty_env_logger::try_init().ok();
+
+    run_mdc_test(Seipdv1ReadMode::Streaming)
+}
+
+fn run_mdc_test(mode: Seipdv1ReadMode) {
     let (encrypted_data, _) = {
         let mut rng = ChaCha8Rng::seed_from_u64(1);
         make_seipdv1_msg(&mut rng, 50_000)
     };
 
-    for mode in [Seipdv1ReadMode::default(), Seipdv1ReadMode::Streaming] {
-        let total_iterations: u64 = 1_000_000;
-        eprintln!("Running MDC fuzz test with {} iterations", total_iterations);
+    let total_iterations: u64 = 1_000_000;
+    eprintln!("Running MDC fuzz test with {} iterations", total_iterations);
 
-        // Each rayon worker gets its own RNG seeded by thread index
-        let result: Option<(u64, usize, RawSessionKey)> = (0..total_iterations)
-            .into_par_iter()
-            .map_init(
-                || {
-                    let thread_idx = rayon::current_thread_index().unwrap_or(0);
-                    ChaCha8Rng::seed_from_u64(1000 + thread_idx as u64)
-                },
-                |rng, i| {
-                    let raw = random_session_key(rng);
-                    let encrypted = Message::from_bytes(&*encrypted_data).expect("valid message");
+    // Each rayon worker gets its own RNG seeded by thread index
+    let result: Option<(u64, usize, RawSessionKey)> = (0..total_iterations)
+        .into_par_iter()
+        .map_init(
+            || {
+                let thread_idx = rayon::current_thread_index().unwrap_or(0);
+                ChaCha8Rng::seed_from_u64(1000 + thread_idx as u64)
+            },
+            |rng, i| {
+                let raw = random_session_key(rng);
+                let encrypted = Message::from_bytes(&*encrypted_data).expect("valid message");
 
-                    let Message::Encrypted {
-                        edata: Edata::SymEncryptedProtectedData { reader },
-                        ..
-                    } = &encrypted
-                    else {
-                        panic!("expected SymEncryptedProtectedData")
-                    };
-                    assert!(matches!(
-                        reader.config(),
-                        ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::V1)
-                    ));
+                let Message::Encrypted {
+                    edata: Edata::SymEncryptedProtectedData { reader },
+                    ..
+                } = &encrypted
+                else {
+                    panic!("expected SymEncryptedProtectedData")
+                };
+                assert!(matches!(
+                    reader.config(),
+                    ProtectedDataConfig::Seipd(SymEncryptedProtectedDataConfig::V1)
+                ));
 
-                    let sk = PlainSessionKey::V3_4 {
-                        key: raw.clone(),
-                        sym_alg: SYM_ALG,
-                    };
+                let sk = PlainSessionKey::V3_4 {
+                    key: raw.clone(),
+                    sym_alg: SYM_ALG,
+                };
 
-                    let ring = TheRing {
-                        decrypt_options: DecryptionOptions::new().set_seipdv1_read_mode(mode),
-                        session_keys: vec![sk.clone()],
-                        ..Default::default()
-                    };
+                let ring = TheRing {
+                    decrypt_options: DecryptionOptions::new().set_seipdv1_read_mode(mode),
+                    session_keys: vec![sk.clone()],
+                    ..Default::default()
+                };
 
-                    if let Ok((mut decrypted, _)) = encrypted.decrypt_the_ring(ring, true) {
-                        if let Ok(data) = decrypted.as_data_vec() {
-                            return Some((i, data.len(), raw));
-                        }
+                if let Ok((mut decrypted, _)) = encrypted.decrypt_the_ring(ring, true) {
+                    if let Ok(data) = decrypted.as_data_vec() {
+                        return Some((i, data.len(), raw));
                     }
-                    None
-                },
-            )
-            .find_any(|opt| opt.is_some())
-            .flatten();
+                }
+                None
+            },
+        )
+        .find_any(|opt| opt.is_some())
+        .flatten();
 
-        if let Some((iteration, len, key)) = result {
-            panic!(
-                "MDC bypass at iteration {}, mode {:?}: decrypted {} bytes with key {:02x?}",
-                iteration,
-                mode,
-                len,
-                key.as_ref()
-            );
-        }
-
-        eprintln!(
-            "MDC fuzz test passed: {} iterations in mode {:?}",
-            total_iterations, mode
+    if let Some((iteration, len, key)) = result {
+        panic!(
+            "MDC bypass at iteration {}, mode {:?}: decrypted {} bytes with key {:02x?}",
+            iteration,
+            mode,
+            len,
+            key.as_ref()
         );
     }
+
+    eprintln!(
+        "MDC fuzz test passed: {} iterations in mode {:?}",
+        total_iterations, mode
+    );
 }
 
 /// Decrypt SEIPDv1 EData with (random) wrong session keys.
