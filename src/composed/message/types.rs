@@ -571,6 +571,7 @@ impl DecryptionOptions {
 
     /// Enable decryption of forwarded messages as specified in draft-wussler-openpgp-forwarding
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+    #[must_use]
     pub fn enable_draft_forwarding(mut self) -> Self {
         self.draft_forwarding = true;
         self
