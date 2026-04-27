@@ -1,7 +1,10 @@
-use std::io::Read;
+use std::io::{Cursor, Read};
 
 use buffer_redux::BufReader;
-use pgp::armor::Dearmor;
+use pgp::{
+    armor::Dearmor,
+    composed::{Deserializable, SignedPublicKey},
+};
 
 #[test]
 fn dearmor_fuzz_1() {
@@ -36,4 +39,16 @@ fn armor_polyglot() {
 
     // content from third block
     assert!(string.contains("PGP"));
+}
+
+#[test]
+fn test_parse_armor_missing_end_marker() {
+    let c = Cursor::new(
+        "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
+             Version: GnuPG v1\n",
+    );
+    // pgp 0.4.0 would hang forever if the end marker is missing.
+    let res = SignedPublicKey::from_armor_single(c);
+
+    assert!(res.is_err());
 }
