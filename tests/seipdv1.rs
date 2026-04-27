@@ -284,7 +284,7 @@ pub fn seipdv1_test_error_uniformity() {
 /// Decrypt SEIPDv1 EData in check-first mode
 #[test]
 pub fn seipdv1_decrypt_check_first() {
-    let (corrupted_encrypted, sk) = setup_seipdv1_test();
+    let (corrupted_encrypted, sk) = make_corrupted_seipdv1_msg();
     let encrypted = Message::from_bytes(&*corrupted_encrypted).expect("ok");
 
     let res = encrypted.decrypt_with_session_key(sk.clone());
@@ -296,10 +296,10 @@ pub fn seipdv1_decrypt_check_first() {
     );
 }
 
-/// Try (and fail) to decrypt SEIPDv1 EData in check-first mode, with insufficient size limit
+/// Try to decrypt SEIPDv1 EData in check-first mode, with insufficient size limit
 #[test]
 pub fn seipdv1_decrypt_check_first_insufficient_size_limit() {
-    let (corrupted_encrypted, sk) = setup_seipdv1_test();
+    let (corrupted_encrypted, sk) = make_corrupted_seipdv1_msg();
     let encrypted = Message::from_bytes(&*corrupted_encrypted).expect("ok");
 
     let ring = TheRing {
@@ -322,7 +322,7 @@ pub fn seipdv1_decrypt_check_first_insufficient_size_limit() {
 /// Decrypt SEIPDv1 EData in streaming mode
 #[test]
 pub fn seipdv1_decrypt_streaming() {
-    let (corrupted_encrypted, sk) = setup_seipdv1_test();
+    let (corrupted_encrypted, sk) = make_corrupted_seipdv1_msg();
     let encrypted = Message::from_bytes(&*corrupted_encrypted).expect("ok");
 
     let ring = TheRing {
@@ -349,7 +349,7 @@ pub fn seipdv1_decrypt_streaming() {
     );
 }
 
-/// Produce an encrypted message for decryption mode tests.
+/// Produce a corrupted encrypted message for decryption mode tests.
 ///
 /// The size is calibrated to allow reading the first part of a corrupted message in streaming
 /// mode, without triggering the MDC check.
@@ -385,7 +385,7 @@ pub fn seipdv1_decrypt_streaming() {
 /// NOTE: The assumptions of this test methodology are tied to internal details of the current
 /// implementation. If the implementation of streaming decryption changes (e.g. the buffer sizes),
 /// then this test may fail, and need to be adjusted.
-fn setup_seipdv1_test() -> (Vec<u8>, PlainSessionKey) {
+fn make_corrupted_seipdv1_msg() -> (Vec<u8>, PlainSessionKey) {
     let mut rng = ChaCha8Rng::seed_from_u64(0);
 
     let (encrypted_data, raw) = make_seipdv1_msg(&mut rng, 24500);
