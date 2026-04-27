@@ -234,36 +234,30 @@ where
 
 #[derive(derive_more::Debug)]
 pub enum MaybeProtected {
-    Protected {
+    /// In "CheckFirst" mode, the message is first decrypted in full, to check the integrity
+    /// protection.
+    ///
+    /// The maximum message size (in bytes) must be specified. If an encrypted message exceeds
+    /// this limit, decryption returns an error (to avoid running out of memory).
+    ProtectedCheckFirst {
         /// We use regular sha1 for MDC, not sha1_checked.
         /// Collisions are not currently a concern with MDC.
         hasher: Sha1,
 
-        /// The read mode for seipdv1 encrypted data.
-        ///
-        /// By default, the data packet is read in one go, so that plaintext is only released
-        /// after the MDC has been checked.
-        mode: Seipdv1ReadMode,
+        max_message_size: usize,
     },
-    Unprotected {
-        key: Zeroizing<Vec<u8>>,
+
+    /// Decrypt the message in streaming mode, which releases plaintext before the message's
+    /// integrity has been checked.
+    ProtectedStreaming {
+        /// We use regular sha1 for MDC, not sha1_checked.
+        /// Collisions are not currently a concern with MDC.
+        hasher: Sha1,
     },
-}
 
-impl MaybeProtected {
-    fn is_seipdv1_streaming(&self) -> bool {
-        matches!(
-            self,
-            MaybeProtected::Protected {
-                mode: Seipdv1ReadMode::Streaming,
-                ..
-            }
-        )
-    }
-
-    fn is_sed(&self) -> bool {
-        matches!(self, MaybeProtected::Unprotected { .. })
-    }
+    /// Encrypted message without integrity protection (using the legacy "Symmetrically Encrypted
+    /// Data" packet)
+    Unprotected { key: Zeroizing<Vec<u8>> },
 }
 
 /// State machine that reads from the encrypted input stream and performs decryption.
@@ -347,9 +341,15 @@ where
         let protected = if protected {
             // checksum over unencrypted data
             let hasher = Sha1::default();
-            MaybeProtected::Protected {
-                hasher,
-                mode: seipdv1_read_mode,
+
+            match seipdv1_read_mode {
+                Seipdv1ReadMode::CheckFirst { max_message_size } => {
+                    MaybeProtected::ProtectedCheckFirst {
+                        hasher,
+                        max_message_size,
+                    }
+                }
+                Seipdv1ReadMode::Streaming => MaybeProtected::ProtectedStreaming { hasher },
             }
         } else {
             MaybeProtected::Unprotected {
@@ -442,7 +442,8 @@ where
                         decryptor = BufDecryptor::<M>::new_from_slices(key, &encrypted_prefix)
                             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
                     }
-                    MaybeProtected::Protected { ref mut hasher, .. } => {
+                    MaybeProtected::ProtectedStreaming { ref mut hasher, .. }
+                    | MaybeProtected::ProtectedCheckFirst { ref mut hasher, .. } => {
                         decryptor.decrypt(&mut prefix);
                         hasher.update(&prefix);
                     }
@@ -476,20 +477,28 @@ where
             unreachable!("fill_data called in non-data state")
         };
 
-        // In streaming modes, if we still have any buffered data to return, don't read more now.
-        // (For `Seipdv1Streaming`, keep at least MDC_LEN bytes back for the MDC check at the end)
-        if (protected.is_seipdv1_streaming() && buffer.remaining() > MDC_LEN)
-            || (protected.is_sed() && buffer.has_remaining())
-        {
-            return Ok(false);
+        // In streaming modes, if we have enough buffered data, don't read more now.
+        match protected {
+            MaybeProtected::ProtectedStreaming { .. } => {
+                // For `Seipdv1Streaming`, keep at least MDC_LEN bytes back for the MDC check at the end
+                if buffer.remaining() > MDC_LEN {
+                    return Ok(false);
+                }
+            }
+            MaybeProtected::Unprotected { .. } => {
+                // For SED any amount is enough
+                if buffer.has_remaining() {
+                    return Ok(false);
+                }
+            }
+            MaybeProtected::ProtectedCheckFirst { .. } => {}
         }
 
         let current_len = buffer.remaining();
 
         let is_last_read = match protected {
-            MaybeProtected::Protected {
-                mode: Seipdv1ReadMode::CheckFirst { max_message_size },
-                ..
+            MaybeProtected::ProtectedCheckFirst {
+                max_message_size, ..
             } => {
                 // Non-Streaming decryption: Read the entire input stream in one go.
 
@@ -522,7 +531,8 @@ where
         decryptor.decrypt(&mut buffer[current_len..]);
 
         match protected {
-            MaybeProtected::Protected { ref mut hasher, .. } => {
+            MaybeProtected::ProtectedCheckFirst { ref mut hasher, .. }
+            | MaybeProtected::ProtectedStreaming { ref mut hasher, .. } => {
                 // For any valid input, the buffer must contain at least MDC_LEN bytes here
                 if buffer.remaining() < MDC_LEN {
                     return Err(io::Error::other(Error::MdcError));
@@ -562,22 +572,29 @@ where
                 protected,
                 ..
             } => {
-                if let MaybeProtected::Protected { mut hasher, .. } = protected {
-                    // Check the validity of the MDC in the message
+                match protected {
+                    MaybeProtected::ProtectedCheckFirst { mut hasher, .. }
+                    | MaybeProtected::ProtectedStreaming { mut hasher, .. } => {
+                        // Check the validity of the MDC in the message
 
-                    // The MDC as found in the message.
-                    // MDC is: 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
-                    let msg_mdc = buffer.split_off(buffer.len() - MDC_LEN);
+                        // The MDC as found in the message.
+                        // MDC is: 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
+                        let msg_mdc = buffer.split_off(buffer.len() - MDC_LEN);
 
-                    hasher.update(&msg_mdc[..2]);
-                    let hash: [u8; 20] = hasher.finalize().into();
+                        hasher.update(&msg_mdc[..2]);
+                        let hash: [u8; 20] = hasher.finalize().into();
 
-                    // Constant-time comparison of MDC from message against expected values
-                    let mdc_ok = msg_mdc[0].ct_eq(&0xD3) // MDC tag
-                        & msg_mdc[1].ct_eq(&0x14) // MDC length
-                        & msg_mdc[2..].ct_eq(hash.as_slice());
-                    if bool::from(!mdc_ok) {
-                        return Err(io::Error::other(Error::MdcError));
+                        // Constant-time comparison of MDC from message against expected values
+                        let mdc_ok = msg_mdc[0].ct_eq(&0xD3) // MDC tag
+                            & msg_mdc[1].ct_eq(&0x14) // MDC length
+                            & msg_mdc[2..].ct_eq(hash.as_slice());
+                        if bool::from(!mdc_ok) {
+                            return Err(io::Error::other(Error::MdcError));
+                        }
+                    }
+
+                    MaybeProtected::Unprotected { .. } => {
+                        // nothing to check
                     }
                 }
 
