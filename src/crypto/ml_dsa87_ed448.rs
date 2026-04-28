@@ -98,7 +98,7 @@ impl Serialize for SecretKey {
 }
 
 impl Signer for SecretKey {
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
+    fn sign_prehash(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
         ensure!(
             ![
                 HashAlgorithm::Md5,
