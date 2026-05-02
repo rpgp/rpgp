@@ -46,7 +46,7 @@ aes = "0.8.4"
 aead = { version = "0.5", features = ["bytes"] }
 argon2 = { version = "0.5", features = ["zeroize", "std"] }
 block-padding = "0.3"
-blowfish = "0.9"
+blowfish = "0.10"
 camellia = "0.1"
 cast5 = "0.11"
 cfb-mode = "0.8.2"
