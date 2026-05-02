@@ -58,7 +58,7 @@ curve25519-dalek = { version = "4.1.3", default-features = false, features = [
     "precomputed-tables",
     "zeroize",
 ] }
-des = "0.8"
+des = "0.9"
 digest = "0.10.7"
 dsa = "0.6.3"
 ecdsa = "0.16.9"
