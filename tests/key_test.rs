@@ -806,6 +806,11 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
         let typ = match pk[0] {
             PublicOrSecret::Public(_) => armor::BlockType::PublicKey,
             PublicOrSecret::Secret(_) => armor::BlockType::PrivateKey,
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            PublicOrSecret::PersistentSymmetric(_) => {
+                panic!("PersistentSymmetric is not expected here")
+            }
         };
         armor::write(&pk, typ, &mut ser, Some(&headers), true).unwrap();
         let ser_str = std::str::from_utf8(&ser).unwrap();
@@ -842,6 +847,11 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
                 }
                 PublicOrSecret::Public(_) => {
                     // Nothing todo
+                }
+
+                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+                PublicOrSecret::PersistentSymmetric(_) => {
+                    panic!("PersistentSymmetric is not expected here")
                 }
             }
         }

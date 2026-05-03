@@ -147,6 +147,16 @@ impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for PubPrivIterator<I>
                                 parser.into_inner(),
                             )
                         }
+                        #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+                        Tag::PersistentSymmetricKey => match packets.next() {
+                            Some(Ok(Packet::PersistentSymmetricKey(key))) => (
+                                Some(Ok(PublicOrSecret::PersistentSymmetric(
+                                    crate::composed::TransferablePersistentSymmetricKey { key },
+                                ))),
+                                packets,
+                            ),
+                            _ => (None, packets),
+                        },
                         _ => (None, packets),
                     };
 
