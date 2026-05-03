@@ -100,7 +100,7 @@ fn main() -> pgp::errors::Result<()> {
    // Create a signature over DATA with the private key
    let (private_key, _headers) = SignedSecretKey::from_armor_file("key.sec.asc")?;
    let sig = DetachedSignature::sign_binary_data(
-      rand::thread_rng(),
+      &mut rand::rng(),
       &private_key.primary_key, // Sign with the primary (NOTE: This is not always the right key!)
       &Password::empty(),
       HashAlgorithm::Sha256,

@@ -2,7 +2,7 @@ use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
-use elliptic_curve::sec1::ToEncodedPoint;
+use elliptic_curve::sec1::ToSec1Point;
 
 use crate::{
     crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve},
@@ -142,19 +142,19 @@ impl Serialize for EcdsaPublicParams {
 
         match self {
             EcdsaPublicParams::P256 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_sec1_point(false).as_bytes());
                 p.to_writer(writer)?;
             }
             EcdsaPublicParams::P384 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_sec1_point(false).as_bytes());
                 p.to_writer(writer)?;
             }
             EcdsaPublicParams::P521 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_sec1_point(false).as_bytes());
                 p.to_writer(writer)?;
             }
             EcdsaPublicParams::Secp256k1 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_sec1_point(false).as_bytes());
                 p.to_writer(writer)?;
             }
             EcdsaPublicParams::Unsupported { opaque, .. } => {
@@ -179,19 +179,19 @@ impl Serialize for EcdsaPublicParams {
 
         match self {
             EcdsaPublicParams::P256 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_sec1_point(false).as_bytes());
                 sum += p.write_len();
             }
             EcdsaPublicParams::P384 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_sec1_point(false).as_bytes());
                 sum += p.write_len();
             }
             EcdsaPublicParams::P521 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_sec1_point(false).as_bytes());
                 sum += p.write_len();
             }
             EcdsaPublicParams::Secp256k1 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_sec1_point(false).as_bytes());
                 sum += p.write_len();
             }
             EcdsaPublicParams::Unsupported { opaque, .. } => {
@@ -204,6 +204,7 @@ impl Serialize for EcdsaPublicParams {
 
 #[cfg(test)]
 mod tests {
+    use elliptic_curve::Generate;
     use proptest::prelude::*;
     use rand::SeedableRng;
 
@@ -211,29 +212,29 @@ mod tests {
 
     proptest::prop_compose! {
         pub fn p256_pub_gen()(seed: u64) -> p256::PublicKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            p256::SecretKey::random(&mut rng).public_key()
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
+            p256::SecretKey::generate_from_rng(&mut rng).public_key()
         }
     }
 
     proptest::prop_compose! {
         pub fn p384_pub_gen()(seed: u64) -> p384::PublicKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            p384::SecretKey::random(&mut rng).public_key()
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
+            p384::SecretKey::generate_from_rng(&mut rng).public_key()
         }
     }
 
     proptest::prop_compose! {
         pub fn p521_pub_gen()(seed: u64) -> p521::PublicKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            p521::SecretKey::random(&mut rng).public_key()
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
+            p521::SecretKey::generate_from_rng(&mut rng).public_key()
         }
     }
 
     proptest::prop_compose! {
         pub fn k256_pub_gen()(seed: u64) -> k256::PublicKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            k256::SecretKey::random(&mut rng).public_key()
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
+            k256::SecretKey::generate_from_rng(&mut rng).public_key()
         }
     }
 

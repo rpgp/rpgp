@@ -1,7 +1,6 @@
 use std::io::{self, BufRead};
 
-use cx448::x448;
-use ml_kem::{kem::EncapsulationKey, EncodedSizeUser, MlKem1024Params};
+use ml_kem::{EncapsulationKey, KeyExport, MlKem1024};
 
 use crate::{
     errors::{format_err, Result},
@@ -16,8 +15,8 @@ const X448_PUB_KEY_LENGTH: usize = 56;
 pub struct MlKem1024X448PublicParams {
     #[debug("{}", hex::encode(x448_key.as_bytes()))]
     pub x448_key: x448::PublicKey,
-    #[debug("{}", hex::encode(ml_kem_key.as_bytes()))]
-    pub ml_kem_key: Box<EncapsulationKey<MlKem1024Params>>,
+    #[debug("{}", hex::encode(ml_kem_key.to_bytes()))]
+    pub ml_kem_key: Box<EncapsulationKey<MlKem1024>>,
 }
 
 impl Eq for MlKem1024X448PublicParams {}
@@ -27,7 +26,8 @@ impl MlKem1024X448PublicParams {
         let x448_public_raw = i.read_arr::<{ X448_PUB_KEY_LENGTH }>()?;
 
         let ml_kem_raw = i.read_arr::<ML_KEM_PUB_KEY_LENGTH>()?;
-        let ml_kem_key = EncapsulationKey::from_bytes(&ml_kem_raw.into());
+        let ml_kem_key = EncapsulationKey::new(&ml_kem_raw.into())
+            .map_err(|_| format_err!("invalid x448 public key"))?;
 
         Ok(Self {
             x448_key: x448::PublicKey::from_bytes(&x448_public_raw)
@@ -40,7 +40,7 @@ impl MlKem1024X448PublicParams {
 impl Serialize for MlKem1024X448PublicParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_all(self.x448_key.as_bytes())?;
-        writer.write_all(&self.ml_kem_key.as_bytes())?;
+        writer.write_all(&self.ml_kem_key.to_bytes())?;
         Ok(())
     }
 
@@ -51,7 +51,8 @@ impl Serialize for MlKem1024X448PublicParams {
 
 #[cfg(test)]
 mod tests {
-    use ml_kem::{KemCore, MlKem1024};
+    use elliptic_curve::Generate;
+    use ml_kem::{Kem, MlKem1024};
     use proptest::prelude::*;
     use rand::SeedableRng;
 
@@ -63,10 +64,10 @@ mod tests {
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
             fn from_seed(seed: u64) -> MlKem1024X448PublicParams {
-                let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+                let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
 
-                let x = x448::Secret::new(&mut rng);
-                let (_, ml) = MlKem1024::generate(&mut rng);
+                let x = x448::EphemeralSecret::generate_from_rng(&mut rng);
+                let (_, ml) = MlKem1024::generate_keypair_from_rng(&mut rng);
 
                 MlKem1024X448PublicParams {
                     x448_key: (&x).into(),

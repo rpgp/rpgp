@@ -1412,8 +1412,8 @@ impl<'a> From<Option<&'a armor::Headers>> for ArmorOptions<'a> {
 mod tests {
     use std::{fs, io::BufReader};
 
+    use chacha20::ChaCha8Rng;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::{
@@ -1872,7 +1872,7 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
-        let rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
         builder
@@ -1880,7 +1880,7 @@ mod tests {
             .sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
         let armored = builder
-            .to_armored_string(rng, ArmorOptions::default())
+            .to_armored_string(&mut rng, ArmorOptions::default())
             .expect("serialize");
         // fs::write("./message-string-signed-x25519.asc", &armored).unwrap();
 
@@ -1899,13 +1899,13 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
-        let rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
         builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
         let armored = builder
-            .to_armored_string(rng, ArmorOptions::default())
+            .to_armored_string(&mut rng, ArmorOptions::default())
             .expect("serialize");
         // fs::write("./message-bytes-signed-x25519.asc", &armored).unwrap();
 
@@ -1925,14 +1925,14 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
-        let rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
         builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
         builder.compression(CompressionAlgorithm::ZLIB);
 
         let armored = builder
-            .to_armored_string(rng, ArmorOptions::default())
+            .to_armored_string(&mut rng, ArmorOptions::default())
             .expect("serialize");
         // fs::write("./message-bytes-compressed-signed-x25519.asc", &armored).unwrap();
 
@@ -1998,13 +1998,13 @@ mod tests {
         .unwrap();
         let pkey = skey.public_key();
 
-        let rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
         builder.sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
 
         let armored = builder
-            .to_armored_string(rng, ArmorOptions::default())
+            .to_armored_string(&mut rng, ArmorOptions::default())
             .expect("serialize");
 
         // fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
@@ -2027,7 +2027,7 @@ mod tests {
         let pkey = skey.public_key();
 
         for _ in 0..100 {
-            let rng = ChaCha8Rng::seed_from_u64(0);
+            let mut rng = ChaCha8Rng::seed_from_u64(0);
 
             let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
             builder.compression(CompressionAlgorithm::ZLIB);
@@ -2035,7 +2035,7 @@ mod tests {
             builder.sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
 
             let armored = builder
-                .to_armored_string(rng, ArmorOptions::default())
+                .to_armored_string(&mut rng, ArmorOptions::default())
                 .expect("serialize");
 
             // fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
