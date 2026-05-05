@@ -25,7 +25,7 @@ fuzz_target!(|data: &[u8]| {
 
             let (decrypt_key, _headers) = SignedSecretKey::from_string(key_input).unwrap();
 
-            let _ = sig.verify(&*decrypt_key.public_key(), b"dummy");
+            let _ = sig.verify(decrypt_key.public_key(), b"dummy");
         }
         Err(_) => return,
     }
