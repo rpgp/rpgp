@@ -1,3 +1,4 @@
+use bytes::BytesMut;
 use log::debug;
 use rand::{CryptoRng, Rng};
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -103,6 +104,15 @@ pub enum SecretKey {
         #[cfg_attr(test, proptest(strategy = "tests::key_p521_gen()"))]
         secret: p521::SecretKey,
     },
+
+    #[cfg_attr(test, proptest(skip))]
+    Unsupported {
+        #[zeroize(skip)]
+        curve: ECCCurve,
+
+        #[debug("..")]
+        opaque: BytesMut,
+    },
 }
 
 impl From<&SecretKey> for EcdhPublicParams {
@@ -131,6 +141,10 @@ impl From<&SecretKey> for EcdhPublicParams {
                 p: secret.public_key(),
                 hash,
                 alg_sym,
+            },
+            SecretKey::Unsupported { curve, .. } => Self::Unsupported {
+                curve: curve.clone(),
+                opaque: vec![].into(), // FIXME: cannot transform. error?
             },
         }
     }
@@ -214,6 +228,7 @@ impl SecretKey {
             Self::P256 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
             Self::P384 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
             Self::P521 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
+            Self::Unsupported { .. } => unimplemented!("should error"),
         }
     }
 
@@ -223,6 +238,7 @@ impl SecretKey {
             Self::P256 { .. } => ECCCurve::P256,
             Self::P384 { .. } => ECCCurve::P384,
             Self::P521 { .. } => ECCCurve::P521,
+            Self::Unsupported { curve, .. } => curve.clone(),
         }
     }
 
@@ -233,6 +249,9 @@ impl SecretKey {
             Self::P256 { secret, .. } => secret.to_bytes().to_vec(),
             Self::P384 { secret, .. } => secret.to_bytes().to_vec(),
             Self::P521 { secret, .. } => secret.to_bytes().to_vec(),
+
+            // NOTE: if the opaque data is Mpi-formatted, this will include the length field!
+            Self::Unsupported { opaque, .. } => opaque.to_vec(),
         }
     }
 }
@@ -305,6 +324,9 @@ impl Decryptor for SecretKey {
             }
             SecretKey::P521 { secret, .. } => {
                 derive_shared_secret_decryption::<p521::NistP521>(data.public_point, secret, 133)?
+            }
+            SecretKey::Unsupported { curve, .. } => {
+                bail!("unsupported ECDH curve {:?}", curve);
             }
         };
 
