@@ -1556,3 +1556,28 @@ fn test_non_standard_rsa_modulus() -> TestResult {
 
     Ok(())
 }
+
+#[test]
+fn test_unknown_algorithm_brainpool() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    // a set of example TPK and TSK with one brainpool subkey, each
+
+    let (cert, _) =
+        SignedPublicKey::from_armor_single(File::open("./tests/brainpool/public.cert")?)?;
+
+    assert_eq!(cert.public_subkeys.len(), 2);
+
+    //  pw: "password"
+    let (locked, _) =
+        SignedSecretKey::from_armor_single(File::open("./tests/brainpool/locked.tsk")?)?;
+
+    assert_eq!(locked.secret_subkeys.len(), 2);
+
+    let (unlocked, _) =
+        SignedSecretKey::from_armor_single(File::open("./tests/brainpool/unlocked.tsk")?)?;
+
+    assert_eq!(unlocked.secret_subkeys.len(), 2);
+
+    Ok(())
+}
