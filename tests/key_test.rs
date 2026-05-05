@@ -1556,3 +1556,52 @@ fn test_non_standard_rsa_modulus() -> TestResult {
 
     Ok(())
 }
+
+#[test]
+fn test_unknown_algorithm_brainpool() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    // a set of example TPK and TSK with one brainpool subkey, each
+
+    let (cert, _) =
+        SignedPublicKey::from_armor_single(File::open("./tests/brainpool/public.cert")?)?;
+
+    assert_eq!(cert.public_subkeys.len(), 2);
+    assert_eq!(
+        cert.public_subkeys[0].fingerprint().to_string(),
+        "2639606d9def1d3be391a9303d894dee1456a7be"
+    );
+    assert_eq!(
+        cert.public_subkeys[1].fingerprint().to_string(),
+        "ed6263e93e154a84903ea17786fab4f0dc170cdd"
+    );
+
+    //  pw: "password"
+    let (locked, _) =
+        SignedSecretKey::from_armor_single(File::open("./tests/brainpool/locked.tsk")?)?;
+
+    assert_eq!(locked.secret_subkeys.len(), 2);
+    assert_eq!(
+        locked.secret_subkeys[0].fingerprint().to_string(),
+        "2639606d9def1d3be391a9303d894dee1456a7be"
+    );
+    assert_eq!(
+        locked.secret_subkeys[1].fingerprint().to_string(),
+        "ed6263e93e154a84903ea17786fab4f0dc170cdd"
+    );
+
+    let (unlocked, _) =
+        SignedSecretKey::from_armor_single(File::open("./tests/brainpool/unlocked.tsk")?)?;
+
+    assert_eq!(unlocked.secret_subkeys.len(), 2);
+    assert_eq!(
+        unlocked.secret_subkeys[0].fingerprint().to_string(),
+        "3e9e605d7125508bd1cea025fd159eb10f9d6f62"
+    );
+    assert_eq!(
+        unlocked.secret_subkeys[1].fingerprint().to_string(),
+        "80344150eb9d0ea041cb8447fe48fdc1961740e3"
+    );
+
+    Ok(())
+}
