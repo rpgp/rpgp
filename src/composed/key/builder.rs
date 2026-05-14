@@ -532,7 +532,7 @@ impl KeyType {
             }
             KeyType::ECDH(curve) => {
                 let secret = ecdh::SecretKey::generate(rng, curve)?;
-                let public_params = PublicParams::ECDH((&secret).into());
+                let public_params = PublicParams::ECDH((&secret).try_into()?);
                 let secret_params = PlainSecretParams::ECDH(secret);
                 (public_params, secret_params)
             }

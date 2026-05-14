@@ -115,34 +115,41 @@ pub enum SecretKey {
     },
 }
 
-impl From<&SecretKey> for EcdhPublicParams {
-    fn from(value: &SecretKey) -> Self {
+impl TryFrom<&SecretKey> for EcdhPublicParams {
+    type Error = Error;
+
+    fn try_from(value: &SecretKey) -> Result<Self, Self::Error> {
         let curve = value.curve();
         let hash = curve.hash_algo().expect("known algo");
         let alg_sym = curve.sym_algo().expect("known algo");
         match value {
-            SecretKey::Curve25519Legacy(key) => Self::Curve25519Legacy {
+            SecretKey::Curve25519Legacy(key) => Ok(Self::Curve25519Legacy {
                 p: PublicKey::from(&key.0),
                 hash,
                 alg_sym,
                 ecdh_kdf_type: EcdhKdfType::Native,
-            },
-            SecretKey::P256 { ref secret } => Self::P256 {
+            }),
+            SecretKey::P256 { ref secret } => Ok(Self::P256 {
                 p: secret.public_key(),
                 hash,
                 alg_sym,
-            },
-            SecretKey::P384 { ref secret } => Self::P384 {
+            }),
+            SecretKey::P384 { ref secret } => Ok(Self::P384 {
                 p: secret.public_key(),
                 hash,
                 alg_sym,
-            },
-            SecretKey::P521 { ref secret } => Self::P521 {
+            }),
+            SecretKey::P521 { ref secret } => Ok(Self::P521 {
                 p: secret.public_key(),
                 hash,
                 alg_sym,
-            },
-            SecretKey::Unsupported { .. } => unimplemented!(), // FIXME?
+            }),
+            SecretKey::Unsupported { curve, .. } => {
+                bail!(
+                    "Can't transform ecdh::SecretKey ({:?}) into EcdhPublicParams",
+                    curve
+                )
+            }
         }
     }
 }
@@ -718,7 +725,7 @@ mod tests {
             let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
             let skey = SecretKey::generate(&mut rng, &curve).unwrap();
-            let pub_params: EcdhPublicParams = (&skey).into();
+            let pub_params: EcdhPublicParams = (&skey).try_into().unwrap();
 
             for text_size in 1..=239 {
                 for _i in 0..10 {

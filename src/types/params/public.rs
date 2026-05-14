@@ -91,7 +91,7 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
             PlainSecretParams::RSA(ref p) => Ok(Self::RSA(p.into())),
             PlainSecretParams::DSA(ref p) => Ok(Self::DSA(p.into())),
             PlainSecretParams::ECDSA(ref p) => p.try_into().map(Self::ECDSA),
-            PlainSecretParams::ECDH(ref p) => Ok(Self::ECDH(p.into())),
+            PlainSecretParams::ECDH(ref p) => Ok(Self::ECDH(p.try_into()?)),
             PlainSecretParams::Elgamal(ref p) => Ok(Self::Elgamal(p.into())),
             PlainSecretParams::Ed25519(ref p) => Ok(Self::Ed25519(p.into())),
             PlainSecretParams::Ed25519Legacy(ref p) => Ok(Self::EdDSALegacy(p.into())),
