@@ -9,11 +9,14 @@ use crate::{
         aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::Result,
+    errors::{bail, Result},
     packet::{Features, KeyFlags, Notation, RevocationCode, Signature},
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::{CompressionAlgorithm, Duration, Fingerprint, KeyId, RevocationKey, Timestamp},
+    types::{
+        CompressionAlgorithm, Duration, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion,
+        RevocationKey, Timestamp,
+    },
 };
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -54,6 +57,7 @@ pub enum SubpacketType {
     // AttestedCertifications, // non-RFC
     // KeyBlock,               // non-RFC
     PreferredAead,
+    ReplacementKey,
     Experimental(u8),
     Other(u8),
 }
@@ -90,6 +94,7 @@ impl SubpacketType {
             // SubpacketType::AttestedCertifications => 37,
             // SubpacketType::KeyBlock => 38,
             SubpacketType::PreferredAead => 39,
+            SubpacketType::ReplacementKey => 100,
             SubpacketType::Experimental(n) => *n,
             SubpacketType::Other(n) => *n,
         };
@@ -138,7 +143,8 @@ impl SubpacketType {
             // 37 => SubpacketType::AttestedCertifications,
             // 38 => SubpacketType::KeyBlock,
             39 => SubpacketType::PreferredAead,
-            100..=110 => SubpacketType::Experimental(n),
+            100 => SubpacketType::ReplacementKey,
+            101..=110 => SubpacketType::Experimental(n), // TODO: re-add 100 when ReplacementKey has a final id
             _ => SubpacketType::Other(n),
         };
 
@@ -316,6 +322,7 @@ pub enum SubpacketData {
     PreferredEncryptionModes(SmallVec<[AeadAlgorithm; 2]>),
     IntendedRecipientFingerprint(Fingerprint),
     PreferredAeadAlgorithms(SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>),
+    ReplacementKeyData(ReplacementKey),
     Experimental(u8, #[debug("{}", hex::encode(_1))] Bytes),
     Other(u8, #[debug("{}", hex::encode(_1))] Bytes),
     SignatureTarget(
@@ -325,11 +332,144 @@ pub enum SubpacketData {
     ),
 }
 
+#[derive(derive_more::Debug, PartialEq, Eq, Clone)]
+pub struct ReplacementKeyTarget {
+    pub(crate) fingerprint: Fingerprint,
+
+    /// Imprint of the target key.
+    ///
+    /// Uses the digest algorithm of the signature packet that contained this replacement key
+    /// target.
+    pub(crate) imprint: Box<[u8]>,
+}
+
+impl ReplacementKeyTarget {
+    pub(crate) fn new(fingerprint: Fingerprint, imprint: Box<[u8]>) -> Self {
+        Self {
+            fingerprint,
+            imprint,
+        }
+    }
+
+    pub fn fingerprint(&self) -> &Fingerprint {
+        &self.fingerprint
+    }
+
+    /// Create a `ReplacementKeyTarget` based on a primary key
+    pub fn from<K: KeyDetails + Imprint>(primary: &K) -> Result<Self> {
+        let fingerprint = primary.fingerprint();
+
+        let imprint = match primary.version() {
+            KeyVersion::V2 | KeyVersion::V3 | KeyVersion::V4 | KeyVersion::V6 => {
+                primary.imprint::<sha3::Sha3_256>()?.to_vec().into()
+            }
+            v => bail!(format!("Unsupported key version {v:?}")),
+        };
+
+        Ok(Self::new(fingerprint, imprint))
+    }
+
+    /// Returns `true`, if `primary` matches this `ReplacementKeyTarget`
+    pub fn matches<K: KeyDetails + Imprint>(&self, primary: &K) -> bool {
+        if self.fingerprint != primary.fingerprint() {
+            return false;
+        }
+
+        match primary.version() {
+            KeyVersion::V2 | KeyVersion::V3 | KeyVersion::V4 | KeyVersion::V6 => {
+                let Ok(imprint) = primary.imprint::<sha3::Sha3_256>() else {
+                    log::debug!("Failed to calculate imprint");
+                    return false;
+                };
+
+                self.imprint.as_ref() == imprint.as_slice()
+            }
+            v => {
+                log::debug!("Unsupported key version {v:?}");
+
+                false
+            }
+        }
+    }
+}
+
+impl Serialize for ReplacementKeyTarget {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        use byteorder::WriteBytesExt;
+
+        writer.write_u8(1 + self.fingerprint.len() as u8 + self.imprint.len() as u8)?;
+
+        if let Some(version) = self.fingerprint.version() {
+            writer.write_u8(version.into())?;
+            writer.write_all(self.fingerprint.as_bytes())?;
+        } else {
+            bail!("IntendedRecipientFingerprint: needs versioned fingerprint")
+        }
+
+        writer.write_all(&self.imprint)?;
+
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        1 + 1 + self.fingerprint.len() + self.imprint.len()
+    }
+}
+
+/// The information contained in one Replacement Key Subpacket.
+///
+/// It contains either:
+///
+/// - one ("forward") target key that replaces the current key, or
+/// - a list of ("backward") keys that are replaced by the current key.
+#[derive(derive_more::Debug, PartialEq, Eq, Clone)]
+pub enum ReplacementKey {
+    /// The target key is the replacement primary key for the current primary key.
+    Forward(ReplacementKeyTarget),
+
+    /// The target key(s) are primary keys for which the current primary key is the replacement
+    /// primary key.
+    Backward(Vec<ReplacementKeyTarget>),
+}
+
+impl Serialize for ReplacementKey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        use byteorder::WriteBytesExt;
+
+        match self {
+            ReplacementKey::Forward(target) => {
+                // Forward reference
+                writer.write_u8(0x00)?;
+
+                target.to_writer(writer)?;
+            }
+            ReplacementKey::Backward(targets) => {
+                // Backward reference
+                writer.write_u8(0x01)?;
+
+                for target in targets {
+                    target.to_writer(writer)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        match self {
+            Self::Forward(target) => 1 + target.write_len(),
+            Self::Backward(targets) => 1 + targets.iter().map(|t| t.write_len()).sum::<usize>(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::composed::{Deserializable, DetachedSignature};
 
     #[test]
     fn subpacket_len() {
@@ -357,6 +497,41 @@ mod tests {
         let len = SubpacketLength::encode(MAX_TWO_BYTE as u32 + 1);
         assert!(matches!(len, SubpacketLength::Five(_)));
         assert_eq!(len.len(), MAX_TWO_BYTE + 1);
+    }
+
+    #[test]
+    fn replacement_key_subpacket() {
+        // test vector from https://github.com/ProtonMail/go-crypto/pull/311
+        let sig_hex = "c2c05b041f0108008f0582886e0900351400000000001c001073616c74406e6f746174696f6e732e6f70656e7067706a732e6f726760cb239ed2fbda79e6cc68a0d52eb82a029b021621040f0bfb42b3b08bece556fffcc181c053de849bf23864003504deadbeefdeadbeefdeadbeefdeadbeefdeadbeef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0000350404009b70dc2436327b36dc25f6f9440666fe3b6e3c4ea79be12b2a6c12a5450451cc47b5c005bfe408c7da4012636f61aec19d93938ab07daa61ff579fdd7353e06bc6ec4c4868e28d860498d0af9d07d5dcddae37e599899e7f031cfb7b615d5bcb45529f1288d196240a653885a0a41305ded4d265f67057c942e1a9e01e5fcc5d";
+
+        let sig_bytes = hex::decode(sig_hex).unwrap();
+
+        let sig = DetachedSignature::from_bytes(sig_bytes.as_slice())
+            .unwrap()
+            .signature;
+
+        let sp = sig
+            .config()
+            .unwrap()
+            .hashed_subpackets
+            .iter()
+            .find(|sp| sp.typ() == SubpacketType::ReplacementKey)
+            .unwrap();
+
+        let SubpacketData::ReplacementKeyData(replace) = &sp.data else {
+            panic!("no!")
+        };
+
+        let ReplacementKey::Forward(target) = replace else {
+            panic!("no!")
+        };
+
+        assert_eq!(
+            target.fingerprint.to_string(),
+            "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+        );
+
+        assert_eq!(target.imprint.len(), 32);
     }
 
     proptest! {
