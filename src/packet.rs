@@ -119,7 +119,10 @@ pub use self::{
     padding::*,
     public_key_encrypted_session_key::*,
     signature::{
-        subpacket::{Subpacket, SubpacketData, SubpacketLength, SubpacketType},
+        subpacket::{
+            ReplacementKey, ReplacementKeyTarget, Subpacket, SubpacketData, SubpacketLength,
+            SubpacketType,
+        },
         *,
     },
     sym_encrypted_data::*,
