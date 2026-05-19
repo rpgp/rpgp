@@ -466,10 +466,12 @@ impl Serialize for ReplacementKey {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
+
     use proptest::prelude::*;
 
     use super::*;
-    use crate::composed::{Deserializable, DetachedSignature};
+    use crate::composed::{Deserializable, DetachedSignature, SignedPublicKey};
 
     #[test]
     fn subpacket_len() {
@@ -532,6 +534,49 @@ mod tests {
         );
 
         assert_eq!(target.imprint.len(), 32);
+    }
+
+    #[test]
+    fn replacement_key_bundle() {
+        // a pair of certificates from go-crypto
+        let mut file = File::open("tests/replacementkey/replacement_bundle.cert").expect("open");
+
+        let (certs, _) = SignedPublicKey::from_armor_many(&mut file).expect("parse");
+
+        let certs: Vec<_> = certs.into_iter().map(|res| res.unwrap()).collect();
+
+        for (i, cert) in certs.iter().enumerate() {
+            let sig = cert
+                .details
+                .direct_signatures
+                .first()
+                .expect("first DKS")
+                .clone();
+
+            let Some(replacement) = sig.config().expect("config").replacement_key() else {
+                panic!("No replacement key subpacket found");
+            };
+
+            match i {
+                0 => {
+                    let ReplacementKey::Forward(target) = replacement else {
+                        panic!("no!");
+                    };
+
+                    assert!(target.matches(&certs[1].primary_key));
+                }
+                1 => {
+                    let ReplacementKey::Backward(targets) = replacement else {
+                        panic!("no!");
+                    };
+
+                    assert_eq!(targets.len(), 1);
+
+                    assert!(targets[0].matches(&certs[0].primary_key));
+                }
+                _ => unimplemented!(),
+            }
+        }
     }
 
     proptest! {
