@@ -4,7 +4,7 @@ use byteorder::{BigEndian, WriteBytesExt};
 use log::debug;
 
 use crate::{
-    errors::{bail, unimplemented_err, unsupported_err, Result},
+    errors::{bail, ensure_eq, unimplemented_err, unsupported_err, Result},
     packet::{
         signature::{types::*, SignatureConfig},
         SignatureVersionSpecific, Subpacket, SubpacketData, SubpacketType,
@@ -309,6 +309,14 @@ impl Serialize for SubpacketData {
 
 impl Serialize for Subpacket {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        ensure_eq!(
+            self.len.len(),
+            self.data.write_len() + 1,
+            "Inconsistent Subpacket len field ({}), subpacket data is {}",
+            self.len.len(),
+            self.data.write_len(),
+        );
+
         self.len.to_writer(writer)?;
         writer.write_u8(self.typ().as_u8(self.is_critical))?;
         self.data.to_writer(writer)?;

@@ -187,8 +187,8 @@ parse_dumps!(
         // - Hash::Other(4)
         // - Elgamal verify
         5,
-        3330,
-        20_997
+        3331,
+        20_998
     ),
     (
         test_parse_dumps_4,
@@ -206,8 +206,8 @@ parse_dumps!(
         // - Hash::Other(4)
         // - Elgamal verify
         7,
-        3361,
-        20_999
+        3364,
+        21_002
     ),
     (
         test_parse_dumps_6,
@@ -234,8 +234,8 @@ parse_dumps!(
         // - Hash::Other(5)
         // - Elgamal verify
         5,
-        3275,
-        20_998
+        3278,
+        21_001
     ),
     (
         test_parse_dumps_9,
@@ -244,8 +244,8 @@ parse_dumps!(
         // - Hash::Other(5)
         // - Elgamal verify
         2,
-        3433,
-        21_001
+        3441,
+        21_009
     ),
 );
 
