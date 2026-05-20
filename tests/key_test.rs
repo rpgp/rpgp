@@ -1564,7 +1564,7 @@ fn test_unknown_algorithm_brainpool() -> TestResult {
     // a set of example TPK and TSK with one brainpool subkey, each
 
     let (cert, _) =
-        SignedPublicKey::from_armor_single(File::open("./tests/brainpool/public.cert")?)?;
+        SignedPublicKey::from_armor_single(File::open("./tests/ecdh/brainpool/public.asc")?)?;
 
     assert_eq!(cert.public_subkeys.len(), 2);
     assert_eq!(
@@ -1578,7 +1578,7 @@ fn test_unknown_algorithm_brainpool() -> TestResult {
 
     //  pw: "password"
     let (locked, _) =
-        SignedSecretKey::from_armor_single(File::open("./tests/brainpool/locked.tsk")?)?;
+        SignedSecretKey::from_armor_single(File::open("./tests/ecdh/brainpool/locked-sec.asc")?)?;
 
     assert_eq!(locked.secret_subkeys.len(), 2);
     assert_eq!(
@@ -1591,7 +1591,7 @@ fn test_unknown_algorithm_brainpool() -> TestResult {
     );
 
     let (unlocked, _) =
-        SignedSecretKey::from_armor_single(File::open("./tests/brainpool/unlocked.tsk")?)?;
+        SignedSecretKey::from_armor_single(File::open("./tests/ecdh/brainpool/unlocked-sec.asc")?)?;
 
     assert_eq!(unlocked.secret_subkeys.len(), 2);
     assert_eq!(
