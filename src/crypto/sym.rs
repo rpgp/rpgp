@@ -18,6 +18,7 @@ use zeroize::Zeroizing;
 use crate::{
     composed::RawSessionKey,
     errors::{bail, unimplemented_err, Result},
+    types::Seipdv1ReadMode,
 };
 
 mod decryptor;
@@ -537,13 +538,14 @@ impl SymmetricKeyAlgorithm {
     /// Protected decryption stream
     pub fn stream_decryptor_protected<R>(
         self,
+        seipdv1_read_mode: Seipdv1ReadMode,
         key: &[u8],
         ciphertext: R,
     ) -> Result<StreamDecryptor<R>>
     where
         R: std::io::BufRead,
     {
-        StreamDecryptor::new(self, true, key, ciphertext)
+        StreamDecryptor::new(self, true, seipdv1_read_mode, key, ciphertext)
     }
 
     /// Unprotected decryption stream
@@ -555,7 +557,7 @@ impl SymmetricKeyAlgorithm {
     where
         R: std::io::BufRead,
     {
-        StreamDecryptor::new(self, false, key, ciphertext)
+        StreamDecryptor::new(self, false, Seipdv1ReadMode::Streaming, key, ciphertext)
     }
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
@@ -823,7 +825,7 @@ mod tests {
                 const MAX_SIZE: usize = 2048;
 
                 // Protected
-                for i in 1..MAX_SIZE {
+                for i in (1..MAX_SIZE).chain([10_000, 100_000, 1_000_000]) {
                     info!("Size {}", i);
                     let mut data = vec![0u8; i];
                     data_rng.fill(&mut data[..]);
@@ -860,11 +862,38 @@ mod tests {
                         assert_eq!(data, plaintext, "decrypt failed");
                     }
                     {
-                        info!("decrypt streaming");
+                        info!("pre-buffered streaming decryptor");
+                        let ciphertext = ciphertext.clone();
                         dbg!(ciphertext.len(), $alg.cfb_prefix_size());
                         let mut input = std::io::Cursor::new(&ciphertext);
-                        let mut decryptor =
-                            $alg.stream_decryptor_protected(&key, &mut input).unwrap();
+                        let mut decryptor = $alg
+                            .stream_decryptor_protected(
+                                Seipdv1ReadMode::CheckFirst {
+                                    max_message_size: 2_000_000,
+                                },
+                                &key,
+                                &mut input,
+                            )
+                            .unwrap();
+                        let mut plaintext = Vec::new();
+                        decryptor.read_to_end(&mut plaintext).unwrap();
+                        assert_eq!(
+                            hex::encode(&data),
+                            hex::encode(&plaintext),
+                            "stream decrypt failed"
+                        );
+                    }
+                    {
+                        info!("decrypt unauthenticated streaming");
+                        dbg!(ciphertext.len(), $alg.cfb_prefix_size());
+                        let mut input = std::io::Cursor::new(&ciphertext);
+                        let mut decryptor = $alg
+                            .stream_decryptor_protected(
+                                Seipdv1ReadMode::Streaming,
+                                &key,
+                                &mut input,
+                            )
+                            .unwrap();
                         let mut plaintext = Vec::new();
                         decryptor.read_to_end(&mut plaintext).unwrap();
                         assert_eq!(
@@ -947,6 +976,8 @@ mod tests {
 
     use rand::RngCore;
 
+    use crate::types::Seipdv1ReadMode;
+
     #[ignore]
     #[test]
     fn bench_aes_256_protected() {
@@ -974,7 +1005,7 @@ mod tests {
         let now = Instant::now();
 
         let mut decryptor = SymmetricKeyAlgorithm::AES256
-            .stream_decryptor_protected(&key, &output[..])
+            .stream_decryptor_protected(Seipdv1ReadMode::default(), &key, &output[..])
             .unwrap();
         let mut res = Vec::with_capacity(SIZE);
         decryptor.read_to_end(&mut res).unwrap();

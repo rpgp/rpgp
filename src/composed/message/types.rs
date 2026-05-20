@@ -18,8 +18,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        DecryptionKey, EskType, KeyDetails, Password, PkeskBytes, PkeskVersion, SkeskVersion, Tag,
-        VerifyingKey,
+        DecryptionKey, EskType, KeyDetails, Password, PkeskBytes, PkeskVersion, Seipdv1ReadMode,
+        SkeskVersion, Tag, VerifyingKey,
     },
     util::impl_try_from_into,
 };
@@ -491,6 +491,11 @@ pub struct DecryptionOptions {
     legacy: bool,
     gnupg_aead: bool,
 
+    /// Choose the mode of decryption for SEIPDv1 messages.
+    ///
+    /// Also see [`DecryptionOptions::set_seipdv1_read_mode`].
+    seipdv1_read_mode: Seipdv1ReadMode,
+
     /// Allow processing of forwarded messages.
     ///
     /// Also see [`DecryptionOptions::enable_draft_forwarding`].
@@ -510,6 +515,7 @@ impl DecryptionOptions {
     ///
     /// This packet type is historical! (RFC 4880 from 11/2007 discourages emitting this format).
     /// Decrypting it should not be necessary in most contexts, except for historical data.
+    #[must_use]
     pub fn enable_legacy(mut self) -> Self {
         self.legacy = true;
         self
@@ -523,13 +529,49 @@ impl DecryptionOptions {
     /// "OCB encrypted data").
     ///
     /// This format is not part of the IETF-specified OpenPGP standard!
+    #[must_use]
     pub fn enable_gnupg_aead(mut self) -> Self {
         self.gnupg_aead = true;
         self
     }
 
+    /// Explicitly set the mode of decryption of SEIPDv1 encrypted data packets.
+    ///
+    /// By default, (in `CheckFirst` mode), the message is first read in full, and integrity is
+    /// checked. In this mode, is the ciphertext has been altered, an error is raised before any
+    /// plaintext is released from decryption.
+    ///
+    /// Message size in `CheckFirst` mode is limited to 1GB by default.
+    ///
+    /// By setting the SEIPDv1 read mode, decryption of SEIPDv1 messages can be configured:
+    ///
+    /// - to use a different size limit in `CheckFirst` mode, or
+    /// - to perform `Streaming` decryption.
+    ///
+    /// In `Streaming` mode, arbitrarily large messages can be processed with modest memory
+    /// requirement. However, the caller must be aware that they are reading unauthenticated
+    /// plaintext from the decryptor.
+    ///
+    /// `Streaming` mode is not recommended:
+    ///
+    /// In streaming mode, MDC errors may only be returned after the caller has already read
+    /// modified plaintext! If the ciphertext has been altered, some of the released plaintext may
+    /// be incorrect (and possibly attacker-controlled to some degree).
+    /// In addition, in this mode, possibly modified plaintext is read by rPGP's message
+    /// parser before authentication. This may trigger any number of (potentially attacker-caused)
+    /// parsing errors.
+    ///
+    /// If the attacker can observe the resulting modified plaintext, error outputs, or timing
+    /// characteristics, they may be able to mount attacks on the encrypted data.
+    #[must_use]
+    pub fn set_seipdv1_read_mode(mut self, mode: Seipdv1ReadMode) -> Self {
+        self.seipdv1_read_mode = mode;
+        self
+    }
+
     /// Enable decryption of forwarded messages as specified in draft-wussler-openpgp-forwarding
     #[cfg(feature = "draft-wussler-openpgp-forwarding")]
+    #[must_use]
     pub fn enable_draft_forwarding(mut self) -> Self {
         self.draft_forwarding = true;
         self
@@ -616,10 +658,10 @@ impl<'a> Edata<'a> {
     /// Decrypts only SEIPD (v1 or v2) packets.
     ///
     /// Throws errors if any other encryption containers are encountered in the message
-    /// (also see [Self::decrypt_permissive])
+    /// (also see [Self::decrypt_with_options])
     pub fn decrypt(&mut self, key: &PlainSessionKey) -> Result<()> {
         debug!("Edata::decrypt");
-        self.decrypt_permissive(key, DecryptionOptions::default())
+        self.decrypt_with_options(key, DecryptionOptions::default())
     }
 
     /// Decrypt encryption packets, including (optionally) non-standard ones.
@@ -630,7 +672,7 @@ impl<'a> Edata<'a> {
     ///
     /// HAZMAT: Depending on the `options` settings, this decrypts malleable SED packets.
     /// Also see <https://www.rfc-editor.org/rfc/rfc9580.html#name-avoiding-ciphertext-malleab>
-    pub fn decrypt_permissive(
+    pub fn decrypt_with_options(
         &mut self,
         key: &PlainSessionKey,
         options: DecryptionOptions,
@@ -640,7 +682,7 @@ impl<'a> Edata<'a> {
 
         match self {
             Self::SymEncryptedProtectedData { reader } => {
-                reader.decrypt(key)?;
+                reader.decrypt(key, options.seipdv1_read_mode)?;
             }
             Self::SymEncryptedData { reader } => {
                 if options.legacy {
@@ -653,7 +695,8 @@ impl<'a> Edata<'a> {
             }
             Self::GnupgAeadData { reader } => {
                 if options.gnupg_aead {
-                    reader.decrypt(key)?;
+                    // Seipdv1ReadMode doesn't apply here
+                    reader.decrypt(key, Seipdv1ReadMode::default())?;
                 } else {
                     bail!(
                         "GnuPG's AEAD packet (type 20) is non-standard, 'DecryptionOptions' allows opting into it"
@@ -886,11 +929,8 @@ impl<'a> Message<'a> {
                     return Err(Error::MissingKey);
                 };
 
-                if decrypt_options.legacy || decrypt_options.gnupg_aead {
-                    edata.decrypt_permissive(&session_key, decrypt_options)?;
-                } else {
-                    edata.decrypt(&session_key)?;
-                }
+                edata.decrypt_with_options(&session_key, decrypt_options)?;
+
                 let message = Message::from_edata(edata, is_nested)?;
                 Ok((message, result))
             }
