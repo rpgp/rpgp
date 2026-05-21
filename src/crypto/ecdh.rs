@@ -1,4 +1,4 @@
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use log::debug;
 use rand::{CryptoRng, Rng};
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -120,8 +120,9 @@ impl TryFrom<&SecretKey> for EcdhPublicParams {
 
     fn try_from(value: &SecretKey) -> Result<Self, Self::Error> {
         let curve = value.curve();
-        let hash = curve.hash_algo().expect("known algo");
-        let alg_sym = curve.sym_algo().expect("known algo");
+        let hash = curve.hash_algo()?;
+        let alg_sym = curve.sym_algo()?;
+
         match value {
             SecretKey::Curve25519Legacy(key) => Ok(Self::Curve25519Legacy {
                 p: PublicKey::from(&key.0),
@@ -209,9 +210,12 @@ impl SecretKey {
 
                 Ok(SecretKey::P521 { secret })
             }
-            _ => {
+            EcdhPublicParams::Brainpool256 { .. }
+            | EcdhPublicParams::Brainpool384 { .. }
+            | EcdhPublicParams::Brainpool512 { .. }
+            | EcdhPublicParams::Unsupported { .. } => {
                 let curve = pub_params.curve();
-                let opaque = Bytes::from(d.as_ref().to_vec()).into();
+                let opaque = BytesMut::from(d.as_ref());
                 Ok(SecretKey::Unsupported { curve, opaque })
             }
         }
