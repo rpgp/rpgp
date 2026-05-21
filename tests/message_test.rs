@@ -972,9 +972,9 @@ fn test_mock_pq_cert_leniency_eddsa_opaque() {
 #[test]
 fn test_mock_pq_cert_leniency_ecdh_opaque() {
     pretty_env_logger::try_init().ok();
-    let (key, _) =
-        SignedPublicKey::from_armor_file("./tests/mock_pq/ecdh_opaque_small.pub.asc").unwrap();
-    dbg!(key);
+    let res = SignedPublicKey::from_armor_file("./tests/mock_pq/ecdh_opaque_small.pub.asc");
+
+    assert!(res.is_err());
 }
 
 #[test]
