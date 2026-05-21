@@ -1680,10 +1680,42 @@ fn test_ecdh_unknown_brainpool_not_locked() -> TestResult {
 }
 
 #[test]
-fn test_unknown_ecdh_curve() -> TestResult {
-    let res = SignedSecretKey::from_armor_single(File::open("./tests/ecdh/unknown_oid.asc")?);
+fn test_unknown_ecdh_curve_malformed_oid() -> TestResult {
+    // This TSK has an ECDH subkey with a curve oid that is malformed
+    let res = SignedSecretKey::from_armor_single(File::open(
+        "./tests/ecdh/unknown_oid_malformed_sec.asc",
+    )?);
 
     assert!(res.is_err());
+
+    Ok(())
+}
+
+#[test]
+fn test_unknown_ecdh_curve_oid() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    // This TSK has an ECDH subkey with a curve oid that is well-formed, but unsupported by rPGP
+    let (secret, _) =
+        SignedSecretKey::from_armor_single(File::open("./tests/ecdh/unknown_oid_sec.asc")?)
+            .expect("parse");
+
+    assert_eq!(secret.secret_subkeys.len(), 1);
+
+    assert_eq!(
+        secret.primary_key.fingerprint().to_string(),
+        "3e28653fb694bad62981a9cd2f1c00e7dc03c3a7"
+    );
+
+    assert_eq!(
+        secret.secret_subkeys[0].fingerprint().to_string(),
+        "14af261d5955de8bade5d24c80d1de9f5c98c62a"
+    );
+
+    // serialize-parse roundtrip\
+    let serialized = secret.to_bytes().expect("serialize");
+    let parsed = SignedSecretKey::from_bytes(&*serialized).expect("parse");
+    assert_eq!(secret, parsed);
 
     Ok(())
 }
