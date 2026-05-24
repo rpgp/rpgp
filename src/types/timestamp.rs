@@ -1,7 +1,10 @@
-use std::{
-    fmt,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::fmt;
+
+#[cfg(feature = "wasm")]
+use web_time::{Duration, SystemTime, UNIX_EPOCH};
+
+#[cfg(not(feature = "wasm"))]
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use byteorder::BigEndian;
 
