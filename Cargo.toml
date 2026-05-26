@@ -112,6 +112,9 @@ ml-dsa = { version = "0.0.4", features = ["zeroize"], optional = true }
 slh-dsa = { version = "0.0.3", optional = true }
 replace_with = "0.1.8"
 
+# WASM helpers
+web-time = { version = "1.1", optional = true }
+
 
 [dev-dependencies]
 glob = "0.3"
@@ -137,7 +140,7 @@ default = ["bzip2"]
 # See README.md for features documentation
 bzip2 = ["dep:bzip2"]
 asm = ["dep:sha1-asm", "sha1/asm", "sha2/asm", "md-5/asm"]
-wasm = ["getrandom", "getrandom/js"]
+wasm = ["getrandom", "getrandom/js", "web-time"]
 
 large-rsa = []
 malformed-artifact-compat = []
