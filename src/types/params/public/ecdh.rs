@@ -110,6 +110,8 @@ pub enum EcdhPublicParams {
         curve: ECCCurve,
         #[debug("{}", hex::encode(opaque))]
         opaque: Bytes,
+        hash: HashAlgorithm,
+        alg_sym: SymmetricKeyAlgorithm,
     },
 }
 
@@ -160,9 +162,14 @@ impl Serialize for EcdhPublicParams {
                 p.to_writer(writer)?;
                 Some((hash, alg_sym, &EcdhKdfType::Native))
             }
-            Self::Unsupported { opaque, .. } => {
+            Self::Unsupported {
+                opaque,
+                hash,
+                alg_sym,
+                ..
+            } => {
                 writer.write_all(opaque)?;
-                None
+                Some((hash, alg_sym, &EcdhKdfType::Native))
             }
         };
 
@@ -242,10 +249,9 @@ impl Serialize for EcdhPublicParams {
             }
         };
 
-        if !matches!(self, Self::Unsupported { .. }) {
-            // fields and tags
-            sum += 1 + 1 + 1 + 1;
-        }
+        // fields and tags
+        sum += 1 + 1 + 1 + 1;
+
         sum
     }
 }
@@ -274,7 +280,7 @@ impl EcdhPublicParams {
     }
 
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ecd>
-    pub fn try_from_reader<B: BufRead>(mut i: B, len: Option<usize>) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(mut i: B, _len: Option<usize>) -> Result<Self> {
         // a one-octet size of the following field
         // octets representing a curve OID
         let curve_len = i.read_u8()?;
@@ -288,7 +294,8 @@ impl EcdhPublicParams {
             | ECCCurve::P521
             | ECCCurve::BrainpoolP256r1
             | ECCCurve::BrainpoolP384r1
-            | ECCCurve::BrainpoolP512r1 => {
+            | ECCCurve::BrainpoolP512r1
+            | ECCCurve::Unknown(_) => {
                 // MPI of an EC point representing a public key
                 let p = Mpi::try_from_reader(&mut i)?;
 
@@ -339,16 +346,8 @@ impl EcdhPublicParams {
                 let params = Self::try_from_mpi(p, curve, hash, alg_sym, ecdh_kdf_type)?;
                 Ok(params)
             }
-            _ => {
-                let data = if let Some(pub_len) = len {
-                    i.take_bytes(pub_len)?.freeze()
-                } else {
-                    i.rest()?.freeze()
-                };
-                Ok(EcdhPublicParams::Unsupported {
-                    curve,
-                    opaque: data,
-                })
+            ECCCurve::Ed25519Legacy | ECCCurve::Secp256k1 => {
+                bail!("Unsupported curve {:?}", curve)
             }
         }
     }
@@ -393,7 +392,16 @@ impl EcdhPublicParams {
             ECCCurve::BrainpoolP256r1 => Ok(EcdhPublicParams::Brainpool256 { p, hash, alg_sym }),
             ECCCurve::BrainpoolP384r1 => Ok(EcdhPublicParams::Brainpool384 { p, hash, alg_sym }),
             ECCCurve::BrainpoolP512r1 => Ok(EcdhPublicParams::Brainpool512 { p, hash, alg_sym }),
-            _ => bail!("unexpected ecdh curve: {:?}", curve),
+            curve => {
+                let opaque = Bytes::from(p.to_bytes()?);
+
+                Ok(EcdhPublicParams::Unsupported {
+                    curve,
+                    opaque,
+                    hash,
+                    alg_sym,
+                })
+            }
         }
     }
 }

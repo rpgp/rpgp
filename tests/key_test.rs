@@ -15,8 +15,8 @@ use pgp::{
         Deserializable, DetachedSignature, PublicOrSecret, SignedPublicKey, SignedSecretKey,
     },
     crypto::{
-        ecdsa::SecretKey as ECDSASecretKey, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
-        sym::SymmetricKeyAlgorithm,
+        ecdh, ecdsa::SecretKey as ECDSASecretKey, hash::HashAlgorithm,
+        public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
     },
     errors::Error,
     packet::{
@@ -25,9 +25,10 @@ use pgp::{
     },
     ser::Serialize,
     types::{
-        CompressionAlgorithm, Fingerprint, Imprint, KeyDetails, KeyId, KeyVersion, Mpi,
-        PacketHeaderVersion, PacketLength, Password, PlainSecretParams, PublicParams, S2kParams,
-        SecretParams, SignedUser, StringToKey, Tag, Timestamp,
+        CompressionAlgorithm, DecryptionKey, EcdhPublicParams, EskType, Fingerprint, Imprint,
+        KeyDetails, KeyId, KeyVersion, Mpi, PacketHeaderVersion, PacketLength, Password,
+        PkeskBytes, PlainSecretParams, PublicParams, S2kParams, SecretParams, SignedUser,
+        StringToKey, Tag, Timestamp,
     },
 };
 use rand::SeedableRng;
@@ -1553,6 +1554,168 @@ fn test_non_standard_rsa_modulus() -> TestResult {
     // signature from GnuPG
     let gpgsig = DetachedSignature::from_file("./tests/weird/rsa-key-with-modulus-e-257.sig")?;
     gpgsig.verify(&pkey.public_key(), DATA)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_ecdh_unknown_brainpool_pub() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    // a set of example TPK and TSK with one brainpool subkey, each
+
+    // --- public key
+    let (cert, _) =
+        SignedPublicKey::from_armor_single(File::open("./tests/ecdh/brainpool/public.asc")?)?;
+
+    assert_eq!(cert.public_subkeys.len(), 2);
+    assert_eq!(
+        cert.public_subkeys[0].fingerprint().to_string(),
+        "2639606d9def1d3be391a9303d894dee1456a7be"
+    );
+    assert_eq!(
+        cert.public_subkeys[1].fingerprint().to_string(),
+        "ed6263e93e154a84903ea17786fab4f0dc170cdd"
+    );
+
+    // serialize-parse roundtrip
+    let serialized = cert.to_bytes().expect("serialize");
+    let parsed = SignedPublicKey::from_bytes(&*serialized).expect("parse");
+    assert_eq!(cert, parsed);
+
+    Ok(())
+}
+
+#[test]
+fn test_ecdh_unknown_brainpool_locked() -> TestResult {
+    // --- private key, password-locked
+
+    //  pw: "password"
+    let (locked, _) =
+        SignedSecretKey::from_armor_single(File::open("./tests/ecdh/brainpool/locked-sec.asc")?)?;
+
+    assert_eq!(locked.secret_subkeys.len(), 2);
+    assert_eq!(
+        locked.secret_subkeys[0].fingerprint().to_string(),
+        "2639606d9def1d3be391a9303d894dee1456a7be"
+    );
+    assert_eq!(
+        locked.secret_subkeys[1].fingerprint().to_string(),
+        "ed6263e93e154a84903ea17786fab4f0dc170cdd"
+    );
+
+    // serialize-parse roundtrip
+    let serialized = locked.to_bytes().expect("serialize");
+    let parsed = SignedSecretKey::from_bytes(&*serialized).expect("parse");
+    assert_eq!(locked, parsed);
+
+    // unlock subkey with unknown (brainpool) curve
+    locked.secret_subkeys[1]
+        .unlock(&Password::from("password"), |public, secret| {
+            assert!(matches!(
+                public,
+                PublicParams::ECDH(EcdhPublicParams::Brainpool256 { .. })
+            ));
+            assert!(matches!(
+                secret,
+                PlainSecretParams::ECDH(ecdh::SecretKey::Unsupported { .. })
+            ));
+            Ok(())
+        })
+        .expect("unlock")
+        .expect("unlock");
+
+    // Transformation to transferable public key
+    let tpk = locked.to_public_key();
+    assert_eq!(
+        tpk.public_subkeys[1].fingerprint().to_string(),
+        "ed6263e93e154a84903ea17786fab4f0dc170cdd"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_ecdh_unknown_brainpool_not_locked() -> TestResult {
+    // --- private key, non-locked
+
+    let (unlocked, _) =
+        SignedSecretKey::from_armor_single(File::open("./tests/ecdh/brainpool/unlocked-sec.asc")?)?;
+
+    assert_eq!(unlocked.secret_subkeys.len(), 2);
+    assert_eq!(
+        unlocked.secret_subkeys[0].fingerprint().to_string(),
+        "3e9e605d7125508bd1cea025fd159eb10f9d6f62"
+    );
+    assert_eq!(
+        unlocked.secret_subkeys[1].fingerprint().to_string(),
+        "80344150eb9d0ea041cb8447fe48fdc1961740e3"
+    );
+
+    // serialize-parse roundtrip
+    let serialized = unlocked.to_bytes().expect("serialize");
+    let parsed = SignedSecretKey::from_bytes(&*serialized).expect("parse");
+    assert_eq!(unlocked, parsed);
+
+    // attempt decryption with brainpool subkey
+    let pkesk_bytes = PkeskBytes::Ecdh {
+        public_point: Mpi::from_slice(&[1]),
+        encrypted_session_key: vec![0x01].into(),
+    };
+
+    // check that attempting to decrypt with the ECDH/brainpool subkey returns a reasonable error
+    let res = unlocked.secret_subkeys[1]
+        .decrypt(&Password::empty(), &pkesk_bytes, EskType::V3_4)
+        .expect("unlock");
+    assert!(matches!(res, Err(Error::Unsupported { .. })));
+
+    // Transformation to transferable public key
+    let tpk = unlocked.to_public_key();
+    assert_eq!(
+        tpk.public_subkeys[1].fingerprint().to_string(),
+        "80344150eb9d0ea041cb8447fe48fdc1961740e3"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_unknown_ecdh_curve_malformed_oid() -> TestResult {
+    // This TSK has an ECDH subkey with a curve oid that is malformed
+    let res = SignedSecretKey::from_armor_single(File::open(
+        "./tests/ecdh/unknown_oid_malformed_sec.asc",
+    )?);
+
+    assert!(res.is_err());
+
+    Ok(())
+}
+
+#[test]
+fn test_unknown_ecdh_curve_oid() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    // This TSK has an ECDH subkey with a curve oid that is well-formed, but unsupported by rPGP
+    let (secret, _) =
+        SignedSecretKey::from_armor_single(File::open("./tests/ecdh/unknown_oid_sec.asc")?)
+            .expect("parse");
+
+    assert_eq!(secret.secret_subkeys.len(), 1);
+
+    assert_eq!(
+        secret.primary_key.fingerprint().to_string(),
+        "3e28653fb694bad62981a9cd2f1c00e7dc03c3a7"
+    );
+
+    assert_eq!(
+        secret.secret_subkeys[0].fingerprint().to_string(),
+        "14af261d5955de8bade5d24c80d1de9f5c98c62a"
+    );
+
+    // serialize-parse roundtrip\
+    let serialized = secret.to_bytes().expect("serialize");
+    let parsed = SignedSecretKey::from_bytes(&*serialized).expect("parse");
+    assert_eq!(secret, parsed);
 
     Ok(())
 }

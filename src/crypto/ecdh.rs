@@ -1,3 +1,4 @@
+use bytes::BytesMut;
 use log::debug;
 use rand::{CryptoRng, Rng};
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -103,35 +104,53 @@ pub enum SecretKey {
         #[cfg_attr(test, proptest(strategy = "tests::key_p521_gen()"))]
         secret: p521::SecretKey,
     },
+
+    #[cfg_attr(test, proptest(skip))]
+    Unsupported {
+        #[zeroize(skip)]
+        curve: ECCCurve,
+
+        #[debug("{}", hex::encode(opaque))]
+        opaque: BytesMut,
+    },
 }
 
-impl From<&SecretKey> for EcdhPublicParams {
-    fn from(value: &SecretKey) -> Self {
+impl TryFrom<&SecretKey> for EcdhPublicParams {
+    type Error = Error;
+
+    fn try_from(value: &SecretKey) -> Result<Self, Self::Error> {
         let curve = value.curve();
-        let hash = curve.hash_algo().expect("known algo");
-        let alg_sym = curve.sym_algo().expect("known algo");
+        let hash = curve.hash_algo()?;
+        let alg_sym = curve.sym_algo()?;
+
         match value {
-            SecretKey::Curve25519Legacy(key) => Self::Curve25519Legacy {
+            SecretKey::Curve25519Legacy(key) => Ok(Self::Curve25519Legacy {
                 p: PublicKey::from(&key.0),
                 hash,
                 alg_sym,
                 ecdh_kdf_type: EcdhKdfType::Native,
-            },
-            SecretKey::P256 { ref secret } => Self::P256 {
+            }),
+            SecretKey::P256 { ref secret } => Ok(Self::P256 {
                 p: secret.public_key(),
                 hash,
                 alg_sym,
-            },
-            SecretKey::P384 { ref secret } => Self::P384 {
+            }),
+            SecretKey::P384 { ref secret } => Ok(Self::P384 {
                 p: secret.public_key(),
                 hash,
                 alg_sym,
-            },
-            SecretKey::P521 { ref secret } => Self::P521 {
+            }),
+            SecretKey::P521 { ref secret } => Ok(Self::P521 {
                 p: secret.public_key(),
                 hash,
                 alg_sym,
-            },
+            }),
+            SecretKey::Unsupported { curve, .. } => {
+                bail!(
+                    "Can't transform ecdh::SecretKey ({:?}) into EcdhPublicParams",
+                    curve
+                )
+            }
         }
     }
 }
@@ -193,11 +212,11 @@ impl SecretKey {
             }
             EcdhPublicParams::Brainpool256 { .. }
             | EcdhPublicParams::Brainpool384 { .. }
-            | EcdhPublicParams::Brainpool512 { .. } => {
-                unsupported_err!("brainpool curve {:?} for ECDH")
-            }
-            EcdhPublicParams::Unsupported { ref curve, .. } => {
-                unsupported_err!("curve {:?} for ECDH", curve)
+            | EcdhPublicParams::Brainpool512 { .. }
+            | EcdhPublicParams::Unsupported { .. } => {
+                let curve = pub_params.curve();
+                let opaque = BytesMut::from(d.as_ref());
+                Ok(SecretKey::Unsupported { curve, opaque })
             }
         }
     }
@@ -214,6 +233,7 @@ impl SecretKey {
             Self::P256 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
             Self::P384 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
             Self::P521 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
+            Self::Unsupported { opaque, .. } => Mpi::from_raw(opaque.clone().into()),
         }
     }
 
@@ -223,6 +243,7 @@ impl SecretKey {
             Self::P256 { .. } => ECCCurve::P256,
             Self::P384 { .. } => ECCCurve::P384,
             Self::P521 { .. } => ECCCurve::P521,
+            Self::Unsupported { curve, .. } => curve.clone(),
         }
     }
 
@@ -233,6 +254,7 @@ impl SecretKey {
             Self::P256 { secret, .. } => secret.to_bytes().to_vec(),
             Self::P384 { secret, .. } => secret.to_bytes().to_vec(),
             Self::P521 { secret, .. } => secret.to_bytes().to_vec(),
+            Self::Unsupported { opaque, .. } => opaque.to_vec(),
         }
     }
 }
@@ -305,6 +327,9 @@ impl Decryptor for SecretKey {
             }
             SecretKey::P521 { secret, .. } => {
                 derive_shared_secret_decryption::<p521::NistP521>(data.public_point, secret, 133)?
+            }
+            SecretKey::Unsupported { curve, .. } => {
+                bail!("unsupported ECDH curve {:?}", curve);
             }
         };
 
@@ -704,7 +729,7 @@ mod tests {
             let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
             let skey = SecretKey::generate(&mut rng, &curve).unwrap();
-            let pub_params: EcdhPublicParams = (&skey).into();
+            let pub_params: EcdhPublicParams = (&skey).try_into().unwrap();
 
             for text_size in 1..=239 {
                 for _i in 0..10 {
