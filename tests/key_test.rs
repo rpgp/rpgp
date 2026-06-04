@@ -1719,3 +1719,26 @@ fn test_unknown_ecdh_curve_oid() -> TestResult {
 
     Ok(())
 }
+
+/// This is a test case from the OpenPGP interop suite, in the "Mock PQ subkey" section
+///
+/// It verifies that implementations can gracefully ignore the presence of a subkey that they can't parse.
+#[test]
+fn test_tolerate_bad_subkey() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    const DATA: &str = "Hello World :)";
+
+    let (public, _) =
+        SignedPublicKey::from_armor_single(File::open("./tests/ecdh/interop/bad_subkey.pub")?)
+            .expect("parse");
+
+    assert_eq!(public.public_subkeys.len(), 1);
+
+    let sig = DetachedSignature::from_file("./tests/ecdh/interop/sig")?;
+
+    sig.verify(&public.primary_key, DATA.as_bytes())
+        .expect("verify ok");
+
+    Ok(())
+}
