@@ -26,8 +26,8 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        EcdhPublicParams, EncryptedSecretParams, EskType, KeyDetails, KeyVersion, Mpi, PkeskBytes,
-        PublicParams, S2kParams, StringToKey, Tag,
+        EcdhPublicParams, EddsaLegacyPublicParams, EncryptedSecretParams, EskType, KeyDetails,
+        KeyVersion, Mpi, PkeskBytes, PublicParams, S2kParams, StringToKey, Tag,
     },
     util::TeeWriter,
 };
@@ -144,7 +144,10 @@ impl PlainSecretParams {
                 let key = crate::crypto::ecdsa::SecretKey::try_from_mpi(pub_params, secret)?;
                 Self::ECDSA(key)
             }
-            (PublicKeyAlgorithm::EdDSALegacy, PublicParams::EdDSALegacy(_pub_params)) => {
+            (
+                PublicKeyAlgorithm::EdDSALegacy,
+                PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { .. }),
+            ) => {
                 let secret = Mpi::try_from_reader(i)?;
 
                 const SIZE: usize = ECCCurve::Ed25519Legacy.secret_key_length();
