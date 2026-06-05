@@ -109,7 +109,9 @@ impl EcdsaPublicParams {
                 let opaque = if let Some(pub_len) = len {
                     i.take_bytes(pub_len)?.freeze()
                 } else {
-                    i.rest()?.freeze()
+                    // Read as Mpi, not to consume the secret parameters in secret key packets
+                    let p = Mpi::try_from_reader(&mut i)?;
+                    Bytes::from(p.to_bytes()?)
                 };
                 Ok(EcdsaPublicParams::Unsupported { curve, opaque })
             }
