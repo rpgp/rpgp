@@ -334,7 +334,7 @@ impl SignatureConfig {
         let hash = &hasher.finalize()[..];
 
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
+        let signature = signer.sign_prehash(signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -379,7 +379,7 @@ impl SignatureConfig {
 
         let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
+        let signature = signer.sign_prehash(signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -425,7 +425,7 @@ impl SignatureConfig {
 
         let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
+        let signature = signer.sign_prehash(signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -464,7 +464,7 @@ impl SignatureConfig {
 
         let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signing_key.sign(key_pw, self.hash_alg, hash)?;
+        let signature = signing_key.sign_prehash(key_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -786,7 +786,7 @@ impl SignatureHasher {
         let hash = &hasher.finalize()[..];
 
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = key.sign(key_pw, config.hash_alg, hash)?;
+        let signature = key.sign_prehash(key_pw, config.hash_alg, hash)?;
 
         Signature::from_config(config, signed_hash_value, signature)
     }

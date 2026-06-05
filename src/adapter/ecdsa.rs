@@ -131,7 +131,7 @@ where
     T: PrehashSigner<ecdsa::Signature<C>>,
     C::Digest: KnownDigest,
 {
-    fn sign(
+    fn sign_prehash(
         &self,
         _key_pw: &Password,
         hash: HashAlgorithm,

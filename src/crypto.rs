@@ -59,5 +59,14 @@ pub trait Decryptor {
 
 /// Describes keys that can sign data.
 pub trait Signer {
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> crate::errors::Result<SignatureBytes>;
+    #[deprecated]
+    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> crate::errors::Result<SignatureBytes> {
+        self.sign_prehash(hash, digest)
+    }
+
+    fn sign_prehash(
+        &self,
+        hash: HashAlgorithm,
+        digest: &[u8],
+    ) -> crate::errors::Result<SignatureBytes>;
 }

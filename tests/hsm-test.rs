@@ -98,13 +98,13 @@ impl KeyDetails for FakeHsm {
 }
 
 impl SigningKey for FakeHsm {
-    fn sign(
+    fn sign_prehash(
         &self,
         _key_pw: &Password,
         _hash: HashAlgorithm,
-        data: &[u8],
+        prehash: &[u8],
     ) -> pgp::errors::Result<SignatureBytes> {
-        assert_eq!(data, self.sign_data.unwrap().0);
+        assert_eq!(prehash, self.sign_data.unwrap().0);
 
         // XXX: imagine a smartcard producing a signature for `data`, here
 

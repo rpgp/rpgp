@@ -138,11 +138,11 @@ impl KeyDetails for Box<&dyn SigningKey> {
 /// Contains private data.
 pub trait SigningKey: KeyDetails {
     /// Create a raw cryptographic signature over `data`
-    fn sign(
+    fn sign_prehash(
         &self,
         key_pw: &Password,
         hash: HashAlgorithm,
-        data: &[u8],
+        prehash: &[u8],
     ) -> Result<crate::types::SignatureBytes>;
 
     /// The recommended hash algorithm to calculate the signature hash digest with,
@@ -151,13 +151,13 @@ pub trait SigningKey: KeyDetails {
 }
 
 impl SigningKey for Box<&dyn SigningKey> {
-    fn sign(
+    fn sign_prehash(
         &self,
         key_pw: &Password,
         hash: HashAlgorithm,
-        data: &[u8],
+        prehash: &[u8],
     ) -> Result<crate::types::SignatureBytes> {
-        (**self).sign(key_pw, hash, data)
+        (**self).sign_prehash(key_pw, hash, prehash)
     }
 
     fn hash_alg(&self) -> HashAlgorithm {
