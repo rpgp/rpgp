@@ -48,7 +48,7 @@ fuzz_target!(|data: &[u8]| {
                     let _ = signed_message.read_to_end(&mut sink);
 
                     let _verify_res = signed_message
-                        .verify(&*decrypt_key.public_key())
+                        .verify(decrypt_key.public_key())
                         .expect("we just signed this and expect it to verify");
                 }
                 // ignore
