@@ -1,3 +1,4 @@
+use bytes::BytesMut;
 use ecdsa::SigningKey;
 use p521::NistP521;
 use rand::{CryptoRng, Rng};
@@ -36,11 +37,11 @@ pub enum SecretKey {
     ),
     #[cfg_attr(test, proptest(skip))]
     Unsupported {
-        /// The secret point.
-        #[debug("..")]
-        x: Vec<u8>,
         #[zeroize(skip)]
         curve: ECCCurve,
+
+        #[debug("{}", hex::encode(opaque))]
+        opaque: BytesMut,
     },
 }
 
@@ -115,7 +116,11 @@ impl SecretKey {
                 Ok(SecretKey::Secp256k1(secret))
             }
             EcdsaPublicParams::Unsupported { curve, .. } => {
-                unsupported_err!("curve {:?} for ECDSA", curve.to_string())
+                let opaque = BytesMut::from(d.as_ref());
+                Ok(SecretKey::Unsupported {
+                    curve: curve.clone(),
+                    opaque,
+                })
             }
         }
     }
@@ -146,7 +151,7 @@ impl SecretKey {
             Self::P384(k) => Mpi::from_slice(k.to_bytes().as_ref()),
             Self::P521(k) => Mpi::from_slice(k.to_bytes().as_ref()),
             Self::Secp256k1(k) => Mpi::from_slice(k.to_bytes().as_ref()),
-            Self::Unsupported { x, .. } => Mpi::from_slice(x),
+            Self::Unsupported { opaque, .. } => Mpi::from_slice(opaque),
         }
     }
 
@@ -157,7 +162,7 @@ impl SecretKey {
             Self::P384(k) => k.to_bytes().to_vec(),
             Self::P521(k) => k.to_bytes().to_vec(),
             Self::Secp256k1(k) => k.to_bytes().to_vec(),
-            Self::Unsupported { x, .. } => x.clone(),
+            Self::Unsupported { opaque, .. } => opaque.to_vec(),
         }
     }
 }
