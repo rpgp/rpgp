@@ -1171,7 +1171,7 @@ fn private_x25519_verify() {
     );
     sk.unlock(&"moon".into(), |_pub_params, k| {
         match k {
-            PlainSecretParams::Ed25519Legacy(..) => {}
+            PlainSecretParams::EdDSALegacy(..) => {}
             _ => panic!("invalid key"),
         }
         Ok(())
@@ -1498,7 +1498,9 @@ fn test_short_ed25519() -> TestResult {
         panic!("expected unencrypted TSK");
     };
 
-    let PlainSecretParams::Ed25519Legacy(secret) = secret else {
+    let PlainSecretParams::EdDSALegacy(pgp::crypto::eddsa_legacy::SecretKey::Ed25519(secret)) =
+        secret
+    else {
         panic!("expected ed25519 TSK");
     };
 

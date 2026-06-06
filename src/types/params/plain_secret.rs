@@ -19,8 +19,8 @@ use crate::{
     composed::{PlainSessionKey, RawSessionKey},
     crypto::{
         aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
-        elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, x448,
-        Decryptor,
+        eddsa_legacy, elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm,
+        x25519, x448, Decryptor,
     },
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
@@ -40,7 +40,7 @@ pub enum PlainSecretParams {
     ECDSA(ecdsa::SecretKey),
     ECDH(ecdh::SecretKey),
     Ed25519(ed25519::SecretKey),
-    Ed25519Legacy(ed25519::SecretKey),
+    EdDSALegacy(eddsa_legacy::SecretKey),
     X25519(x25519::SecretKey),
     #[cfg(feature = "draft-pqc")]
     MlKem768X25519(ml_kem768_x25519::SecretKey),
@@ -156,7 +156,19 @@ impl PlainSecretParams {
                     secret,
                     crate::crypto::ed25519::Mode::EdDSALegacy,
                 )?;
-                Self::Ed25519Legacy(key)
+                Self::EdDSALegacy(crate::crypto::eddsa_legacy::SecretKey::Ed25519(key))
+            }
+            (
+                PublicKeyAlgorithm::EdDSALegacy,
+                PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported { curve, .. }),
+            ) => {
+                let secret = Mpi::try_from_reader(i)?;
+
+                let opaque = Bytes::from(secret.to_bytes()?).into();
+                Self::EdDSALegacy(crate::crypto::eddsa_legacy::SecretKey::Unsupported {
+                    curve: curve.clone(),
+                    opaque,
+                })
             }
             (PublicKeyAlgorithm::Ed25519, PublicParams::Ed25519(_pub_params)) => {
                 let secret = i.read_arr::<32>()?;
@@ -732,7 +744,7 @@ impl PlainSecretParams {
             PlainSecretParams::Ed448(key) => {
                 key.to_writer(writer)?;
             }
-            PlainSecretParams::Ed25519Legacy(key) => {
+            PlainSecretParams::EdDSALegacy(key) => {
                 key.to_writer(writer)?;
             }
             PlainSecretParams::X448(key) => {
@@ -774,7 +786,7 @@ impl PlainSecretParams {
             PlainSecretParams::ECDSA(key) => key.write_len(),
             PlainSecretParams::ECDH(key) => key.write_len(),
             PlainSecretParams::Ed25519(key) => key.write_len(),
-            PlainSecretParams::Ed25519Legacy(key) => key.write_len(),
+            PlainSecretParams::EdDSALegacy(key) => key.write_len(),
             PlainSecretParams::X25519(key) => key.write_len(),
             PlainSecretParams::Ed448(key) => key.write_len(),
             PlainSecretParams::X448(key) => key.write_len(),
@@ -869,7 +881,7 @@ mod tests {
                 PublicKeyAlgorithm::EdDSALegacy => any::<ed25519::SecretKey>()
                     .prop_map(|mut key| {
                         key.mode = ed25519::Mode::EdDSALegacy;
-                        PlainSecretParams::Ed25519Legacy(key)
+                        PlainSecretParams::EdDSALegacy(eddsa_legacy::SecretKey::Ed25519(key))
                     })
                     .boxed(),
                 PublicKeyAlgorithm::Ed25519 => any::<ed25519::SecretKey>()
