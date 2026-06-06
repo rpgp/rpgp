@@ -1276,6 +1276,12 @@ impl KeyFlags {
         self.known.set_group(val);
     }
 
+    /// Sets reserved flag 0x0004 also known as ADSK flag.
+    ///
+    /// It is a reserved flag also known as ADSK flag
+    /// since GnuPG 2.4.1 uses it to support
+    /// proprietary Additional Decryption SubKey feature:
+    /// <https://www.gnupg.org/blog/20230321-adsk.html>
     pub fn set_adsk(&mut self, val: bool) {
         self.known.set_adsk(val);
     }
@@ -1319,6 +1325,14 @@ impl KeyFlags {
         self.known.group()
     }
 
+    /// Returns the value of Reserved (ADSK) flag.
+    ///
+    /// RFC 9580 describes this flag as "Reserved (ADSK)" in
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-key-flags>
+    ///
+    /// GnuPG 2.4.1 uses this reserved flag to support
+    /// proprietary Additional Decryption SubKey feature:
+    /// <https://www.gnupg.org/blog/20230321-adsk.html>
     pub fn adsk(&self) -> bool {
         self.known.adsk()
     }
@@ -1390,6 +1404,15 @@ pub struct KnownKeyFlags {
     group: bool,
     #[bits(2)]
     _padding1: u8,
+
+    /// Non-standard Additional Decryption SubKey flag
+    ///
+    /// It is described as "Reserved (ADSK)" in
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-key-flags>
+    ///
+    /// GnuPG 2.4.1 uses this reserved flag to support
+    /// proprietary Additional Decryption SubKey feature:
+    /// <https://www.gnupg.org/blog/20230321-adsk.html>
     #[bits(1)]
     adsk: bool,
     #[bits(1)]
