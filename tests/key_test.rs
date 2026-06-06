@@ -1775,3 +1775,64 @@ fn test_bp_ecdsa_pub() -> TestResult {
 
     Ok(())
 }
+
+#[test]
+fn test_bp_eddsa_sec() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    // This is a hex-edited variant of tests/ecdsa/bp256.sec,
+    // with the public algorithm field changed to EdDSA Legacy.
+    //
+    // This is not a reasonable key, just an edge-testcase for the key packet parser.
+    let (secret, _) =
+        SignedSecretKey::from_armor_single(File::open("./tests/eddsa/bp256.sec")?).expect("parse");
+
+    assert_eq!(secret.secret_subkeys.len(), 1);
+
+    assert_eq!(
+        secret.primary_key.fingerprint().to_string(),
+        "ad8e4703c7632562faef9ba224708217d85dfeef"
+    );
+
+    assert_eq!(
+        secret.secret_subkeys[0].fingerprint().to_string(),
+        "8b8c2c4eecabf6c66806212cea9468b9f2fcb394"
+    );
+
+    // serialize-parse roundtrip
+    let serialized = secret.to_bytes().expect("serialize");
+    let parsed = SignedSecretKey::from_bytes(&*serialized).expect("parse");
+    assert_eq!(secret, parsed);
+
+    Ok(())
+}
+
+#[test]
+fn test_bp_eddsa_pub() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    // This is extracted from the hacked tests/eddsa/bp256.sec
+    //
+    // This is not a reasonable key, just an edge-testcase for the key packet parser.
+    let (public, _) =
+        SignedPublicKey::from_armor_single(File::open("./tests/eddsa/bp256.pub")?).expect("parse");
+
+    assert_eq!(public.public_subkeys.len(), 1);
+
+    assert_eq!(
+        public.primary_key.fingerprint().to_string(),
+        "ad8e4703c7632562faef9ba224708217d85dfeef"
+    );
+
+    assert_eq!(
+        public.public_subkeys[0].fingerprint().to_string(),
+        "8b8c2c4eecabf6c66806212cea9468b9f2fcb394"
+    );
+
+    // serialize-parse roundtrip
+    let serialized = public.to_bytes().expect("serialize");
+    let parsed = SignedPublicKey::from_bytes(&*serialized).expect("parse");
+    assert_eq!(public, parsed);
+
+    Ok(())
+}
