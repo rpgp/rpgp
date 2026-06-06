@@ -18,6 +18,7 @@ pub mod ecdh;
 pub mod ecdsa;
 pub mod ed25519;
 pub mod ed448;
+pub mod eddsa_legacy;
 pub mod elgamal;
 pub mod rsa;
 pub mod x25519;

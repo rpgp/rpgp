@@ -684,20 +684,21 @@ fn create_signature(
             };
             priv_key.sign(hash, data)
         }
-        PlainSecretParams::Ed25519Legacy(ref priv_key) => {
-            match pub_params {
-                PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { .. }) => {}
-                PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported {
-                    curve, ..
-                }) => {
-                    unsupported_err!("curve {} for EdDSA", curve);
-                }
-                _ => {
-                    bail!("invalid inconsistent key");
-                }
+        PlainSecretParams::EdDSALegacy(ref priv_key) => match (priv_key, pub_params) {
+            (
+                crate::crypto::eddsa_legacy::SecretKey::Ed25519(ed25519),
+                PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { .. }),
+            ) => ed25519.sign(hash, data),
+            (
+                crate::crypto::eddsa_legacy::SecretKey::Unsupported { .. },
+                PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported { curve, .. }),
+            ) => {
+                unsupported_err!("curve {} for EdDSA", curve);
             }
-            priv_key.sign(hash, data)
-        }
+            _ => {
+                bail!("invalid inconsistent key");
+            }
+        },
         PlainSecretParams::Elgamal(_) => {
             unsupported_err!("Elgamal signing");
         }

@@ -1171,7 +1171,7 @@ fn private_x25519_verify() {
     );
     sk.unlock(&"moon".into(), |_pub_params, k| {
         match k {
-            PlainSecretParams::Ed25519Legacy(..) => {}
+            PlainSecretParams::EdDSALegacy(..) => {}
             _ => panic!("invalid key"),
         }
         Ok(())
@@ -1498,7 +1498,9 @@ fn test_short_ed25519() -> TestResult {
         panic!("expected unencrypted TSK");
     };
 
-    let PlainSecretParams::Ed25519Legacy(secret) = secret else {
+    let PlainSecretParams::EdDSALegacy(pgp::crypto::eddsa_legacy::SecretKey::Ed25519(secret)) =
+        secret
+    else {
         panic!("expected ed25519 TSK");
     };
 
@@ -1712,10 +1714,127 @@ fn test_unknown_ecdh_curve_oid() -> TestResult {
         "14af261d5955de8bade5d24c80d1de9f5c98c62a"
     );
 
-    // serialize-parse roundtrip\
+    // serialize-parse roundtrip
     let serialized = secret.to_bytes().expect("serialize");
     let parsed = SignedSecretKey::from_bytes(&*serialized).expect("parse");
     assert_eq!(secret, parsed);
+
+    Ok(())
+}
+
+#[test]
+fn test_bp_ecdsa_sec() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    // This TSK has an ECDSA/bp primary and an ECDH/bp subkey
+    let (secret, _) =
+        SignedSecretKey::from_armor_single(File::open("./tests/ecdsa/bp256.sec")?).expect("parse");
+
+    assert_eq!(secret.secret_subkeys.len(), 1);
+
+    assert_eq!(
+        secret.primary_key.fingerprint().to_string(),
+        "d08c672a677dcc7733735cb027077276467cda5f"
+    );
+
+    assert_eq!(
+        secret.secret_subkeys[0].fingerprint().to_string(),
+        "8b8c2c4eecabf6c66806212cea9468b9f2fcb394"
+    );
+
+    // serialize-parse roundtrip
+    let serialized = secret.to_bytes().expect("serialize");
+    let parsed = SignedSecretKey::from_bytes(&*serialized).expect("parse");
+    assert_eq!(secret, parsed);
+
+    Ok(())
+}
+
+#[test]
+fn test_bp_ecdsa_pub() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    // This TPK has an ECDSA/bp primary and an ECDH/bp subkey
+    let (public, _) =
+        SignedPublicKey::from_armor_single(File::open("./tests/ecdsa/bp256.pub")?).expect("parse");
+
+    assert_eq!(public.public_subkeys.len(), 1);
+
+    assert_eq!(
+        public.primary_key.fingerprint().to_string(),
+        "d08c672a677dcc7733735cb027077276467cda5f"
+    );
+
+    assert_eq!(
+        public.public_subkeys[0].fingerprint().to_string(),
+        "8b8c2c4eecabf6c66806212cea9468b9f2fcb394"
+    );
+
+    // serialize-parse roundtrip
+    let serialized = public.to_bytes().expect("serialize");
+    let parsed = SignedPublicKey::from_bytes(&*serialized).expect("parse");
+    assert_eq!(public, parsed);
+
+    Ok(())
+}
+
+#[test]
+fn test_bp_eddsa_sec() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    // This is a hex-edited variant of tests/ecdsa/bp256.sec,
+    // with the public algorithm field changed to EdDSA Legacy.
+    //
+    // This is not a reasonable key, just an edge-testcase for the key packet parser.
+    let (secret, _) =
+        SignedSecretKey::from_armor_single(File::open("./tests/eddsa/bp256.sec")?).expect("parse");
+
+    assert_eq!(secret.secret_subkeys.len(), 1);
+
+    assert_eq!(
+        secret.primary_key.fingerprint().to_string(),
+        "ad8e4703c7632562faef9ba224708217d85dfeef"
+    );
+
+    assert_eq!(
+        secret.secret_subkeys[0].fingerprint().to_string(),
+        "8b8c2c4eecabf6c66806212cea9468b9f2fcb394"
+    );
+
+    // serialize-parse roundtrip
+    let serialized = secret.to_bytes().expect("serialize");
+    let parsed = SignedSecretKey::from_bytes(&*serialized).expect("parse");
+    assert_eq!(secret, parsed);
+
+    Ok(())
+}
+
+#[test]
+fn test_bp_eddsa_pub() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    // This is extracted from the hacked tests/eddsa/bp256.sec
+    //
+    // This is not a reasonable key, just an edge-testcase for the key packet parser.
+    let (public, _) =
+        SignedPublicKey::from_armor_single(File::open("./tests/eddsa/bp256.pub")?).expect("parse");
+
+    assert_eq!(public.public_subkeys.len(), 1);
+
+    assert_eq!(
+        public.primary_key.fingerprint().to_string(),
+        "ad8e4703c7632562faef9ba224708217d85dfeef"
+    );
+
+    assert_eq!(
+        public.public_subkeys[0].fingerprint().to_string(),
+        "8b8c2c4eecabf6c66806212cea9468b9f2fcb394"
+    );
+
+    // serialize-parse roundtrip
+    let serialized = public.to_bytes().expect("serialize");
+    let parsed = SignedPublicKey::from_bytes(&*serialized).expect("parse");
+    assert_eq!(public, parsed);
 
     Ok(())
 }

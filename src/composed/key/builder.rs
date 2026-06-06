@@ -12,7 +12,7 @@ use crate::crypto::{
 use crate::{
     composed::{KeyDetails, SignedSecretKey},
     crypto::{
-        aead::AeadAlgorithm, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
+        aead::AeadAlgorithm, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448, eddsa_legacy,
         hash::HashAlgorithm, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm,
         x25519, x448,
     },
@@ -539,7 +539,8 @@ impl KeyType {
             KeyType::Ed25519Legacy => {
                 let secret = ed25519::SecretKey::generate(rng, ed25519::Mode::EdDSALegacy);
                 let public_params = PublicParams::EdDSALegacy((&secret).into());
-                let secret_params = PlainSecretParams::Ed25519Legacy(secret);
+                let secret_params =
+                    PlainSecretParams::EdDSALegacy(eddsa_legacy::SecretKey::Ed25519(secret));
                 (public_params, secret_params)
             }
             KeyType::ECDSA(curve) => {

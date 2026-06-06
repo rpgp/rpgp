@@ -94,7 +94,7 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
             PlainSecretParams::ECDH(ref p) => Ok(Self::ECDH(p.try_into()?)),
             PlainSecretParams::Elgamal(ref p) => Ok(Self::Elgamal(p.into())),
             PlainSecretParams::Ed25519(ref p) => Ok(Self::Ed25519(p.into())),
-            PlainSecretParams::Ed25519Legacy(ref p) => Ok(Self::EdDSALegacy(p.into())),
+            PlainSecretParams::EdDSALegacy(ref p) => Ok(Self::EdDSALegacy(p.try_into()?)),
             PlainSecretParams::X25519(ref p) => Ok(Self::X25519(p.into())),
             #[cfg(feature = "draft-pqc")]
             PlainSecretParams::MlKem768X25519(ref p) => Ok(Self::MlKem768X25519(p.into())),
