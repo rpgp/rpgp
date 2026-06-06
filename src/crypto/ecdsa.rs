@@ -40,8 +40,9 @@ pub enum SecretKey {
         #[zeroize(skip)]
         curve: ECCCurve,
 
-        #[debug("{}", hex::encode(opaque))]
-        opaque: BytesMut,
+        // The secret material as raw Mpi data (without Mpi length header)
+        #[debug("{}", hex::encode(mpi_data))]
+        mpi_data: BytesMut,
     },
 }
 
@@ -116,10 +117,10 @@ impl SecretKey {
                 Ok(SecretKey::Secp256k1(secret))
             }
             EcdsaPublicParams::Unsupported { curve, .. } => {
-                let opaque = BytesMut::from(d.as_ref());
+                let mpi_data = BytesMut::from(d.as_ref());
                 Ok(SecretKey::Unsupported {
                     curve: curve.clone(),
-                    opaque,
+                    mpi_data,
                 })
             }
         }
@@ -151,7 +152,7 @@ impl SecretKey {
             Self::P384(k) => Mpi::from_slice(k.to_bytes().as_ref()),
             Self::P521(k) => Mpi::from_slice(k.to_bytes().as_ref()),
             Self::Secp256k1(k) => Mpi::from_slice(k.to_bytes().as_ref()),
-            Self::Unsupported { opaque, .. } => Mpi::from_slice(opaque),
+            Self::Unsupported { mpi_data, .. } => Mpi::from_slice(mpi_data),
         }
     }
 
@@ -162,7 +163,7 @@ impl SecretKey {
             Self::P384(k) => k.to_bytes().to_vec(),
             Self::P521(k) => k.to_bytes().to_vec(),
             Self::Secp256k1(k) => k.to_bytes().to_vec(),
-            Self::Unsupported { opaque, .. } => opaque.to_vec(),
+            Self::Unsupported { mpi_data, .. } => mpi_data.to_vec(),
         }
     }
 }
