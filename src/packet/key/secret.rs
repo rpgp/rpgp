@@ -689,7 +689,10 @@ fn create_signature(
                 crate::crypto::eddsa_legacy::SecretKey::Ed25519(ed25519),
                 PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { .. }),
             ) => ed25519.sign(hash, data),
-            (_, PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported { curve, .. })) => {
+            (
+                crate::crypto::eddsa_legacy::SecretKey::Unsupported { .. },
+                PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported { curve, .. }),
+            ) => {
                 unsupported_err!("curve {} for EdDSA", curve);
             }
             _ => {
