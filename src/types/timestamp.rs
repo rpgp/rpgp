@@ -1,12 +1,12 @@
-use std::fmt;
 #[cfg(not(feature = "wasm"))]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{fmt, ops::Add};
 
 use byteorder::BigEndian;
 #[cfg(feature = "wasm")]
 use web_time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::{ser::Serialize, types::Duration};
+use crate::ser::Serialize;
 
 /// Timestamp that refers to a moment in time after the [`UNIX_EPOCH`].
 ///
@@ -23,7 +23,7 @@ impl fmt::Debug for Timestamp {
 
 impl From<Timestamp> for SystemTime {
     fn from(value: Timestamp) -> Self {
-        UNIX_EPOCH + std::time::Duration::from_secs(u64::from(value.0))
+        UNIX_EPOCH + Duration::from_secs(u64::from(value.0))
     }
 }
 
@@ -82,9 +82,9 @@ impl Serialize for Timestamp {
     }
 }
 
-impl Add<Duration> for Timestamp {
+impl Add<crate::types::Duration> for Timestamp {
     type Output = Timestamp;
-    fn add(self, d: Duration) -> Self::Output {
+    fn add(self, d: crate::types::Duration) -> Self::Output {
         Timestamp::from_secs(self.as_secs() + d.as_secs())
     }
 }
