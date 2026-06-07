@@ -948,7 +948,7 @@ fn test_packet_leniency() {
 // Test vectors from "Mock PQ subkey" in OpenPGP interoperability test suite.
 
 #[test]
-fn test_mock_pq_cert_leniency_unkown_algo_mpi() {
+fn test_mock_pq_cert_leniency_unknown_algo_mpi() {
     pretty_env_logger::try_init().ok();
     let (key, _) =
         SignedPublicKey::from_armor_file("./tests/mock_pq/unknown_algo_mpi.pub.asc").unwrap();
@@ -1302,4 +1302,44 @@ fn test_two_signed_messages() {
         err.to_string().contains("unexpected trailing"),
         "found error: {err}"
     );
+}
+
+/// inline-sign a message with an empty payload
+#[test]
+fn signed_message_over_empty_data() {
+    pretty_env_logger::try_init().ok();
+
+    const PLAIN: &str = "";
+
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    let key_params = SecretKeyParamsBuilder::default()
+        .key_type(KeyType::Ed25519)
+        .can_sign(true)
+        .primary_user_id("test".to_string())
+        .build()
+        .expect("build params");
+
+    let secret = key_params
+        .generate(&mut rng)
+        .expect("failed to generate secret key");
+
+    // Inline-sign empty message
+    let mut builder = MessageBuilder::from_bytes("", PLAIN.as_bytes());
+    builder.sign(
+        &secret.primary_key,
+        Password::empty(),
+        HashAlgorithm::Sha256,
+    );
+
+    let signed = builder.to_vec(&mut rng).expect("writing");
+
+    // Verify signed message over empty payload
+    let mut message = Message::from_bytes(&signed[..]).expect("reading");
+    let plain = message.as_data_string().unwrap();
+    assert_eq!(plain, PLAIN);
+
+    message
+        .verify(&secret.primary_key.public_key())
+        .expect("message verification failed");
 }
