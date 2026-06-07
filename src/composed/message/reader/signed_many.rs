@@ -256,13 +256,6 @@ impl<'a> SignatureManyReader<'a> {
                     let mut buffer = BytesMut::with_capacity(BUFFER_SIZE);
                     let read = fill_buffer_bytes(&mut source, &mut buffer, BUFFER_SIZE)?;
 
-                    if read == 0 {
-                        return Err(io::Error::new(
-                            io::ErrorKind::UnexpectedEof,
-                            "missing signature",
-                        ));
-                    }
-
                     for hasher in hashers.iter_mut().filter_map(|h| h.as_mut()) {
                         hasher.hash_buf(&buffer[..read]);
                     }
