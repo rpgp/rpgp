@@ -56,7 +56,7 @@ impl Duration {
     }
 
     /// Creates a new [`Duration`] that represents a given number of days.
-    pub fn days(days: u32) -> Self {
+    pub fn from_days(days: u32) -> Self {
         Self(days * SECONDS_PER_DAY)
     }
 }
