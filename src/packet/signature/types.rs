@@ -527,7 +527,14 @@ impl Signature {
         key.verify(config.hash_alg, hash, signature)
     }
 
-    /// Verifies a certification signature type (for self-signatures).
+    /// Verifies a certification signature or certification revocation signature (for self-signatures).
+    ///
+    /// Allowed signature types are:
+    /// - Generic Certification Signature (Type ID 0x10)
+    /// - Persona Certification Signature (Type ID 0x11)
+    /// - Casual Certification Signature (Type ID 0x12)
+    /// - Positive Certification Signature (Type ID 0x13)
+    /// - Certification Revocation Signature (Type ID 0x30)
     pub fn verify_certification<V>(&self, key: &V, tag: Tag, id: &impl Serialize) -> Result<()>
     where
         V: VerifyingKey + Serialize,
@@ -535,7 +542,14 @@ impl Signature {
         self.verify_third_party_certification(&key, &key, tag, id)
     }
 
-    /// Verifies a certification signature type (for third-party signatures).
+    /// Verifies a (possibly third-party) certification signature or certification revocation signature.
+    ///
+    /// Allowed signature types are:
+    /// - Generic Certification Signature (Type ID 0x10)
+    /// - Persona Certification Signature (Type ID 0x11)
+    /// - Casual Certification Signature (Type ID 0x12)
+    /// - Positive Certification Signature (Type ID 0x13)
+    /// - Certification Revocation Signature (Type ID 0x30)
     pub fn verify_third_party_certification<V, K>(
         &self,
         signee: &K,
@@ -557,6 +571,18 @@ impl Signature {
         };
         let key_id = signee.legacy_key_id();
         debug!("verifying certification {key_id:?} {self:#?}");
+
+        ensure!(
+            matches!(
+                config.typ,
+                SignatureType::CertGeneric
+                    | SignatureType::CertPersona
+                    | SignatureType::CertCasual
+                    | SignatureType::CertPositive
+                    | SignatureType::CertRevocation
+            ),
+            "Expected certification signature or certificate revocation signature"
+        );
 
         Self::check_signature_key_version_alignment(&signer, config)?;
         Self::check_signature_hash_strength(config)?;
@@ -624,11 +650,13 @@ impl Signature {
         signer.verify(config.hash_alg, hash, signature)
     }
 
-    /// Verifies a subkey binding (which binds a subkey to the primary key).
+    /// Verifies a subkey binding (which binds a subkey to the primary key) or subkey revocation signature.
     ///
     /// The primary key is expected as `signer`, the subkey as `signee`.
     ///
-    /// "Subkey Binding Signature (type ID 0x18)"
+    /// Allowed signature types are:
+    /// - Subkey Binding Signature (type ID 0x18)
+    /// - Subkey Revocation Signature (Type ID 0x28)
     pub fn verify_subkey_binding<V, K>(&self, signer: &V, signee: &K) -> Result<()>
     where
         V: VerifyingKey + Serialize,
@@ -644,6 +672,14 @@ impl Signature {
         else {
             unsupported_err!("signature version {:?}", self.version());
         };
+
+        ensure!(
+            matches!(
+                config.typ,
+                SignatureType::SubkeyBinding | SignatureType::SubkeyRevocation
+            ),
+            "Expected subkey binding or revocation signature"
+        );
 
         Self::check_signature_key_version_alignment(&signer, config)?;
         Self::check_signature_hash_strength(config)?;
@@ -674,7 +710,8 @@ impl Signature {
     ///
     /// The subkey is expected as `signer`, the primary key as `signee`.
     ///
-    /// "Primary Key Binding Signature (type ID 0x19)"
+    /// Allowed signature types are:
+    /// - Primary Key Binding Signature (type ID 0x19)
     pub fn verify_primary_key_binding<V, K>(&self, signer: &V, signee: &K) -> Result<()>
     where
         V: VerifyingKey + Serialize,
@@ -690,6 +727,12 @@ impl Signature {
         else {
             unsupported_err!("signature version {:?}", self.version());
         };
+
+        ensure_eq!(
+            config.typ,
+            SignatureType::KeyBinding,
+            "Expected primary key binding signature"
+        );
 
         Self::check_signature_key_version_alignment(&signer, config)?;
         Self::check_signature_hash_strength(config)?;
