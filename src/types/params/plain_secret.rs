@@ -19,15 +19,15 @@ use crate::{
     composed::{PlainSessionKey, RawSessionKey},
     crypto::{
         aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
-       eddsa_legacy, elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, x448,
-        Decryptor,
+        eddsa_legacy, elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm,
+        x25519, x448, Decryptor,
     },
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        EcdhPublicParams, EddsaLegacyPublicParams,EncryptedSecretParams, EskType, KeyDetails, KeyVersion, Mpi, PkeskBytes,
-        PublicParams, S2kParams, StringToKey, Tag,
+        EcdhPublicParams, EddsaLegacyPublicParams, EncryptedSecretParams, EskType, KeyDetails,
+        KeyVersion, Mpi, PkeskBytes, PublicParams, S2kParams, StringToKey, Tag,
     },
     util::TeeWriter,
 };
