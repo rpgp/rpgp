@@ -767,7 +767,11 @@ impl Signature {
         self.verify_key_third_party(key, key)
     }
 
-    /// Verifies a third-party direct key signature or a revocation.
+    /// Verifies a (possibly third-party) direct key signature or a revocation.
+    ///
+    /// Allowed signature types are:
+    /// - Direct Key Signature (Type ID 0x1F)
+    /// - Key Revocation Signature (Type ID 0x20)
     pub fn verify_key_third_party<V, K>(&self, signee: &K, signer: &V) -> Result<()>
     where
         V: VerifyingKey + Serialize,
@@ -783,6 +787,14 @@ impl Signature {
         else {
             unsupported_err!("signature version {:?}", self.version());
         };
+        ensure!(
+            matches!(
+                config.typ,
+                SignatureType::Key | SignatureType::KeyRevocation
+            ),
+            "Expected direct key signature or key revocation signature"
+        );
+
         Self::check_signature_key_version_alignment(&signer, config)?;
         Self::check_signature_hash_strength(config)?;
 
