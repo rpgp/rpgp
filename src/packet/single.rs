@@ -73,6 +73,13 @@ impl Packet {
                     source: Box::new(format_err!("Unassigned Critical Packet type {:?}", id)),
                 })
             }
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            Tag::PersistentSymmetricKey => {
+                crate::packet::PersistentSymmetricKey::try_from_reader(packet_header, &mut body)
+                    .map(Into::into)
+            }
+
             // "Unassigned Non-Critical Packets"
             Tag::UnassignedNonCritical(id) => {
                 // a "soft" error that will usually get ignored while processing packet streams
