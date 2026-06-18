@@ -67,7 +67,7 @@ elliptic-curve = "0.13"
 generic-array = "0.14.6"
 idea = "0.5"
 md-5 = { version = "0.10.5", features = ["oid"] }
-num_enum = ">=0.5.7, < 0.8"
+num_enum = { version = ">=0.5.7, < 0.8", default-features = false }
 num-traits = "0.2.19"
 p256 = { version = "0.13", features = ["ecdsa", "ecdh"] }
 p384 = { version = "0.13", features = ["ecdsa"] }
