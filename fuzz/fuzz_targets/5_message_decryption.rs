@@ -27,11 +27,16 @@ fuzz_target!(|data: &[u8]| {
             let decryption_res = message.decrypt(&Password::empty(), &decrypt_key);
 
             match decryption_res {
-                // the fuzzer is not clever enough to encrypt anything to the public key
-                // so any "successful" decryption is likely a bug and report-worthy
-                Ok(_decryption) => panic!("potential fake decryption, investigate input"),
-                // not interesting
-                Err(_) => {}
+                Ok(_decryption) => {
+                    // the fuzzer is not clever enough to encrypt anything to the public key
+                    // so any "successful" decryption is likely a bug and report-worthy
+
+                    panic!("potential fake decryption, investigate input")
+                }
+
+                Err(_) => {
+                    // not interesting
+                }
             }
         }
     }
