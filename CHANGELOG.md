@@ -2,6 +2,51 @@
 
 All notable changes to rpgp will be documented in this file.
 
+## [0.20.0](https://github.com/rpgp/rpgp/compare/v0.19.0..0.20.0) - 2026-06-23
+
+### ⛰️  Features
+
+- Derive Ord for Timestamp ([#738](https://github.com/rpgp/rpgp/issues/738)) - ([12e61b3](https://github.com/rpgp/rpgp/commit/12e61b359cf184bc657e9a464ba628cae6dc93f8))
+- Implement more functionality from draft-wussler-openpgp-forwarding ([#723](https://github.com/rpgp/rpgp/issues/723)) - ([47a0ce2](https://github.com/rpgp/rpgp/commit/47a0ce2b548a429e43ad19fb263365bdd58c5c22))
+- [**breaking**] By default, MDC-check first when decrypting SEIPDv1; allow optional streaming ([#662](https://github.com/rpgp/rpgp/issues/662)) - ([8e0ef98](https://github.com/rpgp/rpgp/commit/8e0ef9857b7cbc101c241701d70a8dbc99a6860f))
+- Handling of ECDSA/EdDSA secret key packets with unknown curve ([#796](https://github.com/rpgp/rpgp/issues/796)) - ([1e3a886](https://github.com/rpgp/rpgp/commit/1e3a8869bcfc637e6254350547d17a143601ee45))
+
+### 🐛 Bug Fixes
+
+- Abort on all-zero x25519 shared secret - ([35e98dd](https://github.com/rpgp/rpgp/commit/35e98dde86d09421a5bb9eaa2077a6160f4639e8))
+- Don't panic in legacy_key_id() for v2/3 keys with very short RSA modulus ([#760](https://github.com/rpgp/rpgp/issues/760)) - ([970b18f](https://github.com/rpgp/rpgp/commit/970b18f700d07294cbd47447a3d8ec1ba119b6fb))
+- Improve draft-forwarding implementation - ([e0910fe](https://github.com/rpgp/rpgp/commit/e0910fe34b8731c5a98ec504adeee4f278f261e7))
+- Catch underflow in a controlled manner - ([c33f55b](https://github.com/rpgp/rpgp/commit/c33f55b38178a8536adca1219eb76b4f33a689ac))
+- Subpacket length handling ([#764](https://github.com/rpgp/rpgp/issues/764)) - ([c9b0955](https://github.com/rpgp/rpgp/commit/c9b0955fc85f3e05dfe1d36cf1ae50f9921f890f))
+- Timestamp::now() panics in WASM ([#784](https://github.com/rpgp/rpgp/issues/784)) - ([a4dafc8](https://github.com/rpgp/rpgp/commit/a4dafc8f51988494a299ebbfbd941f72d285515e))
+- Allow verifying signatures over empty payload - ([010a2df](https://github.com/rpgp/rpgp/commit/010a2df59862b177378c2c1bad2f1c420b2c96ef))
+
+### 🚜 Refactor
+
+- Replace `regex` with `memchr` for newline normalization ([#744](https://github.com/rpgp/rpgp/issues/744)) - ([0800991](https://github.com/rpgp/rpgp/commit/0800991619a0cb8649931ed072292d0a270fd4e8))
+- Replace try_key! macro with plain functions - ([a162c07](https://github.com/rpgp/rpgp/commit/a162c07cf9e99687c9cab2c9d8dbba13d6d9f68c))
+
+### 📚 Documentation
+
+- Add GpgFrontend to notable users and libraries ([#769](https://github.com/rpgp/rpgp/issues/769)) - ([2a943ae](https://github.com/rpgp/rpgp/commit/2a943ae9c55e470df51924f56ce3ff3b9619360f))
+- Document what ADSK in key flags means - ([2df698c](https://github.com/rpgp/rpgp/commit/2df698c8c1d3f0f9714000cd503998dadc3aa7ab))
+
+### 🧪 Testing
+
+- Don't run a test by default that requires "tests/tests" ([#748](https://github.com/rpgp/rpgp/issues/748)) - ([02d1536](https://github.com/rpgp/rpgp/commit/02d1536f096233829112065e6e7a2bded62c349a))
+- Dearmorer gets confused (in debug builds) - ([747dd37](https://github.com/rpgp/rpgp/commit/747dd3755c1af447e72ddca0e5c2631297690f4c))
+- Parse incomplete armored data ([#765](https://github.com/rpgp/rpgp/issues/765)) - ([5007673](https://github.com/rpgp/rpgp/commit/5007673bc58cdc939500d46785fa455a0bf1e0d8))
+- Add unit test for #146 ([#766](https://github.com/rpgp/rpgp/issues/766)) - ([a8a0790](https://github.com/rpgp/rpgp/commit/a8a07900acd87fa85c6473a38ca4531acac0c2df))
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump dependencies ([#726](https://github.com/rpgp/rpgp/issues/726)) - ([72ffa1c](https://github.com/rpgp/rpgp/commit/72ffa1c51419d663da76e90f59c01430fd61ab3c))
+- Disable default `num_enum` features - ([6cb96e1](https://github.com/rpgp/rpgp/commit/6cb96e15fce8b05c7364eadcd9f24e6dc2bbd93e))
+
+### Api
+
+- [**breaking**] Mark legacy ECC curves as such - ([a888a7f](https://github.com/rpgp/rpgp/commit/a888a7fecf3f20f85cb01f37837c371c48370120))
+
 ## [0.19.0](https://github.com/rpgp/rpgp/compare/v0.18.0..0.19.0) - 2026-02-02
 
 ### ⛰️  Features
