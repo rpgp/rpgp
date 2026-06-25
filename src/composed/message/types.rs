@@ -989,6 +989,24 @@ impl<'a> Message<'a> {
         Ok(out)
     }
 
+    /// Consumes the reader and reads into a vec.
+    ///
+    /// Limits the output size to no more than `limit` bytes.
+    /// If the output data exceeds the limit, this function returns an error.
+    pub fn as_data_vec_capped(&mut self, limit: u64) -> io::Result<Vec<u8>> {
+        let mut out = Vec::new();
+        self.take(limit).read_to_end(&mut out)?;
+
+        if self.has_buffer_available()? {
+            return Err(io::Error::other(format!(
+                "Message content exceeds size limit ({})",
+                limit
+            )));
+        }
+
+        Ok(out)
+    }
+
     /// Consumes the reader and reads into a string.
     pub fn as_data_string(&mut self) -> io::Result<String> {
         let mut out = String::new();
