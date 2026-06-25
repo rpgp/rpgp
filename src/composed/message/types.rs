@@ -151,16 +151,39 @@ impl BufRead for MessageReader<'_> {
 
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
 ///
-/// Represents one of:
+/// The core of any OpenPGP message is a plaintext payload, encoded as a "Literal Message".
+///
+/// A Literal Message may be encrypted, cryptographically
+/// signed, and/or compressed.
+///
+/// The OpenPGP message grammar allows arbitrary (and recursive) wrapping of the central
+/// Literal Message in a series of:
 ///
 /// - Encrypted Message,
 /// - Signed Message (either one-pass signed or prefixed-signed),
-/// - Compressed Message,
-/// - Literal Message.
+/// - Compressed Message.
 ///
-/// OpenPGP message may consist of multiple layers wrapped around each other (such as for example:
-/// an encrypted message, containing a compressed message, containing a one-pass signed message,
-/// containing a literal message).
+/// (For example: An encrypted message, containing a compressed message, containing a one-pass
+/// signed message, containing a literal message).
+///
+/// This type allows consuming an existing message, and processing its various layers:
+///
+/// If the message contains an encryption layer, then Message attempts to decrypt it,
+/// using material provided with the `decrypt*` function calls.
+///
+/// If the message contains signatures, then these may be verified *after* the message body has
+/// been fully consumed by the caller, using the `verify` function.
+///
+/// Compressed layers can be unwrapped with the `decompress` function.
+///
+/// NOTE: When consuming a message, the output may be arbitrarily large.
+/// A consumer who needs to defend against resource exhaustion should take care to avoid attempting
+/// to allocate more memory than is available in their context.
+///
+/// Callers should consume `Message` as a streaming reader, wherever possible. Depending on the
+/// use case, wrapping `Message` with a limiting reader
+/// (e.g. via [`Read::take`](https://doc.rust-lang.org/std/io/trait.Read.html#method.take)
+/// is a good strategy.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Message<'a> {
@@ -983,6 +1006,14 @@ impl<'a> Message<'a> {
     }
 
     /// Consumes the reader and reads into a vec.
+    ///
+    /// NOTE: The output of this call may be arbitrarily large, and allocate a potentially large
+    /// amount of memory!
+    /// This convenience function is not appropriate for use in environments where "out of memory"
+    /// crashes are unacceptable!
+    ///
+    /// Callers should consider using a limited reader (e.g. via `Read::take`) to safely consume
+    /// message payloads via the `Read` implementation of this type.
     pub fn as_data_vec(&mut self) -> io::Result<Vec<u8>> {
         let mut out = Vec::new();
         self.read_to_end(&mut out)?;
@@ -990,6 +1021,14 @@ impl<'a> Message<'a> {
     }
 
     /// Consumes the reader and reads into a string.
+    ///
+    /// NOTE: The output of this call may be arbitrarily large, and allocate a potentially large
+    /// amount of memory!
+    /// This convenience function is not appropriate for use in environments where "out of memory"
+    /// crashes are unacceptable!
+    ///
+    /// Callers should consider using a limited reader (e.g. via `Read::take`) to safely consume
+    /// message payloads via the `Read` implementation of this type.
     pub fn as_data_string(&mut self) -> io::Result<String> {
         let mut out = String::new();
         self.read_to_string(&mut out)?;
