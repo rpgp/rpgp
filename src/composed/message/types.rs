@@ -176,21 +176,26 @@ impl BufRead for MessageReader<'_> {
 ///
 /// Compressed layers can be unwrapped with the `decompress` function.
 ///
-/// NOTE: When consuming a message, the output may be arbitrarily large.
-/// A consumer who needs to defend against resource exhaustion should take care to avoid attempting
-/// to allocate more memory than is available in their context.
+/// **Message output may be arbitrarily large**
 ///
-/// Callers should consume `Message` as a streaming reader, wherever possible. Depending on the
-/// use case, wrapping `Message` with a limiting reader
+/// When consuming a message, the output may be arbitrarily large.
+/// Applications that consume messages need to deal with this fact, in accordance with their
+/// requirements.
+///
+/// In particular, consumers who need to defend against resource exhaustion must be cautious to
+/// avoid allocating more memory than is available in their context!
+///
+/// Defensive users should consume `Message` as a streaming reader, wherever possible.
+/// Depending on the use case, wrapping `Message` with a limiting reader
 /// (e.g. via [`Read::take`](https://doc.rust-lang.org/std/io/trait.Read.html#method.take)
 /// is a good strategy.)
 ///
-/// Note: If the message still contains unread data after limited reading (as tested e.g. via
-/// `Message::has_buffer_available`), the caller must consider the operation unsuccessful, and
+/// Caution: If the message still contains unread data after limited reading (as tested e.g. via
+/// [`Message::has_buffer_available`]), the caller must consider the operation unsuccessful, and
 /// proceed accordingly - e.g. by throwing an error.
 ///
-/// In particular, note that signatures over a message cannot be verified with `Message::verify`
-/// if the message has not been fully read (e.g. when using a limited readers)!
+/// Also note that signatures over a message *can not be verified* with [`Message::verify`]
+/// if the message has not been fully read!
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Message<'a> {
@@ -1021,6 +1026,8 @@ impl<'a> Message<'a> {
     ///
     /// Callers should consider using a limited reader (e.g. via `Read::take`) to safely consume
     /// message payloads via the `Read` implementation of this type.
+    ///
+    /// See the top level [`Message`] documentation for more information!
     pub fn as_data_vec(&mut self) -> io::Result<Vec<u8>> {
         let mut out = Vec::new();
         self.read_to_end(&mut out)?;
@@ -1036,6 +1043,8 @@ impl<'a> Message<'a> {
     ///
     /// Callers should consider using a limited reader (e.g. via `Read::take`) to safely consume
     /// message payloads via the `Read` implementation of this type.
+    ///
+    /// See the top level [`Message`] documentation for more information!
     pub fn as_data_string(&mut self) -> io::Result<String> {
         let mut out = String::new();
         self.read_to_string(&mut out)?;
