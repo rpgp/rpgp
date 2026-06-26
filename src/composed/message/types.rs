@@ -168,8 +168,8 @@ impl BufRead for MessageReader<'_> {
 ///
 /// This type allows consuming an existing message, and processing its various layers:
 ///
-/// If the message contains an encryption layer, then Message attempts to decrypt it,
-/// using material provided with the `decrypt*` function calls.
+/// If the message contains an encryption layer, then `Message` attempts to decrypt it,
+/// using key material provided with the `decrypt*` function calls.
 ///
 /// If the message contains signatures, then these may be verified *after* the message body has
 /// been fully consumed by the caller, using the `verify` function.
@@ -182,19 +182,19 @@ impl BufRead for MessageReader<'_> {
 /// Applications that consume messages need to deal with this fact, in accordance with their
 /// requirements.
 ///
-/// In particular, consumers who need to defend against resource exhaustion must be cautious to
-/// avoid allocating more memory than is available in their context!
+/// In particular, consumers who need to defend against resource exhaustion must avoid allocating
+/// more memory than is available in their context!
 ///
 /// Defensive users should consume `Message` as a streaming reader, wherever possible.
 /// Depending on the use case, wrapping `Message` with a limiting reader
 /// (e.g. via [`Read::take`](https://doc.rust-lang.org/std/io/trait.Read.html#method.take)
 /// is a good strategy.)
 ///
-/// Caution: If the message still contains unread data after limited reading (as tested e.g. via
-/// [`Message::has_buffer_available`]), the caller must consider the operation unsuccessful, and
-/// proceed accordingly - e.g. by throwing an error.
+/// Caution: If the message still contains unread data after limited reading, the caller must
+/// consider the operation unsuccessful, and proceed accordingly - e.g. by throwing an error.
+/// (One method to detect remaining data in a message is [`Message::has_buffer_available`])
 ///
-/// Also note that signatures over a message *can not be verified* with [`Message::verify`]
+/// Note that signatures over a message *can not be verified* with [`Message::verify`]
 /// if the message has not been fully read!
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
