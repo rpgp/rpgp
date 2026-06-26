@@ -183,7 +183,14 @@ impl BufRead for MessageReader<'_> {
 /// Callers should consume `Message` as a streaming reader, wherever possible. Depending on the
 /// use case, wrapping `Message` with a limiting reader
 /// (e.g. via [`Read::take`](https://doc.rust-lang.org/std/io/trait.Read.html#method.take)
-/// is a good strategy.
+/// is a good strategy.)
+///
+/// Note: If the message still contains unread data after limited reading (as tested e.g. via
+/// `Message::has_buffer_available`), the caller must consider the operation unsuccessful, and
+/// proceed accordingly - e.g. by throwing an error.
+///
+/// In particular, note that signatures over a message cannot be verified with `Message::verify`
+/// if the message has not been fully read (e.g. when using a limited readers)!
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Message<'a> {
