@@ -42,7 +42,7 @@ fn test_parse_msg(entry: &str, base_path: &str, _is_normalized: bool) {
 
     // TODO: verify filename
     let n = format!("{base_path}/{entry}");
-    let mut file = File::open(&n).unwrap_or_else(|_| panic!("no file: {}", &n));
+    let mut file = File::open(&n).unwrap_or_else(|_| panic!("no file: {}", n));
 
     let details: Testcase = serde_json::from_reader(&mut file).unwrap();
     info!(
@@ -60,7 +60,7 @@ fn test_parse_msg(entry: &str, base_path: &str, _is_normalized: bool) {
 
     let decrypt_id = hex::encode(decrypt_key.legacy_key_id());
 
-    info!("decrypt key (ID={})", &decrypt_id);
+    info!("decrypt key (ID={})", decrypt_id);
     if let Some(id) = &details.keyid {
         assert_eq!(id, &decrypt_id, "invalid keyid");
     }
@@ -74,7 +74,7 @@ fn test_parse_msg(entry: &str, base_path: &str, _is_normalized: bool) {
             .expect("invalid verification key");
 
         let verify_id = hex::encode(verify_key.legacy_key_id());
-        info!("verify key (ID={})", &verify_id);
+        info!("verify key (ID={})", verify_id);
         Some(verify_key)
     } else {
         None
@@ -86,7 +86,7 @@ fn test_parse_msg(entry: &str, base_path: &str, _is_normalized: bool) {
 
     let (message, _headers) =
         Message::from_armor_file(cipher_file_path).expect("failed to parse message");
-    info!("message: {:?}", &message);
+    info!("message: {:?}", message);
 
     match &message {
         Message::Encrypted { .. } => {

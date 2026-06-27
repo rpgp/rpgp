@@ -1365,7 +1365,7 @@ impl<'a, R: std::io::Read> SignGenerator<'a, R> {
         let mut configs = VecDeque::with_capacity(prep.len());
         let mut sign_hashers = VecDeque::with_capacity(prep.len());
         let mut ops = VecDeque::with_capacity(prep.len());
-        for ((config, op), signer) in prep.into_iter().zip(signers.into_iter()) {
+        for ((config, op), signer) in prep.into_iter().zip(signers) {
             ops.push_back(op);
             sign_hashers.push_back(config.into_hasher()?);
             configs.push_back(signer);

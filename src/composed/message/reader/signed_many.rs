@@ -359,7 +359,7 @@ impl<'a> SignatureManyReader<'a> {
                         let mut hashes = Vec::with_capacity(packets.len());
                         let mut signatures = Vec::with_capacity(packets.len());
 
-                        for (hasher, packet) in hashers.into_iter().zip(packets.into_iter()) {
+                        for (hasher, packet) in hashers.into_iter().zip(packets) {
                             if let Some(mut hasher) = hasher {
                                 match packet {
                                     SignaturePacket::Ops { signature: ops } => {
