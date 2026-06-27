@@ -1024,10 +1024,17 @@ impl<'a> Message<'a> {
     /// This convenience function is not appropriate for use in environments where "out of memory"
     /// crashes are unacceptable!
     ///
-    /// Callers should consider using a limited reader (e.g. via `Read::take`) to safely consume
-    /// message payloads via the `Read` implementation of this type.
+    /// Defensive users should consume `Message` as a streaming reader, wherever possible.
+    /// Depending on the use case, wrapping `Message` with a limiting reader
+    /// (e.g. via [`Read::take`](https://doc.rust-lang.org/std/io/trait.Read.html#method.take)
+    /// is a good strategy.)
     ///
-    /// See the top level [`Message`] documentation for more information!
+    /// Caution: If the message still contains unread data after limited reading, the caller must
+    /// consider the operation unsuccessful, and proceed accordingly - e.g. by throwing an error.
+    /// (One method to detect remaining data in a message is [`Message::has_buffer_available`])
+    ///
+    /// Note that signatures over a message *can not be verified* with [`Message::verify`]
+    /// if the message has not been fully read!
     pub fn as_data_vec(&mut self) -> io::Result<Vec<u8>> {
         let mut out = Vec::new();
         self.read_to_end(&mut out)?;
@@ -1041,10 +1048,17 @@ impl<'a> Message<'a> {
     /// This convenience function is not appropriate for use in environments where "out of memory"
     /// crashes are unacceptable!
     ///
-    /// Callers should consider using a limited reader (e.g. via `Read::take`) to safely consume
-    /// message payloads via the `Read` implementation of this type.
+    /// Defensive users should consume `Message` as a streaming reader, wherever possible.
+    /// Depending on the use case, wrapping `Message` with a limiting reader
+    /// (e.g. via [`Read::take`](https://doc.rust-lang.org/std/io/trait.Read.html#method.take)
+    /// is a good strategy.)
     ///
-    /// See the top level [`Message`] documentation for more information!
+    /// Caution: If the message still contains unread data after limited reading, the caller must
+    /// consider the operation unsuccessful, and proceed accordingly - e.g. by throwing an error.
+    /// (One method to detect remaining data in a message is [`Message::has_buffer_available`])
+    ///
+    /// Note that signatures over a message *can not be verified* with [`Message::verify`]
+    /// if the message has not been fully read!
     pub fn as_data_string(&mut self) -> io::Result<String> {
         let mut out = String::new();
         self.read_to_string(&mut out)?;
