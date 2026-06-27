@@ -7,9 +7,9 @@ use generic_array::{
     ArrayLength, GenericArray,
 };
 
-const CRLF: [u8; 2] = [b'\r', b'\n'];
-const CR: [u8; 1] = [b'\r'];
-const LF: [u8; 1] = [b'\n'];
+const CRLF: [u8; 2] = *b"\r\n";
+const CR: [u8; 1] = *b"\r";
+const LF: [u8; 1] = *b"\n";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]

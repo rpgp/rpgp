@@ -79,7 +79,6 @@ impl PacketTrait for Padding {
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 

@@ -124,9 +124,9 @@ fn forward_a_3_transform_pkesk() {
 
     eprintln!(
         "forwardee fp {:#02x?}",
-        &forwardee.secret_subkeys[0].key.fingerprint()
+        forwardee.secret_subkeys[0].key.fingerprint()
     );
-    eprintln!("forwardee {:#02x?}", &forwardee.secret_subkeys[0].key);
+    eprintln!("forwardee {:#02x?}", forwardee.secret_subkeys[0].key);
 
     let transformed_pkesk = pkesk
         .forwarding_transform(&forwardee.secret_subkeys[0].key, PROXY_PARAMETER_K.into())

@@ -815,7 +815,7 @@ impl KeyDetails for PubKeyInner {
                     }
                     raw.into()
                 }
-                _ => panic!("invalid key constructed: {:?}", &self.public_params),
+                _ => panic!("invalid key constructed: {:?}", self.public_params),
             },
             KeyVersion::V4 => {
                 // Lower 64 bits
