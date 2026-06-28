@@ -191,7 +191,8 @@ impl BufRead for MessageReader<'_> {
 ///
 /// Caution: If the message still contains unread data after limited reading, the caller must
 /// consider the operation unsuccessful, and proceed accordingly - e.g. by throwing an error.
-/// (One method to detect remaining data in a message is [`Message::has_buffer_available`])
+/// (If the reader yielded exactly the limited amount of bytes, the caller can test if the reader
+/// will yield one more byte, and if so, fail)
 ///
 /// Note that signatures over a message *can not be verified* with [`Message::verify`]
 /// if the message has not been fully read!
@@ -1029,7 +1030,8 @@ impl<'a> Message<'a> {
     ///
     /// Caution: If the message still contains unread data after limited reading, the caller must
     /// consider the operation unsuccessful, and proceed accordingly - e.g. by throwing an error.
-    /// (One method to detect remaining data in a message is [`Message::has_buffer_available`])
+    /// (If the reader yielded exactly the limited amount of bytes, the caller can test if the
+    /// reader will yield one more byte, and if so, fail)
     ///
     /// Note that signatures over a message *can not be verified* with [`Message::verify`]
     /// if the message has not been fully read!
@@ -1052,7 +1054,8 @@ impl<'a> Message<'a> {
     ///
     /// Caution: If the message still contains unread data after limited reading, the caller must
     /// consider the operation unsuccessful, and proceed accordingly - e.g. by throwing an error.
-    /// (One method to detect remaining data in a message is [`Message::has_buffer_available`])
+    /// (If the reader yielded exactly the limited amount of bytes, the caller can test if the
+    /// reader will yield one more byte, and if so, fail)
     ///
     /// Note that signatures over a message *can not be verified* with [`Message::verify`]
     /// if the message has not been fully read!
