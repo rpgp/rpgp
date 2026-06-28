@@ -76,14 +76,15 @@ Don't see your project here? Please send a PR :)
 use pgp::composed::{Deserializable, Message, SignedPublicKey};
 
 fn main() -> pgp::errors::Result<()> {
-    let (public_key, _headers_public) = SignedPublicKey:: from_armor_file("key.asc")?;
-   
+    let (public_key, _headers_public) = SignedPublicKey::from_armor_file("key.asc")?;
+
     let (mut msg, _headers_msg) = Message::from_armor_file("msg.asc")?;
+    let payload = msg.as_data_string()?;
     if msg.verify(&public_key).is_ok() { // Verify using the primary (NOTE: This is not always the right key!)
         // Signature is correct, print message payload
-        println!("Signed message: {:?}", msg.as_data_string()?);
+        println!("Signed message: {:?}", payload);
     }
-   
+
     Ok(())
 }
 ```
