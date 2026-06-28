@@ -187,8 +187,7 @@ impl BufRead for MessageReader<'_> {
 ///
 /// Defensive users should consume `Message` as a streaming reader, wherever possible.
 /// Depending on the use case, wrapping `Message` with a limiting reader
-/// (e.g. via [`Read::take`](https://doc.rust-lang.org/std/io/trait.Read.html#method.take)
-/// is a good strategy.)
+/// (e.g. via [`std::io::Read::take`] is a good strategy.)
 ///
 /// Caution: If the message still contains unread data after limited reading, the caller must
 /// consider the operation unsuccessful, and proceed accordingly - e.g. by throwing an error.
@@ -1026,8 +1025,7 @@ impl<'a> Message<'a> {
     ///
     /// Defensive users should consume `Message` as a streaming reader, wherever possible.
     /// Depending on the use case, wrapping `Message` with a limiting reader
-    /// (e.g. via [`Read::take`](https://doc.rust-lang.org/std/io/trait.Read.html#method.take)
-    /// is a good strategy.)
+    /// (e.g. via [`std::io::Read::take`] is a good strategy.)
     ///
     /// Caution: If the message still contains unread data after limited reading, the caller must
     /// consider the operation unsuccessful, and proceed accordingly - e.g. by throwing an error.
@@ -1050,8 +1048,7 @@ impl<'a> Message<'a> {
     ///
     /// Defensive users should consume `Message` as a streaming reader, wherever possible.
     /// Depending on the use case, wrapping `Message` with a limiting reader
-    /// (e.g. via [`Read::take`](https://doc.rust-lang.org/std/io/trait.Read.html#method.take)
-    /// is a good strategy.)
+    /// (e.g. via [`std::io::Read::take`] is a good strategy.)
     ///
     /// Caution: If the message still contains unread data after limited reading, the caller must
     /// consider the operation unsuccessful, and proceed accordingly - e.g. by throwing an error.
