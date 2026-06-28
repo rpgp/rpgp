@@ -153,8 +153,7 @@ impl BufRead for MessageReader<'_> {
 ///
 /// The core of any OpenPGP message is a plaintext payload, encoded as a "Literal Message".
 ///
-/// A Literal Message may be encrypted, cryptographically
-/// signed, and/or compressed.
+/// A Literal Message may be encrypted, cryptographically signed, and/or compressed.
 ///
 /// The OpenPGP message grammar allows arbitrary (and recursive) wrapping of the central
 /// Literal Message in a series of:
