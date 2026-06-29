@@ -52,7 +52,7 @@ jobs:
       run: cargo test --doc
 
     - name: test crypto::dsa::tests::test_dsa_2048 500 times
-      run: cargo nextest run --stress-count 500 crypto::dsa::tests::test_dsa_2048
+      run: cargo nextest run --lib --bins --tests --all --features asm --stress-count 500 crypto::dsa::tests::test_dsa_2048
 
     - name: asm
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
