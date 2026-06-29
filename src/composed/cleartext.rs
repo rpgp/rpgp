@@ -43,17 +43,20 @@ pub struct CleartextSignedMessage {
 
 impl CleartextSignedMessage {
     /// Construct a new cleartext message and sign it using the given key.
-    pub fn new(
+    pub fn new<R>(
+        rng: &mut R,
         text: &str,
         config: SignatureConfig,
-        key: &impl SigningKey,
+        key: &impl SigningKey<R>,
         key_pw: &Password,
     ) -> Result<Self>
-where {
+    where
+        R: rand::Rng + rand::CryptoRng,
+    {
         let mut bytes = text.as_bytes();
         let signature_text = NormalizedReader::new(&mut bytes, LineBreak::Crlf);
         let hash = config.hash_alg;
-        let signature = config.sign(key, key_pw, signature_text)?;
+        let signature = config.sign(rng, key, key_pw, signature_text)?;
 
         Ok(Self {
             csf_encoded_text: dash_escape(text),
@@ -63,7 +66,12 @@ where {
     }
 
     /// Sign the given text.
-    pub fn sign<R>(rng: R, text: &str, key: &impl SigningKey, key_pw: &Password) -> Result<Self>
+    pub fn sign<R>(
+        rng: &mut R,
+        text: &str,
+        key: &impl SigningKey<R>,
+        key_pw: &Password,
+    ) -> Result<Self>
     where
         R: rand::Rng + rand::CryptoRng,
     {
@@ -83,7 +91,7 @@ where {
             ))?];
         }
 
-        Self::new(text, config, key, key_pw)
+        Self::new(rng, text, config, key, key_pw)
     }
 
     /// Sign the same message with multiple keys.

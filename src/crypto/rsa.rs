@@ -1,3 +1,4 @@
+use aead::rand_core::RngCore;
 use digest::{const_oid::AssociatedOid, Digest};
 use md5::Md5;
 use num_bigint::ModInverse;
@@ -153,7 +154,12 @@ impl Decryptor for SecretKey {
 
 impl Signer for SecretKey {
     /// Sign using RSA, with PKCS1v15 padding.
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
+    fn sign<RNG: CryptoRng + RngCore>(
+        &self,
+        _rng: &mut RNG,
+        hash: HashAlgorithm,
+        digest: &[u8],
+    ) -> Result<SignatureBytes> {
         let sig = match hash {
             HashAlgorithm::None => return Err(format_err!("none")),
             HashAlgorithm::Md5 => sign_int::<Md5>(self.0.clone(), digest),
