@@ -43,13 +43,16 @@ jobs:
     - name: Install cargo-nextest
       uses: taiki-e/install-action@v2
       with:
-        tool: nextest@0.9.80
+        tool: nextest@0.9.137
 
     - name: tests
       run: cargo nextest run --lib --bins --tests --all
 
     - name: doc tests
       run: cargo test --doc
+
+    - name: test crypto::dsa::tests::test_dsa_2048 500 times
+      run: cargo nextest run --stress-count 500 crypto::dsa::tests::test_dsa_2048
 
     - name: asm
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
