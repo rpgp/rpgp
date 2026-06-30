@@ -77,7 +77,6 @@ rand = "0.8.6"
 ripemd = { version = "0.1.3", features = ["oid"] }
 rsa = { version = "0.9.10" }
 sha1 = { version = "0.10.6", features = ["oid"] }
-sha1-asm = { version = "0.5.3", optional = true }
 sha1-checked = { version = "0.10", features = ["zeroize"] }
 sha2 = { version = "0.10.6", features = ["oid"] }
 sha3 = { version = "0.10.8", features = ["oid"] }
@@ -139,7 +138,6 @@ default = ["bzip2"]
 
 # See README.md for features documentation
 bzip2 = ["dep:bzip2"]
-asm = ["dep:sha1-asm", "sha1/asm", "sha2/asm", "md-5/asm"]
 wasm = ["getrandom", "getrandom/js", "web-time"]
 
 large-rsa = []
