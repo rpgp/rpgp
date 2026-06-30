@@ -138,6 +138,7 @@ default = ["bzip2"]
 
 # See README.md for features documentation
 bzip2 = ["dep:bzip2"]
+asm = ["sha2/asm", "md-5/asm"]
 wasm = ["getrandom", "getrandom/js", "web-time"]
 
 large-rsa = []
