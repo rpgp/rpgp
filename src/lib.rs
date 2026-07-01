@@ -49,6 +49,3 @@ mod parsing_reader;
 
 /// The version of this crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-/// Default maximum size that gets buffered.
-pub const MAX_BUFFER_SIZE: usize = 1024 * 1024 * 1024;
