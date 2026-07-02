@@ -2,7 +2,8 @@
 
 ### Does rPGP support Post Quantum Cryptography (PQC)? 
 
-Yes, rPGP implements RFC 9980 [Post-Quantum Cryptography in OpenPGP](https://www.rfc-editor.org/info/rfc9980/), gated behind the feature `pqc`.
+Yes, rPGP implements RFC 9980 [Post-Quantum Cryptography in OpenPGP](https://www.rfc-editor.org/info/rfc9980/), gated behind the feature `pqc`
+(this feature was previously called `draft-pqc`).
 
 ### What other standards are you considering for implementation? 
 
