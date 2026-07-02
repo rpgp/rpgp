@@ -39,7 +39,7 @@ Algorithms:
 
 ## Modern and/or upcoming
 
-### From RFC 9580
+### From RFC 9580 (OpenPGP)
 
 The following set of formats and mechanisms is widely supported in most modern implementations of OpenPGP.
 Notably, however, GnuPG does not yet implement support for the new formats in RFC 9580.
@@ -63,12 +63,9 @@ The old variants are named "EdDSALegacy with Ed25519Legacy" and "ECDH with Curve
 
 While these newly specified OpenPGP algorithms don't use different cryptographic mechanisms, they are not interchangeable with the pre-existing ones.
 
-### From draft-ietf-openpgp-pqc
+### From RFC 9980 (Post-Quantum Cryptography in OpenPGP)
 
-The draft document [draft-ietf-openpgp-pqc](https://datatracker.ietf.org/doc/html/draft-ietf-openpgp-pqc) defines post-quantum algorithm extensions for OpenPGP.
-
-This draft is not finalized, but it is in a late stage of development.
-Finalization as an RFC is pending, and anticipated in the coming months.
+[RFC 9980](https://www.rfc-editor.org/info/rfc9980/) defines post-quantum algorithm extensions for OpenPGP.
 
 - Asymmetric cryptography:
   - ML-DSA-65+Ed25519, ML-DSA-87+Ed448 (hybrid signatures)
@@ -78,10 +75,7 @@ Finalization as an RFC is pending, and anticipated in the coming months.
 Of these, ML-KEM-768+X25519 keys may be used as encryption subkeys of v4 keys.
 All other of the PQC algorithms may only be used in v6 OpenPGP keys.
 
-rPGP implements support for the latest version of this draft ("draft-ietf-openpgp-pqc-12"), feature-gated as `draft-pqc`.
-
-Note that, as the standard is not finalized, applications should *not emit these formats in production* use yet!
-That said, rPGP's implementation enables experimentation with PQC today (and it has been shown to interoperate with other implementations).
+rPGP implements full support for RFC 9980, feature-gated as `pqc`.
 
 ## Legacy
 

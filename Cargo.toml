@@ -144,7 +144,7 @@ wasm = ["getrandom", "getrandom/js", "web-time"]
 large-rsa = []
 malformed-artifact-compat = []
 
-draft-pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
+pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
 draft-wussler-openpgp-forwarding = []
 
 [profile.bench]

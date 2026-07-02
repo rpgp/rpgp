@@ -4,7 +4,7 @@ use derive_builder::Builder;
 use rand::{CryptoRng, Rng};
 use smallvec::SmallVec;
 
-#[cfg(feature = "draft-pqc")]
+#[cfg(feature = "pqc")]
 use crate::crypto::{
     ml_dsa65_ed25519, ml_dsa87_ed448, ml_kem1024_x448, ml_kem768_x25519, slh_dsa_shake128f,
     slh_dsa_shake128s, slh_dsa_shake256s,
@@ -399,25 +399,25 @@ pub enum KeyType {
     /// Encrypting with X448
     X448,
     /// Encrypting using MlKem768-X25519
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     MlKem768X25519,
     /// Encrypting using MlKem1024-X25519
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     MlKem1024X448,
     /// Signing using ML DSA 65 ED25519
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     MlDsa65Ed25519,
     /// Signing using ML DSA 87 ED448
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     MlDsa87Ed448,
     /// Signing with SLH DSA Shake 128s
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     SlhDsaShake128s,
     /// Signing with SLH DSA Shake 128f
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     SlhDsaShake128f,
     /// Signing with SLH DSA Shake 256s
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     SlhDsaShake256s,
 }
 
@@ -456,19 +456,19 @@ impl KeyType {
             KeyType::Ed448 => PublicKeyAlgorithm::Ed448,
             KeyType::X25519 => PublicKeyAlgorithm::X25519,
             KeyType::X448 => PublicKeyAlgorithm::X448,
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::MlKem768X25519 => PublicKeyAlgorithm::MlKem768X25519,
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::MlKem1024X448 => PublicKeyAlgorithm::MlKem1024X448,
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::MlDsa65Ed25519 => PublicKeyAlgorithm::MlDsa65Ed25519,
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::MlDsa87Ed448 => PublicKeyAlgorithm::MlDsa87Ed448,
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::SlhDsaShake128s => PublicKeyAlgorithm::SlhDsaShake128s,
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::SlhDsaShake128f => PublicKeyAlgorithm::SlhDsaShake128f,
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::SlhDsaShake256s => PublicKeyAlgorithm::SlhDsaShake256s,
         }
     }
@@ -485,9 +485,9 @@ impl KeyType {
             | KeyType::Ed25519
             | KeyType::Ed448 => true,
             KeyType::ECDH(_) | KeyType::X25519 | KeyType::X448 => false,
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::MlKem768X25519 | KeyType::MlKem1024X448 => false,
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::MlDsa65Ed25519
             | KeyType::MlDsa87Ed448
             | KeyType::SlhDsaShake128s
@@ -508,9 +508,9 @@ impl KeyType {
             | KeyType::Ed25519
             | KeyType::Ed448 => false,
             KeyType::ECDH(_) | KeyType::X25519 | KeyType::X448 => true,
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::MlKem768X25519 | KeyType::MlKem1024X448 => true,
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::MlDsa65Ed25519
             | KeyType::MlDsa87Ed448
             | KeyType::SlhDsaShake128s
@@ -581,49 +581,49 @@ impl KeyType {
                 let secret_params = PlainSecretParams::X448(secret);
                 (public_params, secret_params)
             }
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::MlKem768X25519 => {
                 let secret = ml_kem768_x25519::SecretKey::generate(rng);
                 let public_params = PublicParams::MlKem768X25519((&secret).into());
                 let secret_params = PlainSecretParams::MlKem768X25519(secret);
                 (public_params, secret_params)
             }
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::MlKem1024X448 => {
                 let secret = ml_kem1024_x448::SecretKey::generate(rng);
                 let public_params = PublicParams::MlKem1024X448((&secret).into());
                 let secret_params = PlainSecretParams::MlKem1024X448(secret);
                 (public_params, secret_params)
             }
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::MlDsa65Ed25519 => {
                 let secret = ml_dsa65_ed25519::SecretKey::generate(rng);
                 let public_params = PublicParams::MlDsa65Ed25519((&secret).into());
                 let secret_params = PlainSecretParams::MlDsa65Ed25519(secret);
                 (public_params, secret_params)
             }
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::MlDsa87Ed448 => {
                 let secret = ml_dsa87_ed448::SecretKey::generate(rng);
                 let public_params = PublicParams::MlDsa87Ed448((&secret).into());
                 let secret_params = PlainSecretParams::MlDsa87Ed448(secret);
                 (public_params, secret_params)
             }
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::SlhDsaShake128s => {
                 let secret = slh_dsa_shake128s::SecretKey::generate(rng);
                 let public_params = PublicParams::SlhDsaShake128s((&secret).into());
                 let secret_params = PlainSecretParams::SlhDsaShake128s(secret);
                 (public_params, secret_params)
             }
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::SlhDsaShake128f => {
                 let secret = slh_dsa_shake128f::SecretKey::generate(rng);
                 let public_params = PublicParams::SlhDsaShake128f((&secret).into());
                 let secret_params = PlainSecretParams::SlhDsaShake128f(secret);
                 (public_params, secret_params)
             }
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             KeyType::SlhDsaShake256s => {
                 let secret = slh_dsa_shake256s::SecretKey::generate(rng);
                 let public_params = PublicParams::SlhDsaShake256s((&secret).into());
@@ -1613,7 +1613,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     fn key_gen_ed25519_ml_kem_x25519() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
@@ -1625,7 +1625,7 @@ mod tests {
             }
         }
     }
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     fn gen_ed25519_ml_kem_x25519<R: Rng + CryptoRng>(mut rng: R, version: KeyVersion) {
         let _ = pretty_env_logger::try_init();
 
@@ -1692,7 +1692,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     fn key_gen_ed448_ml_kem_x448() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
@@ -1704,7 +1704,7 @@ mod tests {
             }
         }
     }
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     fn gen_ed448_ml_kem_x448<R: Rng + CryptoRng>(mut rng: R, version: KeyVersion) {
         let _ = pretty_env_logger::try_init();
 
@@ -1771,7 +1771,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     fn key_gen_ml_dsa_65_ed25519_ml_kem_x25519() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
@@ -1787,7 +1787,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     fn key_ml_dsa_87_ed448_gen_ed448_ml_kem_x448() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
@@ -1804,7 +1804,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     fn key_slh_dsa_128s_ml_kem_x25519() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
@@ -1818,7 +1818,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     fn key_slh_dsa_128f_ml_kem_x25519() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
@@ -1832,7 +1832,7 @@ mod tests {
     }
     #[test]
     #[ignore]
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     fn key_slh_dsa_256s_ml_kem_x448() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
@@ -1845,7 +1845,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     fn gen_key<R: Rng + CryptoRng>(
         mut rng: R,
         version: KeyVersion,

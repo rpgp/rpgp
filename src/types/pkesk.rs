@@ -174,9 +174,9 @@ impl PkeskBytes {
                 let key = i.rest()?.freeze();
                 Ok(PkeskBytes::Other { key })
             }
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             PublicKeyAlgorithm::MlKem768X25519 => {
-                // <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-public-key-encrypted-sessio>
+                // <https://www.rfc-editor.org/info/rfc9980/#name-public-key-encrypted-sessio>
 
                 // A fixed-length octet string representing an ECDH ephemeral public key in the format associated with
                 // the curve as specified in Section 4.1.1.
@@ -211,9 +211,9 @@ impl PkeskBytes {
                     ml_kem_ciphertext,
                 })
             }
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             PublicKeyAlgorithm::MlKem1024X448 => {
-                // <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-public-key-encrypted-sessio>
+                // <https://www.rfc-editor.org/info/rfc9980/#name-public-key-encrypted-sessio>
 
                 // A fixed-length octet string representing an ECDH ephemeral public key in the format associated with
                 // the curve as specified in Section 4.1.1.

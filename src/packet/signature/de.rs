@@ -361,7 +361,7 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
         PublicKeyAlgorithm::ElgamalEncrypt => {
             bail!("invalid signature algorithm, encryption only elgamal");
         }
-        #[cfg(feature = "draft-pqc")]
+        #[cfg(feature = "pqc")]
         &PublicKeyAlgorithm::MlKem768X25519 | &PublicKeyAlgorithm::MlKem1024X448 => {
             bail!("invalid signature algorithm, ML KEM is encryption only");
         }

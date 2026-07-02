@@ -436,11 +436,11 @@ impl Signature {
     /// (in particular, if it's allowed in combination with the public key algorithm).
     pub(crate) fn check_signature_hash_strength(config: &SignatureConfig) -> Result<()> {
         if config.pub_alg.is_pqc() {
-            // For all signature algorithms in draft-ietf-openpgp-pqc-10,
+            // For all signature algorithms in RFC 9980,
             // hash digest sizes of at least 256 bits are required:
             //
-            // https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-signature-packet-tag-2
-            // https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-10.html#name-signature-packet-tag-2-2
+            // https://www.rfc-editor.org/info/rfc9980/#name-signature-packet-packet-typ
+            // https://www.rfc-editor.org/info/rfc9980/#name-signature-packet-packet-type
 
             let Some(digest_size) = config.hash_alg.digest_size() else {
                 bail!("Illegal hash_alg setting {}", config.hash_alg);

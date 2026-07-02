@@ -61,7 +61,7 @@ jobs:
 
     - name: pqc
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      run: cargo nextest run --lib --bins --tests --all --features draft-pqc
+      run: cargo nextest run --lib --bins --tests --all --features pqc
 
     - name: forwarding
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
@@ -78,7 +78,7 @@ jobs:
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features asm
 
     - name: pqc ignored
-      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-pqc
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features pqc
 
   build_and_test_windows:
     name: Build and test (Windows)
@@ -111,13 +111,13 @@ jobs:
       run: cargo nextest run --lib --bins --tests --all
 
     - name: tests - pqc
-      run: cargo nextest run --lib --bins --tests --all --features draft-pqc
+      run: cargo nextest run --lib --bins --tests --all --features pqc
 
     - name: tests ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
 
     - name: tests ignored - pqc
-      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-pqc
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features pqc
 
   cross:
     name: Cross compile
@@ -152,7 +152,7 @@ jobs:
       run: cross test --release --all --target ${{ matrix.target }}
 
     - name: test - pqc
-      run: cross test --release --all --target ${{ matrix.target }} --features draft-pqc
+      run: cross test --release --all --target ${{ matrix.target }} --features pqc
 
   check_wasm:
     name: Check wasm targets
@@ -189,7 +189,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: check
-        args: --target wasm32-unknown-unknown --no-default-features --features wasm,draft-pqc
+        args: --target wasm32-unknown-unknown --no-default-features --features wasm,pqc
 
   check_fmt:
     name: Checking fmt

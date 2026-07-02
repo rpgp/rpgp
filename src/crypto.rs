@@ -26,19 +26,19 @@ pub mod x448;
 
 // PQC
 
-#[cfg(feature = "draft-pqc")]
+#[cfg(feature = "pqc")]
 pub mod ml_dsa65_ed25519;
-#[cfg(feature = "draft-pqc")]
+#[cfg(feature = "pqc")]
 pub mod ml_dsa87_ed448;
-#[cfg(feature = "draft-pqc")]
+#[cfg(feature = "pqc")]
 pub mod ml_kem1024_x448;
-#[cfg(feature = "draft-pqc")]
+#[cfg(feature = "pqc")]
 pub mod ml_kem768_x25519;
-#[cfg(feature = "draft-pqc")]
+#[cfg(feature = "pqc")]
 pub mod slh_dsa_shake128f;
-#[cfg(feature = "draft-pqc")]
+#[cfg(feature = "pqc")]
 pub mod slh_dsa_shake128s;
-#[cfg(feature = "draft-pqc")]
+#[cfg(feature = "pqc")]
 pub mod slh_dsa_shake256s;
 
 // Misc

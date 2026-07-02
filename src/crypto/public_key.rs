@@ -38,27 +38,27 @@ pub enum PublicKeyAlgorithm {
     Ed448 = 28,
 
     /// ML-DSA-65+Ed25519
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     MlDsa65Ed25519 = 30,
     /// ML-DSA-87+Ed448
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     MlDsa87Ed448 = 31,
 
     /// SLH-DSA-SHAKE-128s
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     SlhDsaShake128s = 32,
     /// SLH-DSA-SHAKE-128f
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     SlhDsaShake128f = 33,
     /// SLH-DSA-SHAKE-256s
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     SlhDsaShake256s = 34,
 
     /// ML-KEM-768+X25519
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     MlKem768X25519 = 35,
     /// ML-KEM-1024+X448
-    #[cfg(feature = "draft-pqc")]
+    #[cfg(feature = "pqc")]
     MlKem1024X448 = 36,
 
     /// Private experimental range (from OpenPGP)
@@ -95,7 +95,7 @@ impl PublicKeyAlgorithm {
     /// (and can thus provide post-quantum security)
     pub fn is_pqc(&self) -> bool {
         match self {
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             Self::MlDsa65Ed25519
             | Self::MlDsa87Ed448
             | Self::SlhDsaShake128s
@@ -112,7 +112,7 @@ impl PublicKeyAlgorithm {
     pub fn can_sign(self) -> bool {
         use PublicKeyAlgorithm::*;
 
-        #[cfg(feature = "draft-pqc")]
+        #[cfg(feature = "pqc")]
         if matches!(
             self,
             MlDsa65Ed25519 | MlDsa87Ed448 | SlhDsaShake128s | SlhDsaShake128f | SlhDsaShake256s
@@ -130,7 +130,7 @@ impl PublicKeyAlgorithm {
     pub fn can_encrypt(self) -> bool {
         use PublicKeyAlgorithm::*;
 
-        #[cfg(feature = "draft-pqc")]
+        #[cfg(feature = "pqc")]
         if matches!(self, MlKem768X25519 | MlKem1024X448) {
             return true;
         }

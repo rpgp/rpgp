@@ -315,9 +315,9 @@ impl PubKeyInner {
             }
         }
 
-        // Algorithms from draft-ietf-openpgp-pqc are only legal in v6 keys.
+        // Algorithms from RFC 9980 (PQC) are only legal in v6 keys.
         // Only "ML-KEM-768 + X25519" is also allowed in v4 keys, starting in draft version -08.
-        #[cfg(feature = "draft-pqc")]
+        #[cfg(feature = "pqc")]
         if version != KeyVersion::V4
             && version != KeyVersion::V6
             && matches!(public_params, PublicParams::MlKem768X25519(_))
@@ -328,7 +328,7 @@ impl PubKeyInner {
             );
         }
 
-        #[cfg(feature = "draft-pqc")]
+        #[cfg(feature = "pqc")]
         if version != KeyVersion::V6 {
             if matches!(public_params, PublicParams::MlKem1024X448(_)) {
                 bail!(
@@ -555,7 +555,7 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
         }
         PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
         PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
-        #[cfg(feature = "draft-pqc")]
+        #[cfg(feature = "pqc")]
         PublicParams::MlKem768X25519(ref params) => {
             let (sym_alg, plain) = match typ {
                 EskType::V6 => (None, plain),
@@ -584,7 +584,7 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
                 sym_alg,
             })
         }
-        #[cfg(feature = "draft-pqc")]
+        #[cfg(feature = "pqc")]
         PublicParams::MlKem1024X448(ref params) => {
             let (sym_alg, plain) = match typ {
                 EskType::V6 => (None, plain),
@@ -613,23 +613,23 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
                 sym_alg,
             })
         }
-        #[cfg(feature = "draft-pqc")]
+        #[cfg(feature = "pqc")]
         PublicParams::MlDsa65Ed25519(_) => {
             bail!("ML DSA 65 ED2519 is only used for signing")
         }
-        #[cfg(feature = "draft-pqc")]
+        #[cfg(feature = "pqc")]
         PublicParams::MlDsa87Ed448(_) => {
             bail!("ML DSA 87 ED448 is only used for signing")
         }
-        #[cfg(feature = "draft-pqc")]
+        #[cfg(feature = "pqc")]
         PublicParams::SlhDsaShake128s(_) => {
             bail!("SLH DSA Shake 128s is only used for signing")
         }
-        #[cfg(feature = "draft-pqc")]
+        #[cfg(feature = "pqc")]
         PublicParams::SlhDsaShake128f(_) => {
             bail!("SLH DSA Shake 128f is only used for signing")
         }
-        #[cfg(feature = "draft-pqc")]
+        #[cfg(feature = "pqc")]
         PublicParams::SlhDsaShake256s(_) => {
             bail!("SLH DSA Shake 256s is only used for signing")
         }
@@ -892,7 +892,7 @@ impl VerifyingKey for PubKeyInner {
             PublicParams::Ed448(ref params) => {
                 crypto::ed448::verify(&params.key, hash, hashed, sig.try_into()?)
             }
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             PublicParams::MlDsa65Ed25519(ref params) => crypto::ml_dsa65_ed25519::verify(
                 &params.ed25519,
                 &params.ml_dsa,
@@ -900,7 +900,7 @@ impl VerifyingKey for PubKeyInner {
                 hashed,
                 sig.try_into()?,
             ),
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             PublicParams::MlDsa87Ed448(ref params) => crypto::ml_dsa87_ed448::verify(
                 &params.ed448,
                 &params.ml_dsa,
@@ -908,15 +908,15 @@ impl VerifyingKey for PubKeyInner {
                 hashed,
                 sig.try_into()?,
             ),
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             PublicParams::SlhDsaShake128s(ref params) => {
                 crypto::slh_dsa_shake128s::verify(&params.key, hash, hashed, sig.try_into()?)
             }
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             PublicParams::SlhDsaShake128f(ref params) => {
                 crypto::slh_dsa_shake128f::verify(&params.key, hash, hashed, sig.try_into()?)
             }
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             PublicParams::SlhDsaShake256s(ref params) => {
                 crypto::slh_dsa_shake256s::verify(&params.key, hash, hashed, sig.try_into()?)
             }
@@ -931,11 +931,11 @@ impl VerifyingKey for PubKeyInner {
 
                 crypto::ecdsa::verify(params, hash, hashed, sig)
             }
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             PublicParams::MlKem768X25519(_) => {
                 bail!("ML KEM 768 X25519 can not be used for verify operations");
             }
-            #[cfg(feature = "draft-pqc")]
+            #[cfg(feature = "pqc")]
             PublicParams::MlKem1024X448(_) => {
                 bail!("ML KEM 1024 X448 can not be used for verify operations");
             }
