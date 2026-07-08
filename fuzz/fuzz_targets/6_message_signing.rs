@@ -2,6 +2,7 @@
 
 use std::io::Read;
 
+use chacha20::ChaCha8Rng;
 use libfuzzer_sys::fuzz_target;
 use pgp::{
     composed::{ArmorOptions, Deserializable, Message, MessageBuilder, SignedSecretKey},
@@ -9,7 +10,6 @@ use pgp::{
     types::Password,
 };
 use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 
 // build message and try decryption with a genuine private key
 fuzz_target!(|data: &[u8]| {
@@ -31,14 +31,14 @@ fuzz_target!(|data: &[u8]| {
             let (decrypt_key, _headers) = SignedSecretKey::from_string(key_input).unwrap();
 
             // fixed seed PRNG for determinism
-            let rng = ChaCha8Rng::seed_from_u64(0);
+            let mut rng = ChaCha8Rng::seed_from_u64(0);
 
             // FUZZER OBSERVATION contrary to initial expectations, signing does not always succeed
             let mut builder = MessageBuilder::from_bytes("", data);
             builder.sign(&*decrypt_key, Password::from("test"), HashAlgorithm::Sha256);
 
             let armored = builder
-                .to_armored_string(rng, ArmorOptions::default())
+                .to_armored_string(&mut rng, ArmorOptions::default())
                 .unwrap();
 
             let signed_message_res = Message::from_armor(armored.as_bytes());
