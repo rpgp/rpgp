@@ -1343,3 +1343,41 @@ fn signed_message_over_empty_data() {
         .verify(&secret.primary_key.public_key())
         .expect("message verification failed");
 }
+
+/// From GHSA-939f-rrrj-p2pc
+#[test]
+fn short_x25519_pkesk() {
+    // short-x25519-pkesk-seipdv2.hex
+    const MSG_HEX: &str = "c125
+06
+00
+19
+0101010101010101010101010101010101010101010101010101010101010101
+01
+01
+d225
+02
+07
+01
+06
+0000000000000000000000000000000000000000000000000000000000000000";
+
+    let msg_bytes = hex::decode(
+        MSG_HEX
+            .chars()
+            .filter(char::is_ascii_hexdigit)
+            .collect::<String>(),
+    )
+    .expect("hex decode msg");
+
+    let (mut keys, _) = SignedSecretKey::from_reader_many(
+        File::open("tests/rfc9580/v6-25519-annex-a-4/tsk.asc").expect("file open"),
+    )
+    .expect("key parses");
+
+    let secret = keys.next().expect("one key").expect("key entry parses");
+
+    let msg = Message::from_bytes(&*msg_bytes).expect("message parses");
+
+    let _ = msg.decrypt(&"".into(), &secret);
+}

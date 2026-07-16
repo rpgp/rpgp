@@ -12,6 +12,8 @@ const IV_LEN: usize = 8;
 pub enum Error {
     #[snafu(display("invalid key size: {}", size))]
     InvalidKeySize { size: usize },
+    #[snafu(display("invalid data size: {}", size))]
+    InvalidDataSize { size: usize },
     #[snafu(display("wrap failed"))]
     Wrap { source: aes_kw::Error },
     #[snafu(display("unwrap failed"))]
@@ -48,8 +50,12 @@ pub fn wrap(key: &[u8], data: &[u8]) -> Result<Vec<u8>, Error> {
 /// AES Key Unwrap
 /// As defined in RFC 3394.
 pub fn unwrap(key: &[u8], data: &[u8]) -> Result<Zeroizing<Vec<u8>>, Error> {
-    let len = data.len() - IV_LEN;
-    let mut out = Zeroizing::new(vec![0u8; len]);
+    let out_len = data
+        .len()
+        .checked_sub(IV_LEN)
+        .ok_or(Error::InvalidDataSize { size: data.len() })?;
+
+    let mut out = Zeroizing::new(vec![0u8; out_len]);
 
     let aes_size = key.len() * 8;
     match aes_size {
@@ -141,4 +147,15 @@ mod tests {
         "00112233445566778899AABBCCDDEEFF000102030405060708090A0B0C0D0E0F",
         "28C9F404C4B810F4CBCCB35CFB87F8263F5786E2D80ED326CBC7F0E71A99F43BFB988B9B7A02DD21"
     );
+
+    #[test]
+    fn unwrap_rejects_data_shorter_than_iv() {
+        let key = [0u8; 16];
+        let data = [0u8; IV_LEN - 1];
+
+        assert!(matches!(
+            unwrap(&key, &data),
+            Err(Error::InvalidDataSize { size }) if size == data.len()
+        ));
+    }
 }
