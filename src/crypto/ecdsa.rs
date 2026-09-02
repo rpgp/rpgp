@@ -2,7 +2,7 @@ use bytes::BytesMut;
 use ecdsa::SigningKey;
 use p521::NistP521;
 use rand::{CryptoRng, Rng, RngCore};
-use signature::hazmat::{PrehashSigner, PrehashVerifier};
+use signature::hazmat::{PrehashVerifier, RandomizedPrehashSigner};
 use zeroize::ZeroizeOnDrop;
 
 use crate::{
@@ -183,7 +183,7 @@ impl Serialize for SecretKey {
 impl Signer for SecretKey {
     fn sign<RNG: CryptoRng + RngCore + ?Sized>(
         &self,
-        _rng: &mut RNG,
+        mut rng: &mut RNG,
         hash: HashAlgorithm,
         digest: &[u8],
     ) -> Result<SignatureBytes> {
@@ -207,26 +207,30 @@ impl Signer for SecretKey {
         let (r, s) = match self {
             Self::P256(secret_key) => {
                 let secret = p256::ecdsa::SigningKey::from(secret_key);
-                let signature: p256::ecdsa::Signature = secret.sign_prehash(digest)?;
+                let signature: p256::ecdsa::Signature =
+                    secret.sign_prehash_with_rng(&mut rng, digest)?;
                 let (r, s) = signature.split_bytes();
                 (Mpi::from_slice(&r), Mpi::from_slice(&s))
             }
             Self::P384(secret_key) => {
                 let secret = p384::ecdsa::SigningKey::from(secret_key);
-                let signature: p384::ecdsa::Signature = secret.sign_prehash(digest)?;
+                let signature: p384::ecdsa::Signature =
+                    secret.sign_prehash_with_rng(&mut rng, digest)?;
                 let (r, s) = signature.split_bytes();
                 (Mpi::from_slice(&r), Mpi::from_slice(&s))
             }
             Self::P521(secret_key) => {
                 let secret: SigningKey<NistP521> = secret_key.into();
                 let signing_key = p521::ecdsa::SigningKey::from(secret);
-                let signature: p521::ecdsa::Signature = signing_key.sign_prehash(digest)?;
+                let signature: p521::ecdsa::Signature =
+                    signing_key.sign_prehash_with_rng(&mut rng, digest)?;
                 let (r, s) = signature.split_bytes();
                 (Mpi::from_slice(&r), Mpi::from_slice(&s))
             }
             Self::Secp256k1(secret_key) => {
                 let secret = k256::ecdsa::SigningKey::from(secret_key);
-                let signature: k256::ecdsa::Signature = secret.sign_prehash(digest)?;
+                let signature: k256::ecdsa::Signature =
+                    secret.sign_prehash_with_rng(&mut rng, digest)?;
                 let (r, s) = signature.split_bytes();
                 (Mpi::from_slice(&r), Mpi::from_slice(&s))
             }
