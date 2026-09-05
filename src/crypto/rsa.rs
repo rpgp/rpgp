@@ -152,12 +152,15 @@ impl Decryptor for SecretKey {
 }
 
 impl Signer for SecretKey {
+    type SignerFields = ();
+
     /// Sign using RSA, with PKCS1v15 padding.
     fn sign<RNG: CryptoRng + RngCore + ?Sized>(
         &self,
         _rng: &mut RNG,
         hash: HashAlgorithm,
         digest: &[u8],
+        _fields: Self::SignerFields,
     ) -> Result<SignatureBytes> {
         let sig = match hash {
             HashAlgorithm::None => return Err(format_err!("none")),

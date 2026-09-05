@@ -85,11 +85,14 @@ impl Serialize for SecretKey {
 }
 
 impl Signer for SecretKey {
+    type SignerFields = ();
+
     fn sign<RNG: CryptoRng + RngCore + ?Sized>(
         &self,
         _rng: &mut RNG,
         hash_algorithm: HashAlgorithm,
         digest: &[u8],
+        _fields: Self::SignerFields,
     ) -> Result<SignatureBytes> {
         let signing_key = &self.key;
         let signature = match hash_algorithm {
@@ -190,7 +193,7 @@ mod tests {
                 let key = SecretKey { key };
 
                 let SignatureBytes::Mpis(res) = key
-                    .sign(&mut rng, hash_algorithm, &hashed)
+                    .sign(&mut rng, hash_algorithm, &hashed, ())
                     .expect("failed to sign")
                 else {
                     panic!("invalid sig format");
@@ -328,7 +331,7 @@ mod tests {
                 let key = SecretKey { key };
 
                 let SignatureBytes::Mpis(res) = key
-                    .sign(&mut rng, hash_algorithm, &hashed)
+                    .sign(&mut rng, hash_algorithm, &hashed, ())
                     .expect("failed to sign")
                 else {
                     panic!("invalid sig format");

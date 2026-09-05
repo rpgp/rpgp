@@ -181,11 +181,14 @@ impl Serialize for SecretKey {
 }
 
 impl Signer for SecretKey {
+    type SignerFields = ();
+
     fn sign<RNG: CryptoRng + RngCore + ?Sized>(
         &self,
         mut rng: &mut RNG,
         hash: HashAlgorithm,
         digest: &[u8],
+        _fields: Self::SignerFields,
     ) -> Result<SignatureBytes> {
         if let Some(field_size) = self.secret_key_length() {
             // We require that the signing key length is matched by the hash digest length,

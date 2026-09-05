@@ -114,11 +114,14 @@ impl SecretKey {
 }
 
 impl Signer for SecretKey {
+    type SignerFields = ();
+
     fn sign<RNG: CryptoRng + RngCore + ?Sized>(
         &self,
         _rng: &mut RNG,
         hash: HashAlgorithm,
         digest: &[u8],
+        _fields: Self::SignerFields,
     ) -> Result<SignatureBytes> {
         let Some(digest_size) = hash.digest_size() else {
             bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);

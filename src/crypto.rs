@@ -61,10 +61,13 @@ pub trait Decryptor {
 
 /// Describes keys that can sign data.
 pub trait Signer {
+    type SignerFields;
+
     fn sign<RNG: CryptoRng + RngCore + ?Sized>(
         &self,
         rng: &mut RNG,
         hash: HashAlgorithm,
         digest: &[u8],
+        fields: Self::SignerFields,
     ) -> crate::errors::Result<SignatureBytes>;
 }
