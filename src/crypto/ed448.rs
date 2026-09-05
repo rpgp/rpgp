@@ -1,4 +1,4 @@
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngCore};
 use zeroize::ZeroizeOnDrop;
 
 use crate::{
@@ -52,7 +52,12 @@ impl SecretKey {
 }
 
 impl Signer for SecretKey {
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
+    fn sign<RNG: CryptoRng + RngCore + ?Sized>(
+        &self,
+        _rng: &mut RNG,
+        hash: HashAlgorithm,
+        digest: &[u8],
+    ) -> Result<SignatureBytes> {
         let Some(digest_size) = hash.digest_size() else {
             bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
         };

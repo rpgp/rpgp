@@ -1,3 +1,4 @@
+use aead::rand_core::RngCore;
 use ml_dsa::{KeyGen, MlDsa87};
 use rand::{CryptoRng, Rng};
 use signature::{Signer as _, Verifier};
@@ -98,7 +99,12 @@ impl Serialize for SecretKey {
 }
 
 impl Signer for SecretKey {
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
+    fn sign<RNG: CryptoRng + RngCore + ?Sized>(
+        &self,
+        _rng: &mut RNG,
+        hash: HashAlgorithm,
+        digest: &[u8],
+    ) -> Result<SignatureBytes> {
         ensure!(
             ![
                 HashAlgorithm::Md5,

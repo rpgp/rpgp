@@ -1,4 +1,4 @@
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 
 use crate::{
     composed::PlainSessionKey,
@@ -133,6 +133,9 @@ impl KeyDetails for Box<&dyn SigningKey> {
     }
 }
 
+pub trait RngTrait: CryptoRng + RngCore {}
+impl<R: CryptoRng + RngCore> RngTrait for R {}
+
 /// Keys that can sign data.
 ///
 /// Contains private data.
@@ -140,6 +143,7 @@ pub trait SigningKey: KeyDetails {
     /// Create a raw cryptographic signature over `data`
     fn sign(
         &self,
+        rng: &mut dyn RngTrait,
         key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
@@ -153,11 +157,12 @@ pub trait SigningKey: KeyDetails {
 impl SigningKey for Box<&dyn SigningKey> {
     fn sign(
         &self,
+        rng: &mut dyn RngTrait,
         key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
     ) -> Result<crate::types::SignatureBytes> {
-        (**self).sign(key_pw, hash, data)
+        (**self).sign(rng, key_pw, hash, data)
     }
 
     fn hash_alg(&self) -> HashAlgorithm {
@@ -168,7 +173,7 @@ impl SigningKey for Box<&dyn SigningKey> {
 /// Describes keys that can encrypt plain data (i.e. a session key) into data for a
 /// [PKESK](https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio).
 pub trait EncryptionKey: KeyDetails {
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(
+    fn encrypt<R: CryptoRng + RngCore>(
         &self,
         rng: R,
         plain: &[u8],
@@ -177,7 +182,7 @@ pub trait EncryptionKey: KeyDetails {
 }
 
 impl<T: EncryptionKey> EncryptionKey for &T {
-    fn encrypt<R: CryptoRng + Rng>(
+    fn encrypt<R: CryptoRng + RngCore>(
         &self,
         rng: R,
         plain: &[u8],

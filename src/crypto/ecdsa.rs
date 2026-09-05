@@ -1,7 +1,7 @@
 use bytes::BytesMut;
 use ecdsa::SigningKey;
 use p521::NistP521;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngCore};
 use signature::hazmat::{PrehashSigner, PrehashVerifier};
 use zeroize::ZeroizeOnDrop;
 
@@ -181,7 +181,12 @@ impl Serialize for SecretKey {
 }
 
 impl Signer for SecretKey {
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
+    fn sign<RNG: CryptoRng + RngCore + ?Sized>(
+        &self,
+        _rng: &mut RNG,
+        hash: HashAlgorithm,
+        digest: &[u8],
+    ) -> Result<SignatureBytes> {
         if let Some(field_size) = self.secret_key_length() {
             // We require that the signing key length is matched by the hash digest length,
             // see https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3.2-5

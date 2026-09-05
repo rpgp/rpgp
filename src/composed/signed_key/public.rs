@@ -1,7 +1,7 @@
 use std::io;
 
 use log::warn;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 
 use crate::{
     armor,
@@ -151,7 +151,7 @@ impl SignedPublicKey {
 }
 
 impl EncryptionKey for SignedPublicKey {
-    fn encrypt<R: Rng + CryptoRng>(
+    fn encrypt<R: CryptoRng + RngCore>(
         &self,
         rng: R,
         plain: &[u8],
@@ -234,7 +234,7 @@ impl SignedPublicKey {
     /// "Embedded primary key binding signature", is included.
     /// See <https://www.rfc-editor.org/rfc/rfc9580.html#sigtype-primary-binding>
     pub fn bind_with_signing_key<R, K>(
-        mut rng: R,
+        rng: &mut R,
         primary_signer: &K,
         primary_key: packet::PublicKey,
         details: composed::KeyDetails,
@@ -242,7 +242,7 @@ impl SignedPublicKey {
         public_subkeys: Vec<SignedPublicSubKey>,
     ) -> Result<Self>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + RngCore,
         K: SigningKey,
     {
         // Prevent callers from accidentally using an unrelated signing key
@@ -252,7 +252,7 @@ impl SignedPublicKey {
             "Signing key fingerprint must match primary public key fingerprint"
         );
 
-        let details = details.sign(&mut rng, primary_signer, &primary_key, key_pw)?;
+        let details = details.sign(rng, primary_signer, &primary_key, key_pw)?;
         Ok(Self {
             primary_key,
             details,
@@ -313,7 +313,7 @@ impl SignedPublicSubKey {
 }
 
 impl EncryptionKey for SignedPublicSubKey {
-    fn encrypt<R: Rng + CryptoRng>(
+    fn encrypt<R: CryptoRng + RngCore>(
         &self,
         rng: R,
         plain: &[u8],

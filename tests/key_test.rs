@@ -1508,7 +1508,7 @@ fn test_short_ed25519() -> TestResult {
     assert_eq!(secret.as_bytes().len(), 32);
 
     let sig = DetachedSignature::sign_binary_data(
-        rand::thread_rng(),
+        &mut rand::thread_rng(),
         &pkey.primary_key,
         &Password::empty(),
         HashAlgorithm::Sha256,
@@ -1544,7 +1544,7 @@ fn test_non_standard_rsa_modulus() -> TestResult {
     assert_eq!(public.key.e().to_bytes_be(), [1, 1]);
 
     let sig = DetachedSignature::sign_binary_data(
-        rand::thread_rng(),
+        &mut rand::thread_rng(),
         &pkey.primary_key,
         &Password::empty(),
         HashAlgorithm::Sha256,

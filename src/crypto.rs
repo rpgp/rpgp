@@ -1,5 +1,6 @@
 //! Low-level cryptographic building blocks
 
+use rand::{CryptoRng, RngCore};
 use zeroize::Zeroizing;
 
 use self::hash::HashAlgorithm;
@@ -60,5 +61,10 @@ pub trait Decryptor {
 
 /// Describes keys that can sign data.
 pub trait Signer {
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> crate::errors::Result<SignatureBytes>;
+    fn sign<RNG: CryptoRng + RngCore + ?Sized>(
+        &self,
+        rng: &mut RNG,
+        hash: HashAlgorithm,
+        digest: &[u8],
+    ) -> crate::errors::Result<SignatureBytes>;
 }

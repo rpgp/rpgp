@@ -1,7 +1,7 @@
 pub use dsa::KeySize;
 use dsa::{Components, Signature, SigningKey};
 use num_bigint::BigUint;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngCore};
 use signature::hazmat::PrehashVerifier;
 use zeroize::Zeroize;
 
@@ -85,7 +85,12 @@ impl Serialize for SecretKey {
 }
 
 impl Signer for SecretKey {
-    fn sign(&self, hash_algorithm: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
+    fn sign<RNG: CryptoRng + RngCore + ?Sized>(
+        &self,
+        _rng: &mut RNG,
+        hash_algorithm: HashAlgorithm,
+        digest: &[u8],
+    ) -> Result<SignatureBytes> {
         let signing_key = &self.key;
         let signature = match hash_algorithm {
             HashAlgorithm::Md5 => signing_key.sign_prehashed_rfc6979::<md5::Md5>(digest),
@@ -127,6 +132,7 @@ mod tests {
     use num_traits::Num;
     use proptest::prelude::*;
     use rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
 
     use super::*;
     use crate::types::Mpi;
@@ -175,14 +181,17 @@ mod tests {
             DsaPublicParams::try_from_mpi(Mpi::from(p), Mpi::from(q), Mpi::from(g), Mpi::from(y))
                 .unwrap();
 
-        let check =
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let mut check =
             |hash_algorithm: HashAlgorithm, text: &str, _k: BigUint, r: BigUint, s: BigUint| {
                 let hashed = hash(hash_algorithm, text);
                 let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
                 let key = SecretKey { key };
 
-                let SignatureBytes::Mpis(res) =
-                    key.sign(hash_algorithm, &hashed).expect("failed to sign")
+                let SignatureBytes::Mpis(res) = key
+                    .sign(&mut rng, hash_algorithm, &hashed)
+                    .expect("failed to sign")
                 else {
                     panic!("invalid sig format");
                 };
@@ -310,14 +319,17 @@ mod tests {
             DsaPublicParams::try_from_mpi(Mpi::from(p), Mpi::from(q), Mpi::from(g), Mpi::from(y))
                 .unwrap();
 
-        let check =
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let mut check =
             |hash_algorithm: HashAlgorithm, text: &str, _k: BigUint, r: BigUint, s: BigUint| {
                 let hashed = hash(hash_algorithm, text);
                 let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
                 let key = SecretKey { key };
 
-                let SignatureBytes::Mpis(res) =
-                    key.sign(hash_algorithm, &hashed).expect("failed to sign")
+                let SignatureBytes::Mpis(res) = key
+                    .sign(&mut rng, hash_algorithm, &hashed)
+                    .expect("failed to sign")
                 else {
                     panic!("invalid sig format");
                 };
