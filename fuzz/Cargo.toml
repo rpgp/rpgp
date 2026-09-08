@@ -10,9 +10,9 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 
-rand = "0.8"
+rand = "0.10"
 # for non-deterministic simple PRNG
-rand_chacha = "0.3"
+chacha20 = { version = "0.10", features = ["rng"] }
 # needed for a test case
 buffer-redux = { version = "1.0.0", default-features = false }
 

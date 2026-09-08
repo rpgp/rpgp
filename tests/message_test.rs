@@ -11,6 +11,7 @@ extern crate log;
 
 use std::{collections::VecDeque, fs::File, io::BufReader};
 
+use chacha20::ChaCha8Rng;
 use pgp::{
     composed::{
         CleartextSignedMessage, Deserializable, DetachedSignature, KeyType, Message,
@@ -22,7 +23,6 @@ use pgp::{
     types::{KeyDetails, KeyId, Password},
 };
 use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]

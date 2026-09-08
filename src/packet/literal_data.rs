@@ -706,8 +706,8 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
 mod tests {
     use std::io::Read;
 
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
+    use chacha20::ChaCha20Rng;
+    use rand::{RngExt, SeedableRng};
 
     use super::*;
     use crate::{
@@ -829,7 +829,7 @@ mod tests {
 
             let mut generator = LiteralDataGenerator::new(
                 header.clone(),
-                ChaosReader::new(rng.clone(), s.clone()),
+                ChaosReader::new(rng.fork(), s.clone()),
                 None,
                 chunk_size as u32,
             )
@@ -885,7 +885,7 @@ mod tests {
             // 10k tests on Vec<u8> of length 0-99
             let len = count % 100;
 
-            let bytes: Vec<u8> = (1..=len).map(|_| rng.r#gen::<u8>()).collect();
+            let bytes: Vec<u8> = (1..=len).map(|_| rng.random::<u8>()).collect();
 
             let cr = ChaosReader::new(&mut rng, bytes.clone());
             let mut r = Utf8CheckReader::new(cr);

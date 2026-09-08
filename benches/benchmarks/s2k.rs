@@ -3,11 +3,11 @@ use pgp::{
     crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
     types::StringToKey,
 };
-use rand::distributions::{Alphanumeric, DistString};
+use rand::distr::{Alphanumeric, SampleString};
 
 fn bench_s2k(c: &mut Criterion) {
     let sizes = [10, 100, 1000];
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     let mut group = c.benchmark_group("s2k");
     {
