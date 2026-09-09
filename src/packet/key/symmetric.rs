@@ -4,12 +4,12 @@
 //!
 //! Ref <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html>
 
-use std::{fmt::Debug, io::BufRead};
+use std::{cell::RefCell, fmt::Debug, io::BufRead};
 
 use bytes::Bytes;
 use elliptic_curve::subtle::ConstantTimeEq;
 use log::debug;
-use rand::{thread_rng, CryptoRng, Rng};
+use rand::{CryptoRng, Rng};
 
 use crate::{
     composed::PlainSessionKey,
@@ -21,8 +21,9 @@ use crate::{
     packet::{PacketHeader, PacketTrait, PubKeyInner, SignatureVersion},
     ser::Serialize,
     types::{
-        DecryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PkeskBytes,
-        PlainSecretParams, PublicParams, SecretParams, SignatureBytes, SigningKey, Tag, Timestamp,
+        DecryptionKey, EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion,
+        Password, PkeskBytes, PlainSecretParams, PublicParams, SecretParams, SignatureBytes,
+        SigningKey, Tag, Timestamp, VerifyingKey,
     },
 };
 
@@ -333,29 +334,6 @@ impl PersistentSymmetricKey {
     }
 }
 
-impl SigningKey for PersistentSymmetricKey {
-    fn sign(
-        &self,
-        key_pw: &Password,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> crate::errors::Result<SignatureBytes> {
-        // This trait interface doesn't allow exposing the full flexibility of persistent symmetric
-        // key signatures, so we're using fixed values for `rng` and `aead` here.
-
-        // TODO: expose signing with full flexibility as a separate fn on this type?
-
-        let rng = thread_rng();
-        let aead = AeadAlgorithm::Ocb;
-
-        self.symmetric_sign(rng, key_pw, hash, aead, data)
-    }
-
-    fn hash_alg(&self) -> HashAlgorithm {
-        self.details.public_params().hash_alg()
-    }
-}
-
 impl DecryptionKey for PersistentSymmetricKey {
     fn decrypt(
         &self,
@@ -428,6 +406,192 @@ impl Serialize for PersistentSymmetricKey {
     }
 }
 
+// --- signing key
+
+#[derive(derive_more::Debug)]
+pub struct PersistentSymmetricSigningKey<'a, R: CryptoRng + Rng> {
+    psk: &'a PersistentSymmetricKey,
+
+    // FIXME: interior mutability to work around read-only access in SigningKey
+    #[debug("Rng")]
+    rng: RefCell<R>,
+
+    aead: AeadAlgorithm,
+}
+
+impl<'a, R: CryptoRng + Rng> PersistentSymmetricSigningKey<'a, R> {
+    pub fn new(psk: &'a PersistentSymmetricKey, rng: R, aead: AeadAlgorithm) -> Self {
+        Self {
+            psk,
+            rng: RefCell::new(rng),
+            aead,
+        }
+    }
+}
+
+impl<R: CryptoRng + Rng> KeyDetails for PersistentSymmetricSigningKey<'_, R> {
+    fn version(&self) -> KeyVersion {
+        self.psk.version()
+    }
+    fn fingerprint(&self) -> Fingerprint {
+        self.psk.fingerprint()
+    }
+
+    fn legacy_key_id(&self) -> KeyId {
+        self.psk.legacy_key_id()
+    }
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.psk.algorithm()
+    }
+
+    fn created_at(&self) -> Timestamp {
+        self.psk.created_at()
+    }
+
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        self.psk.legacy_v3_expiration_days()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.psk.public_params()
+    }
+}
+
+impl<R: CryptoRng + Rng> SigningKey for PersistentSymmetricSigningKey<'_, R> {
+    fn sign(
+        &self,
+        key_pw: &Password,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> crate::errors::Result<SignatureBytes> {
+        let mut rng = self.rng.borrow_mut();
+
+        self.psk
+            .symmetric_sign(&mut *rng, key_pw, hash, self.aead, data)
+    }
+
+    fn hash_alg(&self) -> HashAlgorithm {
+        self.psk.public_params().hash_alg()
+    }
+}
+
+// --- encryption key
+
+#[derive(derive_more::Debug)]
+pub struct PersistentSymmetricEncryptionKey<'a> {
+    psk: &'a PersistentSymmetricKey,
+
+    key_pw: &'a Password,
+
+    aead: AeadAlgorithm,
+}
+
+impl<'a> PersistentSymmetricEncryptionKey<'a> {
+    pub fn new(psk: &'a PersistentSymmetricKey, key_pw: &'a Password, aead: AeadAlgorithm) -> Self {
+        Self { psk, key_pw, aead }
+    }
+}
+
+impl KeyDetails for PersistentSymmetricEncryptionKey<'_> {
+    fn version(&self) -> KeyVersion {
+        self.psk.version()
+    }
+    fn fingerprint(&self) -> Fingerprint {
+        self.psk.fingerprint()
+    }
+
+    fn legacy_key_id(&self) -> KeyId {
+        self.psk.legacy_key_id()
+    }
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.psk.algorithm()
+    }
+
+    fn created_at(&self) -> Timestamp {
+        self.psk.created_at()
+    }
+
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        self.psk.legacy_v3_expiration_days()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.psk.public_params()
+    }
+}
+
+impl EncryptionKey for PersistentSymmetricEncryptionKey<'_> {
+    fn encrypt<R: CryptoRng + Rng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> crate::errors::Result<PkeskBytes> {
+        self.psk.symmetric_encrypt(
+            rng,
+            self.key_pw,
+            plain,
+            typ,
+            self.aead,
+            self.psk.details.version(),
+        )
+    }
+}
+
+// --- verifying key
+
+#[derive(derive_more::Debug)]
+pub struct PersistentSymmetricVerifyingKey<'a> {
+    psk: &'a PersistentSymmetricKey,
+
+    key_pw: &'a Password,
+}
+
+impl<'a> PersistentSymmetricVerifyingKey<'a> {
+    pub fn new(psk: &'a PersistentSymmetricKey, key_pw: &'a Password) -> Self {
+        Self { psk, key_pw }
+    }
+}
+
+impl KeyDetails for PersistentSymmetricVerifyingKey<'_> {
+    fn version(&self) -> KeyVersion {
+        self.psk.version()
+    }
+    fn fingerprint(&self) -> Fingerprint {
+        self.psk.fingerprint()
+    }
+
+    fn legacy_key_id(&self) -> KeyId {
+        self.psk.legacy_key_id()
+    }
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.psk.algorithm()
+    }
+
+    fn created_at(&self) -> Timestamp {
+        self.psk.created_at()
+    }
+
+    fn legacy_v3_expiration_days(&self) -> Option<u16> {
+        self.psk.legacy_v3_expiration_days()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.psk.public_params()
+    }
+}
+
+impl VerifyingKey for PersistentSymmetricVerifyingKey<'_> {
+    fn verify(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> crate::errors::Result<()> {
+        self.psk.symmetric_verify(self.key_pw, hash, data, sig)
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -449,7 +613,8 @@ mod tests {
             sym::SymmetricKeyAlgorithm,
         },
         packet::{
-            key::symmetric::PersistentSymmetricKey, Packet, PacketParser, PubKeyInner, PublicKey,
+            key::symmetric::{PersistentSymmetricKey, PersistentSymmetricSigningKey},
+            Packet, PacketParser, PubKeyInner, PublicKey,
         },
         ser::Serialize,
         types::{
@@ -536,8 +701,12 @@ mod tests {
             AeadAlgorithm::Ocb,
             ChunkSize::default(),
         );
+
+        let pw = Password::empty();
+        let encryptor = psk.to_encryptor(&pw, AeadAlgorithm::Ocb);
+
         builder
-            .encrypt_to_key(&mut rng, &psk.to_unlockable(&Password::empty()))
+            .encrypt_to_key(&mut rng, &encryptor)
             .expect("encryption");
 
         let encrypted = builder
@@ -576,19 +745,21 @@ mod tests {
 
     #[test]
     fn psk_sign_msg() {
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng1 = ChaCha8Rng::seed_from_u64(0);
 
         const PLAIN: &[u8] = b"hello world";
 
         let tpsk = TransferablePersistentSymmetricKey { key: make_psk() };
 
-        // let signed = psk.to(&mut rng, ArmorOptions::default()).expect("writing");
+        let signer = PersistentSymmetricSigningKey::new(&tpsk.key, &mut rng1, AeadAlgorithm::Ocb);
 
         let mut builder = MessageBuilder::from_bytes(&[][..], PLAIN.to_vec());
-        builder.sign(&tpsk.key, Password::empty(), HashAlgorithm::Sha512);
+        builder.sign(&signer, Password::empty(), HashAlgorithm::Sha512);
+
+        let mut rng2 = ChaCha8Rng::seed_from_u64(0);
 
         let signed = builder
-            .to_armored_string(&mut rng, ArmorOptions::default())
+            .to_armored_string(&mut rng2, ArmorOptions::default())
             .expect("writing");
 
         eprintln!("{signed}");
@@ -596,8 +767,10 @@ mod tests {
         let (mut msg, _) = Message::from_armor(signed.as_bytes()).expect("parse");
         let _payload = msg.as_data_vec().expect("read");
 
-        msg.verify(&tpsk.to_unlockable(&Password::empty()))
-            .expect("ok");
+        let pw = Password::empty();
+        let verifier = tpsk.to_verifier(&pw);
+
+        msg.verify(&verifier).expect("ok");
     }
 
     #[test]
@@ -630,7 +803,9 @@ EN6rcnCdGrHtbnaevXgEt/h+4qr8EKogUsV/JxmVOt6NUAF8jKM=
         let (mut msg, _) = Message::from_armor(MSG.as_bytes()).expect("parse");
         let _payload = msg.as_data_vec().expect("read");
 
-        msg.verify(&tpsk.to_unlockable(&Password::empty()))
-            .expect("ok");
+        let pw = Password::empty();
+        let verifier = tpsk.to_verifier(&pw);
+
+        msg.verify(&verifier).expect("ok");
     }
 }
