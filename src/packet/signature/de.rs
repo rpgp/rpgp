@@ -325,9 +325,18 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
     match typ {
         #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
         PublicKeyAlgorithm::AEAD => {
-            let aead = i.read_u8()?.into();
+            let aead = AeadAlgorithm::from(i.read_u8()?);
             let salt = i.read_arr()?;
-            let tag = i.rest()?.to_vec().into();
+            let tag: Box<[u8]> = Box::from(i.rest()?.to_vec());
+
+            ensure_eq!(
+                aead.tag_size(),
+                Some(tag.len()),
+                "Illegal AEAD ({:?}) signature tag size {}",
+                aead,
+                tag.len()
+            );
+
             Ok(SignatureBytes::PersistentSymmetric { aead, salt, tag })
         }
 
