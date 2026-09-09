@@ -178,7 +178,7 @@ impl PersistentSymmetricKey {
         Ok(())
     }
 
-    pub(crate) fn symmetric_sign<R: CryptoRng + Rng>(
+    pub fn sign<R: CryptoRng + Rng>(
         &self,
         rng: R,
         key_pw: &Password,
@@ -221,7 +221,7 @@ impl PersistentSymmetricKey {
         signature.ok_or_else(|| unreachable!())
     }
 
-    pub(crate) fn symmetric_verify(
+    pub fn verify(
         &self,
         pw: &Password,
         hash: HashAlgorithm,
@@ -279,7 +279,7 @@ impl PersistentSymmetricKey {
         })?
     }
 
-    pub(crate) fn symmetric_encrypt<R: CryptoRng + Rng>(
+    pub fn encrypt<R: CryptoRng + Rng>(
         &self,
         mut rng: R,
         pw: &Password,
@@ -470,8 +470,7 @@ impl<R: CryptoRng + Rng> SigningKey for PersistentSymmetricSigningKey<'_, R> {
     ) -> crate::errors::Result<SignatureBytes> {
         let mut rng = self.rng.borrow_mut();
 
-        self.psk
-            .symmetric_sign(&mut *rng, key_pw, hash, self.aead, data)
+        self.psk.sign(&mut *rng, key_pw, hash, self.aead, data)
     }
 
     fn hash_alg(&self) -> HashAlgorithm {
@@ -531,7 +530,7 @@ impl EncryptionKey for PersistentSymmetricEncryptionKey<'_> {
         plain: &[u8],
         typ: EskType,
     ) -> crate::errors::Result<PkeskBytes> {
-        self.psk.symmetric_encrypt(
+        self.psk.encrypt(
             rng,
             self.key_pw,
             plain,
@@ -592,7 +591,7 @@ impl VerifyingKey for PersistentSymmetricVerifyingKey<'_> {
         data: &[u8],
         sig: &SignatureBytes,
     ) -> crate::errors::Result<()> {
-        self.psk.symmetric_verify(self.key_pw, hash, data, sig)
+        self.psk.verify(self.key_pw, hash, data, sig)
     }
 }
 
