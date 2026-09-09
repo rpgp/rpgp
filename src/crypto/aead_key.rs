@@ -125,7 +125,7 @@ impl SecretKey {
         persistent_key: &[u8],
         salt: &[u8; 32],
         info: InfoParameter,
-    ) -> (Zeroizing<Box<[u8]>>, Box<[u8]>) {
+    ) -> (Zeroizing<Vec<u8>>, Zeroizing<Vec<u8>>) {
         let hk = Hkdf::<Sha512>::new(Some(salt), persistent_key);
 
         let key_size = info.sym_alg.key_size();
@@ -140,10 +140,10 @@ impl SecretKey {
         hk.expand(&info_parameter, &mut output)
             .expect("expand size is < 255 * HashLength");
 
-        let key: Box<[u8]> = output[0..key_size].into();
-        let iv = output[key_size..].into();
+        let iv = Zeroizing::new(output.split_off(key_size));
+        let key = output;
 
-        (key.into(), iv)
+        (key, iv)
     }
 }
 
@@ -238,7 +238,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            *iv,
+            **iv,
             [
                 0x85, 0x71, 0x58, 0x76, 0x2f, 0x06, 0x7c, 0xaa, 0x15, 0x92, 0x9f, 0xa9, 0x31, 0x64,
                 0x95
