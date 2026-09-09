@@ -112,14 +112,19 @@ impl PersistentSymmetricKey {
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> crate::errors::Result<T>,
     {
-        // TODO: AEAD encryption (S2K usage octet 253) MUST be used [..]
-        // Implementations MUST NOT decrypt symmetric key material in a Persistent Symmetric
-        // Key Packet that was encrypted using a different method.
-
         let pub_params = self.details.public_params();
         match self.secret_params {
             SecretParams::Plain(ref k) => Ok(work(pub_params, k)),
             SecretParams::Encrypted(ref k) => {
+                // Only AEAD encryption (S2K usage octet 253) may be used
+                ensure!(
+                    matches!(
+                        k.string_to_key_params(),
+                        crate::types::S2kParams::Aead { .. }
+                    ),
+                    "Persistent Symmetric Key Packet may only be locked with AEAD"
+                );
+
                 let plain = k.unlock(pw, &self.details, Some(self.packet_header.tag()))?;
                 Ok(work(pub_params, &plain))
             }
@@ -155,11 +160,11 @@ impl PersistentSymmetricKey {
         password: &Password,
         s2k_params: crate::types::S2kParams,
     ) -> crate::errors::Result<()> {
-        // TODO:
-        //
-        // When storing encrypted symmetric key material in a Persistent Symmetric Key Packet,
-        // AEAD encryption (S2K usage octet 253, see section 3.7.2.1 of [RFC9580]) MUST be used,
-        // to ensure that the secret key material is bound to the fingerprint.
+        // Only AEAD encryption (S2K usage octet 253) may be used
+        ensure!(
+            matches!(s2k_params, crate::types::S2kParams::Aead { .. }),
+            "Persistent Symmetric Key Packet may only be locked with AEAD"
+        );
 
         let plain = match &self.secret_params {
             SecretParams::Plain(plain) => plain,
