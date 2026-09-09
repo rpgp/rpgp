@@ -99,118 +99,6 @@ impl PersistentSymmetricKey {
         })
     }
 
-    pub(crate) fn symmetric_encrypt<R: CryptoRng + Rng>(
-        &self,
-        mut rng: R,
-        pw: &Password,
-        plain: &[u8],
-        typ: EskType,
-        aead: AeadAlgorithm,
-        version: KeyVersion,
-    ) -> Result<PkeskBytes, Error> {
-        ensure!(
-            matches!(typ, EskType::V6),
-            "only v6 ESK supported right now"
-        );
-
-        self.unlock(pw, |pub_params, sec_params| {
-            let PublicParams::AEAD(public_params) = pub_params else {
-                bail!("Unsupported public parameters for persistent symmetric key: {pub_params:?}");
-            };
-
-            let PlainSecretParams::AEAD(secret) = &sec_params else {
-                bail!("Unsupported secret parameters for persistent symmetric key: {sec_params:?}");
-            };
-
-            // 32 octets of salt. The salt is used to derive the key-encryption key and MUST be
-            // securely generated (see section 13.10 of [RFC9580]).
-            let mut salt: [u8; 32] = [0; 32];
-            rng.fill(&mut salt);
-
-            // A symmetric key encryption of the plaintext value described in section 5.1 of [RFC9580],
-            // performed with the key-encryption key and IV computed as described in Section 7.4,
-            // using the symmetric-key cipher of the key and the indicated AEAD mode, with as
-            // additional data the empty string; including the authentication tag.
-
-            let version = version.into();
-            let info = InfoParameter {
-                packet_type: Tag::PublicKeyEncryptedSessionKey,
-                version,
-                aead,
-                sym_alg: public_params.sym_alg,
-            };
-
-            let (key, iv) =
-                crate::crypto::aead_key::SecretKey::derive_key_iv(&secret.key, &salt, info);
-
-            let mut buf = plain.into();
-
-            aead.encrypt_in_place(&public_params.sym_alg, &key, &iv, &[], &mut buf)?;
-
-            let encrypted: Bytes = buf.into();
-
-            Ok(PkeskBytes::Aead {
-                aead,
-                salt,
-                encrypted,
-            })
-        })?
-    }
-
-    pub(crate) fn symmetric_verify(
-        &self,
-        pw: &Password,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<(), Error> {
-        let Some(digest_len) = hash.digest_size() else {
-            bail!(
-                "UnlockablePersistentSymmetricKey::verify: invalid hash algorithm: {:?}",
-                hash
-            );
-        };
-        ensure_eq!(
-            data.len(),
-            digest_len,
-            "signature data length {} doesn't match digest len {}",
-            data.len(),
-            digest_len,
-        );
-
-        let SignatureBytes::PersistentSymmetric { aead, salt, tag } = sig else {
-            bail!("Unsupported SignatureBytes for persistent symmetric key: {sig:?}");
-        };
-
-        ensure_eq!(
-            tag.len(),
-            aead.tag_size().unwrap_or(0),
-            "unexpected tag length"
-        );
-
-        self.unlock(pw, |pub_params, sec_params| {
-            let PublicParams::AEAD(public) = &pub_params else {
-                bail!("Unsupported public parameters for persistent symmetric key: {pub_params:?}");
-            };
-            let PlainSecretParams::AEAD(secret) = &sec_params else {
-                bail!("Unsupported secret parameters for persistent symmetric key: {sec_params:?}");
-            };
-
-            let version = SignatureVersion::V6; // FIXME: should not be fixed
-
-            // "buf" is the newly calculated authentication tag
-            let buf = secret.compute_persistent_mac(version, public.sym_alg, *aead, salt, data)?;
-
-            // check if the stored and calculated authentication tags match
-            if buf.ct_ne(&**tag).into() {
-                // no: the signature is invalid!
-                bail!("PersistentSymmetricKey signature mismatch");
-            }
-
-            Ok(())
-        })?
-    }
-
     pub fn secret_params(&self) -> &SecretParams {
         &self.secret_params
     }
@@ -288,13 +176,13 @@ impl PersistentSymmetricKey {
 
         Ok(())
     }
-}
 
-impl SigningKey for PersistentSymmetricKey {
-    fn sign(
+    pub(crate) fn symmetric_sign<R: CryptoRng + Rng>(
         &self,
+        rng: R,
         key_pw: &Password,
         hash: HashAlgorithm,
+        aead: AeadAlgorithm,
         data: &[u8],
     ) -> crate::errors::Result<SignatureBytes> {
         let mut signature: Option<SignatureBytes> = None;
@@ -317,14 +205,6 @@ impl SigningKey for PersistentSymmetricKey {
                 _ => bail!("Unsupported key version for persistent symmetric key signing"),
             };
 
-            // This trait interface doesn't allow exposing the full flexibility of persistent symmetric
-            // key signatures, so we're using fixed values for `rng` and `aead` here.
-
-            // TODO: expose signing with full flexibility as a separate fn on this type?
-
-            let rng = thread_rng();
-            let aead = AeadAlgorithm::Ocb;
-
             let sig = secret.compute_and_wrap_persistent_mac(
                 rng,
                 version,
@@ -338,6 +218,137 @@ impl SigningKey for PersistentSymmetricKey {
         })??;
 
         signature.ok_or_else(|| unreachable!())
+    }
+
+    pub(crate) fn symmetric_verify(
+        &self,
+        pw: &Password,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<(), Error> {
+        let Some(digest_len) = hash.digest_size() else {
+            bail!(
+                "UnlockablePersistentSymmetricKey::verify: invalid hash algorithm: {:?}",
+                hash
+            );
+        };
+        ensure_eq!(
+            data.len(),
+            digest_len,
+            "signature data length {} doesn't match digest len {}",
+            data.len(),
+            digest_len,
+        );
+
+        let SignatureBytes::PersistentSymmetric { aead, salt, tag } = sig else {
+            bail!("Unsupported SignatureBytes for persistent symmetric key: {sig:?}");
+        };
+
+        ensure_eq!(
+            tag.len(),
+            aead.tag_size().unwrap_or(0),
+            "unexpected tag length"
+        );
+
+        self.unlock(pw, |pub_params, sec_params| {
+            let PublicParams::AEAD(public) = &pub_params else {
+                bail!("Unsupported public parameters for persistent symmetric key: {pub_params:?}");
+            };
+            let PlainSecretParams::AEAD(secret) = &sec_params else {
+                bail!("Unsupported secret parameters for persistent symmetric key: {sec_params:?}");
+            };
+
+            let version = SignatureVersion::V6; // FIXME: should not be fixed
+
+            // "buf" is the newly calculated authentication tag
+            let buf = secret.compute_persistent_mac(version, public.sym_alg, *aead, salt, data)?;
+
+            // check if the stored and calculated authentication tags match
+            if buf.ct_ne(&**tag).into() {
+                // no: the signature is invalid!
+                bail!("PersistentSymmetricKey signature mismatch");
+            }
+
+            Ok(())
+        })?
+    }
+
+    pub(crate) fn symmetric_encrypt<R: CryptoRng + Rng>(
+        &self,
+        mut rng: R,
+        pw: &Password,
+        plain: &[u8],
+        typ: EskType,
+        aead: AeadAlgorithm,
+        version: KeyVersion,
+    ) -> Result<PkeskBytes, Error> {
+        ensure!(
+            matches!(typ, EskType::V6),
+            "only v6 ESK supported right now"
+        );
+
+        self.unlock(pw, |pub_params, sec_params| {
+            let PublicParams::AEAD(public_params) = pub_params else {
+                bail!("Unsupported public parameters for persistent symmetric key: {pub_params:?}");
+            };
+
+            let PlainSecretParams::AEAD(secret) = &sec_params else {
+                bail!("Unsupported secret parameters for persistent symmetric key: {sec_params:?}");
+            };
+
+            // 32 octets of salt. The salt is used to derive the key-encryption key and MUST be
+            // securely generated (see section 13.10 of [RFC9580]).
+            let mut salt: [u8; 32] = [0; 32];
+            rng.fill(&mut salt);
+
+            // A symmetric key encryption of the plaintext value described in section 5.1 of [RFC9580],
+            // performed with the key-encryption key and IV computed as described in Section 7.4,
+            // using the symmetric-key cipher of the key and the indicated AEAD mode, with as
+            // additional data the empty string; including the authentication tag.
+
+            let version = version.into();
+            let info = InfoParameter {
+                packet_type: Tag::PublicKeyEncryptedSessionKey,
+                version,
+                aead,
+                sym_alg: public_params.sym_alg,
+            };
+
+            let (key, iv) =
+                crate::crypto::aead_key::SecretKey::derive_key_iv(&secret.key, &salt, info);
+
+            let mut buf = plain.into();
+
+            aead.encrypt_in_place(&public_params.sym_alg, &key, &iv, &[], &mut buf)?;
+
+            let encrypted: Bytes = buf.into();
+
+            Ok(PkeskBytes::Aead {
+                aead,
+                salt,
+                encrypted,
+            })
+        })?
+    }
+}
+
+impl SigningKey for PersistentSymmetricKey {
+    fn sign(
+        &self,
+        key_pw: &Password,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> crate::errors::Result<SignatureBytes> {
+        // This trait interface doesn't allow exposing the full flexibility of persistent symmetric
+        // key signatures, so we're using fixed values for `rng` and `aead` here.
+
+        // TODO: expose signing with full flexibility as a separate fn on this type?
+
+        let rng = thread_rng();
+        let aead = AeadAlgorithm::Ocb;
+
+        self.symmetric_sign(rng, key_pw, hash, aead, data)
     }
 
     fn hash_alg(&self) -> HashAlgorithm {
