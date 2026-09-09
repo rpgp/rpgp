@@ -344,12 +344,12 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
             let b = Mpi::try_from_reader(&mut i)?;
             Ok(SignatureBytes::Mpis(vec![a, b]))
         }
-        &PublicKeyAlgorithm::Private100
-        | &PublicKeyAlgorithm::Private101
-        | &PublicKeyAlgorithm::Private102
+        // &PublicKeyAlgorithm::Private100 |
+        //   &PublicKeyAlgorithm::Private101 |
+          &PublicKeyAlgorithm::Private102
         | &PublicKeyAlgorithm::Private103
-        | &PublicKeyAlgorithm::Private104
-        | &PublicKeyAlgorithm::Private105
+        // | &PublicKeyAlgorithm::Private104
+        // | &PublicKeyAlgorithm::Private105
         | &PublicKeyAlgorithm::Private106
         | &PublicKeyAlgorithm::Private107
         | &PublicKeyAlgorithm::Private108

@@ -15,6 +15,10 @@ use crate::crypto::{
     ml_dsa65_ed25519, ml_dsa87_ed448, ml_kem1024_x448, ml_kem768_x25519, slh_dsa_shake128f,
     slh_dsa_shake128s, slh_dsa_shake256s,
 };
+#[cfg(feature = "pqc-nist-bp")]
+use crate::crypto::{
+    ml_dsa65_nistp384, ml_dsa87_nistp521, ml_kem1024_nistp521, ml_kem768_nistp384,
+};
 use crate::{
     composed::{PlainSessionKey, RawSessionKey},
     crypto::{
@@ -59,6 +63,14 @@ pub enum PlainSecretParams {
     SlhDsaShake128f(slh_dsa_shake128f::SecretKey),
     #[cfg(feature = "pqc")]
     SlhDsaShake256s(slh_dsa_shake256s::SecretKey),
+    #[cfg(feature = "pqc-nist-bp")]
+    MlKem768NistP384(ml_kem768_nistp384::SecretKey),
+    #[cfg(feature = "pqc-nist-bp")]
+    MlKem1024NistP521(ml_kem1024_nistp521::SecretKey),
+    #[cfg(feature = "pqc-nist-bp")]
+    MlDsa65NistP384(ml_dsa65_nistp384::SecretKey),
+    #[cfg(feature = "pqc-nist-bp")]
+    MlDsa87NistP521(ml_dsa87_nistp521::SecretKey),
     Unknown {
         #[zeroize(skip)]
         alg: PublicKeyAlgorithm,
@@ -264,6 +276,39 @@ impl PlainSecretParams {
                 let secret = i.read_arr::<128>()?;
                 let key = crate::crypto::slh_dsa_shake256s::SecretKey::try_from_bytes(secret)?;
                 Self::SlhDsaShake256s(key)
+            }
+
+            #[cfg(feature = "pqc-nist-bp")]
+            (PublicKeyAlgorithm::MlKem768NistP384, PublicParams::MlKem768NistP384(_)) => {
+                let nistp384 = i.read_arr::<48>()?;
+                let ml_kem = i.read_arr::<64>()?;
+
+                let key = ml_kem768_nistp384::SecretKey::try_from_bytes(nistp384, ml_kem)?;
+                Self::MlKem768NistP384(key)
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            (PublicKeyAlgorithm::MlKem1024NistP521, PublicParams::MlKem1024NistP521(_)) => {
+                let nistp521 = i.read_arr::<66>()?;
+                let ml_kem = i.read_arr::<64>()?;
+
+                let key = ml_kem1024_nistp521::SecretKey::try_from_bytes(nistp521, ml_kem)?;
+                Self::MlKem1024NistP521(key)
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            (PublicKeyAlgorithm::MlDsa65NistP384, PublicParams::MlDsa65NistP384(_)) => {
+                let nistp384 = i.read_arr::<48>()?;
+                let ml_dsa = i.read_arr::<32>()?;
+
+                let key = ml_dsa65_nistp384::SecretKey::try_from_bytes(nistp384, ml_dsa)?;
+                Self::MlDsa65NistP384(key)
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            (PublicKeyAlgorithm::MlDsa87NistP521, PublicParams::MlDsa87NistP521(_)) => {
+                let nistp521 = i.read_arr::<66>()?;
+                let ml_dsa = i.read_arr::<32>()?;
+
+                let key = ml_dsa87_nistp521::SecretKey::try_from_bytes(nistp521, ml_dsa)?;
+                Self::MlDsa87NistP521(key)
             }
 
             (_, _) => {
@@ -586,6 +631,74 @@ impl PlainSecretParams {
                     _ => bail!("unexpected: sym_alg {:?} for {:?}", sym_alg, typ),
                 };
             }
+            #[cfg(feature = "pqc-nist-bp")]
+            (
+                PlainSecretParams::MlKem768NistP384(ref priv_key),
+                PkeskBytes::MlKem768NistP384 {
+                    ecdh_ciphertext: ephemeral,
+                    ml_kem_ciphertext,
+                    session_key,
+                    sym_alg,
+                },
+            ) => {
+                let PublicParams::MlKem768NistP384(params) = recipient.public_params() else {
+                    bail!(
+                        "Unexpected recipient public_params {:?} for ML KEM 768 NIST P384",
+                        recipient.public_params()
+                    );
+                };
+
+                let data = ml_kem768_nistp384::EncryptionFields {
+                    ecdh_ciphertext: ephemeral.to_owned(),
+                    ml_kem_ciphertext,
+                    ecdh_pub_key: &params.nistp384_key,
+                    ml_kem_pub_key: &params.ml_kem_key,
+                    encrypted_session_key: session_key,
+                };
+
+                let key = priv_key.decrypt(data)?.into();
+
+                return match (&typ, *sym_alg) {
+                    // We expect `sym_alg` to be set for v3 PKESK, and unset for v6 PKESK
+                    (EskType::V3_4, Some(sym_alg)) => Ok(PlainSessionKey::V3_4 { key, sym_alg }),
+                    (EskType::V6, None) => Ok(PlainSessionKey::V6 { key }),
+                    _ => bail!("unexpected: sym_alg {:?} for {:?}", sym_alg, typ),
+                };
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            (
+                PlainSecretParams::MlKem1024NistP521(ref priv_key),
+                PkeskBytes::MlKem1024NistP521 {
+                    ecdh_ciphertext: ephemeral,
+                    ml_kem_ciphertext,
+                    session_key,
+                    sym_alg,
+                },
+            ) => {
+                let PublicParams::MlKem1024NistP521(params) = recipient.public_params() else {
+                    bail!(
+                        "Unexpected recipient public_params {:?} for ML KEM 1024 NIST P521",
+                        recipient.public_params()
+                    );
+                };
+
+                let data = ml_kem1024_nistp521::EncryptionFields {
+                    ecdh_ciphertext: ephemeral.to_owned(),
+                    ml_kem_ciphertext,
+                    ecdh_pub_key: &params.nistp521_key,
+                    ml_kem_pub_key: &params.ml_kem_key,
+                    encrypted_session_key: session_key,
+                };
+
+                let key = priv_key.decrypt(data)?.into();
+
+                return match (&typ, *sym_alg) {
+                    // We expect `sym_alg` to be set for v3 PKESK, and unset for v6 PKESK
+                    (EskType::V3_4, Some(sym_alg)) => Ok(PlainSessionKey::V3_4 { key, sym_alg }),
+                    (EskType::V6, None) => Ok(PlainSessionKey::V6 { key }),
+                    _ => bail!("unexpected: sym_alg {:?} for {:?}", sym_alg, typ),
+                };
+            }
             (
                 PlainSecretParams::X448(ref priv_key),
                 PkeskBytes::X448 {
@@ -770,6 +883,22 @@ impl PlainSecretParams {
             PlainSecretParams::SlhDsaShake256s(key) => {
                 key.to_writer(writer)?;
             }
+            #[cfg(feature = "pqc-nist-bp")]
+            PlainSecretParams::MlKem768NistP384(key) => {
+                key.to_writer(writer)?;
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PlainSecretParams::MlKem1024NistP521(key) => {
+                key.to_writer(writer)?;
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PlainSecretParams::MlDsa65NistP384(key) => {
+                key.to_writer(writer)?;
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PlainSecretParams::MlDsa87NistP521(key) => {
+                key.to_writer(writer)?;
+            }
             PlainSecretParams::Unknown { data, .. } => {
                 writer.write_all(data)?;
             }
@@ -804,6 +933,14 @@ impl PlainSecretParams {
             PlainSecretParams::SlhDsaShake128f(key) => key.write_len(),
             #[cfg(feature = "pqc")]
             PlainSecretParams::SlhDsaShake256s(key) => key.write_len(),
+            #[cfg(feature = "pqc-nist-bp")]
+            PlainSecretParams::MlKem768NistP384(key) => key.write_len(),
+            #[cfg(feature = "pqc-nist-bp")]
+            PlainSecretParams::MlKem1024NistP521(key) => key.write_len(),
+            #[cfg(feature = "pqc-nist-bp")]
+            PlainSecretParams::MlDsa65NistP384(key) => key.write_len(),
+            #[cfg(feature = "pqc-nist-bp")]
+            PlainSecretParams::MlDsa87NistP521(key) => key.write_len(),
             PlainSecretParams::Unknown { data, .. } => data.len(),
         }
     }

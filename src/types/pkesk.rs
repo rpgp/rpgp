@@ -71,6 +71,30 @@ pub enum PkeskBytes {
         /// Set for v3 PKESK only (the sym_alg is not encrypted with the session key for X448)
         sym_alg: Option<SymmetricKeyAlgorithm>,
     },
+    MlKem768NistP384 {
+        /// Ephemeral ECDH public key (97 bytes).
+        #[debug("{}", hex::encode(ecdh_ciphertext))]
+        ecdh_ciphertext: [u8; 97],
+        #[debug("{}", hex::encode(&ml_kem_ciphertext[..]))]
+        ml_kem_ciphertext: Box<[u8; 1088]>,
+        /// Encrypted and wrapped session key.
+        #[debug("{}", hex::encode(session_key))]
+        session_key: Bytes,
+        /// Set for v3 PKESK only (the sym_alg is not encrypted with the session key for X25519)
+        sym_alg: Option<SymmetricKeyAlgorithm>,
+    },
+    MlKem1024NistP521 {
+        /// Ephemeral ECDH public key (133 bytes).
+        #[debug("{}", hex::encode(ecdh_ciphertext))]
+        ecdh_ciphertext: [u8; 133],
+        #[debug("{}", hex::encode(&ml_kem_ciphertext[..]))]
+        ml_kem_ciphertext: Box<[u8; 1568]>,
+        /// Encrypted and wrapped session key.
+        #[debug("{}", hex::encode(session_key))]
+        session_key: Bytes,
+        /// Set for v3 PKESK only (the sym_alg is not encrypted with the session key for X25519)
+        sym_alg: Option<SymmetricKeyAlgorithm>,
+    },
     Other {
         #[debug("{}", hex::encode(key))]
         key: Bytes,
@@ -250,6 +274,76 @@ impl PkeskBytes {
                     ml_kem_ciphertext,
                 })
             }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicKeyAlgorithm::MlKem768NistP384 => {
+                // A fixed-length octet string representing an ECDH ephemeral public key in the format associated with
+                // the curve as specified in Section 4.1.1.
+                let ephemeral_public = i.read_arr::<97>()?;
+
+                // A fixed-length octet string of the ML-KEM ciphertext, whose length depends on the algorithm ID as specified in Table 4.
+                let ml_kem_ciphertext = Box::new(i.read_arr::<1088>()?);
+
+                // A one-octet size of the following fields.
+                let len = i.read_u8()?;
+                if len == 0 {
+                    return Err(InvalidInputSnafu.build());
+                }
+
+                // Only in the case of a v3 PKESK packet: a one-octet symmetric algorithm identifier.
+                let sym_alg = if version == 3 {
+                    let alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
+                    Some(alg)
+                } else {
+                    None
+                };
+
+                let skey_len = if version == 3 { len - 1 } else { len };
+
+                // The encrypted session key.
+                let esk = i.take_bytes(skey_len.into())?.freeze();
+
+                Ok(PkeskBytes::MlKem768NistP384 {
+                    ecdh_ciphertext: ephemeral_public,
+                    sym_alg,
+                    session_key: esk,
+                    ml_kem_ciphertext,
+                })
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicKeyAlgorithm::MlKem1024NistP521 => {
+                // A fixed-length octet string representing an ECDH ephemeral public key in the format associated with
+                // the curve as specified in Section 4.1.1.
+                let ephemeral_public = i.read_arr::<133>()?;
+
+                // A fixed-length octet string of the ML-KEM ciphertext, whose length depends on the algorithm ID as specified in Table 4.
+                let ml_kem_ciphertext = Box::new(i.read_arr::<1568>()?);
+
+                // A one-octet size of the following fields.
+                let len = i.read_u8()?;
+                if len == 0 {
+                    return Err(InvalidInputSnafu.build());
+                }
+
+                // Only in the case of a v3 PKESK packet: a one-octet symmetric algorithm identifier.
+                let sym_alg = if version == 3 {
+                    let alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
+                    Some(alg)
+                } else {
+                    None
+                };
+
+                let skey_len = if version == 3 { len - 1 } else { len };
+
+                // The encrypted session key.
+                let esk = i.take_bytes(skey_len.into())?.freeze();
+
+                Ok(PkeskBytes::MlKem1024NistP521 {
+                    ecdh_ciphertext: ephemeral_public,
+                    sym_alg,
+                    session_key: esk,
+                    ml_kem_ciphertext,
+                })
+            }
             _ => unsupported_err!("unsupported algorithm for ESK: {:?}", alg),
         }
     }
@@ -339,6 +433,60 @@ impl Serialize for PkeskBytes {
 
                 // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
                 // the symmetric algorithm ID is not encrypted [for X448].
+                //
+                // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-
+                if let Some(sym_alg) = sym_alg {
+                    // len: algo octet + session_key len
+                    writer.write_u8((session_key.len() + 1).try_into()?)?;
+
+                    writer.write_u8((*sym_alg).into())?;
+                } else {
+                    // len: esk len
+                    writer.write_u8(session_key.len().try_into()?)?;
+
+                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
+                }
+
+                writer.write_all(session_key)?; // encrypted session key
+            }
+            PkeskBytes::MlKem768NistP384 {
+                ecdh_ciphertext: ephemeral,
+                sym_alg,
+                session_key,
+                ml_kem_ciphertext,
+            } => {
+                writer.write_all(ephemeral)?;
+                writer.write_all(&ml_kem_ciphertext[..])?;
+
+                // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
+                // the symmetric algorithm ID is not encrypted [for X25519].
+                //
+                // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-
+                if let Some(sym_alg) = sym_alg {
+                    // len: algo octet + session_key len
+                    writer.write_u8((session_key.len() + 1).try_into()?)?;
+
+                    writer.write_u8((*sym_alg).into())?;
+                } else {
+                    // len: esk len
+                    writer.write_u8(session_key.len().try_into()?)?;
+
+                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
+                }
+
+                writer.write_all(session_key)?; // encrypted session key
+            }
+            PkeskBytes::MlKem1024NistP521 {
+                ecdh_ciphertext: ephemeral,
+                sym_alg,
+                session_key,
+                ml_kem_ciphertext,
+            } => {
+                writer.write_all(ephemeral)?;
+                writer.write_all(&ml_kem_ciphertext[..])?;
+
+                // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
+                // the symmetric algorithm ID is not encrypted [for X25519].
                 //
                 // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-
                 if let Some(sym_alg) = sym_alg {
@@ -461,6 +609,52 @@ impl Serialize for PkeskBytes {
 
                 // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
                 // the symmetric algorithm ID is not encrypted [for X448].
+                //
+                // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-
+                if sym_alg.is_some() {
+                    // len: algo octet + session_key len
+                    sum += 1 + 1;
+                } else {
+                    // len: esk len
+                    sum += 1;
+                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
+                }
+                sum += session_key.len(); // encrypted session key
+            }
+            PkeskBytes::MlKem768NistP384 {
+                ecdh_ciphertext: ephemeral,
+                sym_alg,
+                session_key,
+                ml_kem_ciphertext,
+            } => {
+                sum += ephemeral.len();
+                sum += ml_kem_ciphertext.len();
+
+                // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
+                // the symmetric algorithm ID is not encrypted [for X25519].
+                //
+                // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-
+                if sym_alg.is_some() {
+                    // len: algo octet + session_key len
+                    sum += 1 + 1;
+                } else {
+                    // len: esk len
+                    sum += 1;
+                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
+                }
+                sum += session_key.len(); // encrypted session key
+            }
+            PkeskBytes::MlKem1024NistP521 {
+                ecdh_ciphertext: ephemeral,
+                sym_alg,
+                session_key,
+                ml_kem_ciphertext,
+            } => {
+                sum += ephemeral.len();
+                sum += ml_kem_ciphertext.len();
+
+                // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
+                // the symmetric algorithm ID is not encrypted [for X25519].
                 //
                 // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-
                 if sym_alg.is_some() {

@@ -134,7 +134,7 @@ regex = "1.12"
 testresult = "0.4.1"
 
 [features]
-default = ["bzip2"]
+default = ["bzip2", "pqc-nist-bp"]
 
 # See README.md for features documentation
 bzip2 = ["dep:bzip2"]
@@ -145,6 +145,7 @@ large-rsa = []
 malformed-artifact-compat = []
 
 pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
+pqc-nist-bp = ["dep:ml-kem", "dep:ml-dsa"]
 draft-wussler-openpgp-forwarding = []
 
 [profile.bench]
