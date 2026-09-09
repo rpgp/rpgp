@@ -260,7 +260,11 @@ impl PersistentSymmetricKey {
                 bail!("Unsupported secret parameters for persistent symmetric key: {sec_params:?}");
             };
 
-            let version = SignatureVersion::V6; // FIXME: should not be fixed
+            let version = match self.version() {
+                KeyVersion::V6 => SignatureVersion::V6, // Version 6 keys MUST produce Version 6 signatures
+
+                _ => bail!("Unsupported key version for persistent symmetric key signing"),
+            };
 
             // "buf" is the newly calculated authentication tag
             let buf = secret.compute_persistent_mac(version, public.sym_alg, *aead, salt, data)?;
