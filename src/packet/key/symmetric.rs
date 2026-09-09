@@ -1,16 +1,15 @@
 #![cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
 
-//! Persistent Symmetric Keys in OpenPGP
+//! Persistent Symmetric Key packet
 //!
 //! Ref <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html>
 
 use std::{fmt::Debug, io::BufRead};
 
-use aead::rand_core::CryptoRng;
 use bytes::Bytes;
 use elliptic_curve::subtle::ConstantTimeEq;
 use log::debug;
-use rand::{thread_rng, Rng};
+use rand::{thread_rng, CryptoRng, Rng};
 
 use crate::{
     composed::PlainSessionKey,

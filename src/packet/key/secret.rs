@@ -613,6 +613,7 @@ impl DecryptionKey for SecretSubkey {
     }
 }
 
+// Create a signature with an asymmetric key
 fn create_signature(
     pub_params: &PublicParams,
     priv_key: &PlainSecretParams,

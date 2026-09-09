@@ -11,8 +11,7 @@ use std::{
     io,
 };
 
-use aead::rand_core::CryptoRng;
-use rand::Rng;
+use rand::{CryptoRng, Rng};
 
 use crate::{
     armor,
