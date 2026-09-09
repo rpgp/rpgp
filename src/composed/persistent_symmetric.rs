@@ -6,24 +6,19 @@
 //!
 //! Ref <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html>
 
-use std::{
-    fmt::{Debug, Formatter},
-    io,
-};
-
-use rand::{CryptoRng, Rng};
+use std::{fmt::Debug, io};
 
 use crate::{
     armor,
     composed::ArmorOptions,
-    crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    crypto::{aead::AeadAlgorithm, public_key::PublicKeyAlgorithm},
     packet,
-    packet::{PacketTrait, PersistentSymmetricKey},
-    ser::Serialize,
-    types::{
-        EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PkeskBytes,
-        PublicParams, SignatureBytes, Timestamp, VerifyingKey,
+    packet::{
+        PacketTrait, PersistentSymmetricEncryptionKey, PersistentSymmetricKey,
+        PersistentSymmetricVerifyingKey,
     },
+    ser::Serialize,
+    types::{Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PublicParams, Timestamp},
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -38,11 +33,16 @@ impl From<PersistentSymmetricKey> for TransferablePersistentSymmetricKey {
 }
 
 impl TransferablePersistentSymmetricKey {
-    pub fn to_unlockable(&self, key_pw: &Password) -> UnlockablePersistentSymmetricKey {
-        UnlockablePersistentSymmetricKey {
-            tpsk: self.clone(),
-            key_pw: Password::Static(key_pw.read()),
-        }
+    pub fn to_encryptor<'a>(
+        &'a self,
+        key_pw: &'a Password,
+        aead: AeadAlgorithm,
+    ) -> PersistentSymmetricEncryptionKey<'a> {
+        PersistentSymmetricEncryptionKey::new(&self.key, key_pw, aead)
+    }
+
+    pub fn to_verifier<'a>(&'a self, key_pw: &'a Password) -> PersistentSymmetricVerifyingKey<'a> {
+        PersistentSymmetricVerifyingKey::new(&self.key, key_pw)
     }
 
     pub fn key(&self) -> &PersistentSymmetricKey {
@@ -119,88 +119,5 @@ impl KeyDetails for TransferablePersistentSymmetricKey {
 
     fn public_params(&self) -> &PublicParams {
         self.key.public_params()
-    }
-}
-
-/// A wrapper around `TransferablePersistentSymmetricKey` that bundles a symmetric key with a `Password`
-///
-/// This allows performing "public key operations" (i.e. encryption and signature verification) on persistent symmetric keys that are password-locked.
-pub struct UnlockablePersistentSymmetricKey {
-    tpsk: TransferablePersistentSymmetricKey,
-    key_pw: Password,
-}
-
-impl UnlockablePersistentSymmetricKey {
-    pub fn new(tpsk: TransferablePersistentSymmetricKey, key_pw: Password) -> Self {
-        Self { tpsk, key_pw }
-    }
-}
-
-impl EncryptionKey for UnlockablePersistentSymmetricKey {
-    fn encrypt<R: CryptoRng + Rng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> crate::errors::Result<PkeskBytes> {
-        let aead = AeadAlgorithm::Ocb; // FIXME: parameter
-
-        self.tpsk.key.symmetric_encrypt(
-            rng,
-            &self.key_pw,
-            plain,
-            typ,
-            aead,
-            self.tpsk.key.details.version(),
-        )
-    }
-}
-
-impl VerifyingKey for UnlockablePersistentSymmetricKey {
-    fn verify(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> crate::errors::Result<()> {
-        self.tpsk
-            .key
-            .symmetric_verify(&self.key_pw, hash, data, sig)
-    }
-}
-
-impl KeyDetails for UnlockablePersistentSymmetricKey {
-    fn version(&self) -> KeyVersion {
-        self.tpsk.version()
-    }
-
-    fn legacy_key_id(&self) -> KeyId {
-        self.tpsk.legacy_key_id()
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        self.tpsk.fingerprint()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.tpsk.key.algorithm()
-    }
-
-    fn created_at(&self) -> Timestamp {
-        self.tpsk.key.created_at()
-    }
-
-    fn legacy_v3_expiration_days(&self) -> Option<u16> {
-        self.tpsk.key.legacy_v3_expiration_days()
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.tpsk.key.public_params()
-    }
-}
-
-impl Debug for UnlockablePersistentSymmetricKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.tpsk.fmt(f)
     }
 }
