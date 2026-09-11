@@ -418,8 +418,8 @@ impl Serialize for PersistentSymmetricKey {
 // --- signing key
 
 #[derive(derive_more::Debug)]
-pub struct PersistentSymmetricSigningKey<'a, R: CryptoRng + Rng> {
-    psk: &'a PersistentSymmetricKey,
+pub struct PersistentSymmetricSigningKey<R: CryptoRng + Rng> {
+    psk: PersistentSymmetricKey,
 
     // FIXME: interior mutability to work around read-only access in SigningKey
     #[debug("Rng")]
@@ -428,8 +428,8 @@ pub struct PersistentSymmetricSigningKey<'a, R: CryptoRng + Rng> {
     aead: AeadAlgorithm,
 }
 
-impl<'a, R: CryptoRng + Rng> PersistentSymmetricSigningKey<'a, R> {
-    pub fn new(psk: &'a PersistentSymmetricKey, rng: R, aead: AeadAlgorithm) -> Self {
+impl<R: CryptoRng + Rng> PersistentSymmetricSigningKey<R> {
+    pub fn new(psk: PersistentSymmetricKey, rng: R, aead: AeadAlgorithm) -> Self {
         Self {
             psk,
             rng: RefCell::new(rng),
@@ -438,7 +438,7 @@ impl<'a, R: CryptoRng + Rng> PersistentSymmetricSigningKey<'a, R> {
     }
 }
 
-impl<R: CryptoRng + Rng> KeyDetails for PersistentSymmetricSigningKey<'_, R> {
+impl<R: CryptoRng + Rng> KeyDetails for PersistentSymmetricSigningKey<R> {
     fn version(&self) -> KeyVersion {
         self.psk.version()
     }
@@ -466,7 +466,7 @@ impl<R: CryptoRng + Rng> KeyDetails for PersistentSymmetricSigningKey<'_, R> {
     }
 }
 
-impl<R: CryptoRng + Rng> SigningKey for PersistentSymmetricSigningKey<'_, R> {
+impl<R: CryptoRng + Rng> SigningKey for PersistentSymmetricSigningKey<R> {
     fn sign(
         &self,
         key_pw: &Password,
@@ -486,21 +486,21 @@ impl<R: CryptoRng + Rng> SigningKey for PersistentSymmetricSigningKey<'_, R> {
 // --- encryption key
 
 #[derive(derive_more::Debug)]
-pub struct PersistentSymmetricEncryptionKey<'a> {
-    psk: &'a PersistentSymmetricKey,
+pub struct PersistentSymmetricEncryptionKey {
+    psk: PersistentSymmetricKey,
 
-    key_pw: &'a Password,
+    key_pw: Password,
 
     aead: AeadAlgorithm,
 }
 
-impl<'a> PersistentSymmetricEncryptionKey<'a> {
-    pub fn new(psk: &'a PersistentSymmetricKey, key_pw: &'a Password, aead: AeadAlgorithm) -> Self {
+impl PersistentSymmetricEncryptionKey {
+    pub fn new(psk: PersistentSymmetricKey, key_pw: Password, aead: AeadAlgorithm) -> Self {
         Self { psk, key_pw, aead }
     }
 }
 
-impl KeyDetails for PersistentSymmetricEncryptionKey<'_> {
+impl KeyDetails for PersistentSymmetricEncryptionKey {
     fn version(&self) -> KeyVersion {
         self.psk.version()
     }
@@ -528,7 +528,7 @@ impl KeyDetails for PersistentSymmetricEncryptionKey<'_> {
     }
 }
 
-impl EncryptionKey for PersistentSymmetricEncryptionKey<'_> {
+impl EncryptionKey for PersistentSymmetricEncryptionKey {
     fn encrypt<R: CryptoRng + Rng>(
         &self,
         rng: R,
@@ -537,7 +537,7 @@ impl EncryptionKey for PersistentSymmetricEncryptionKey<'_> {
     ) -> crate::errors::Result<PkeskBytes> {
         self.psk.encrypt(
             rng,
-            self.key_pw,
+            &self.key_pw,
             plain,
             typ,
             self.aead,
@@ -549,19 +549,19 @@ impl EncryptionKey for PersistentSymmetricEncryptionKey<'_> {
 // --- verifying key
 
 #[derive(derive_more::Debug)]
-pub struct PersistentSymmetricVerifyingKey<'a> {
-    psk: &'a PersistentSymmetricKey,
+pub struct PersistentSymmetricVerifyingKey {
+    psk: PersistentSymmetricKey,
 
-    key_pw: &'a Password,
+    key_pw: Password,
 }
 
-impl<'a> PersistentSymmetricVerifyingKey<'a> {
-    pub fn new(psk: &'a PersistentSymmetricKey, key_pw: &'a Password) -> Self {
+impl PersistentSymmetricVerifyingKey {
+    pub fn new(psk: PersistentSymmetricKey, key_pw: Password) -> Self {
         Self { psk, key_pw }
     }
 }
 
-impl KeyDetails for PersistentSymmetricVerifyingKey<'_> {
+impl KeyDetails for PersistentSymmetricVerifyingKey {
     fn version(&self) -> KeyVersion {
         self.psk.version()
     }
@@ -589,14 +589,14 @@ impl KeyDetails for PersistentSymmetricVerifyingKey<'_> {
     }
 }
 
-impl VerifyingKey for PersistentSymmetricVerifyingKey<'_> {
+impl VerifyingKey for PersistentSymmetricVerifyingKey {
     fn verify(
         &self,
         hash: HashAlgorithm,
         data: &[u8],
         sig: &SignatureBytes,
     ) -> crate::errors::Result<()> {
-        self.psk.verify(self.key_pw, hash, data, sig)
+        self.psk.verify(&self.key_pw, hash, data, sig)
     }
 }
 
@@ -621,7 +621,13 @@ mod tests {
             sym::SymmetricKeyAlgorithm,
         },
         packet::{
-            key::symmetric::{PersistentSymmetricKey, PersistentSymmetricSigningKey},
+            key::{
+                symmetric::{
+                    PersistentSymmetricKey, PersistentSymmetricSigningKey,
+                    PersistentSymmetricVerifyingKey,
+                },
+                PersistentSymmetricEncryptionKey,
+            },
             Packet, PacketParser, PubKeyInner, PublicKey,
         },
         ser::Serialize,
@@ -701,7 +707,7 @@ mod tests {
 
         const PLAIN: &[u8] = b"hello world";
 
-        let psk = TransferablePersistentSymmetricKey { key: make_psk() };
+        let tpsk = TransferablePersistentSymmetricKey { key: make_psk() };
 
         let mut builder = MessageBuilder::from_bytes(&[][..], PLAIN.to_vec()).seipd_v2(
             &mut rng,
@@ -711,7 +717,8 @@ mod tests {
         );
 
         let pw = Password::empty();
-        let encryptor = psk.to_encryptor(&pw, AeadAlgorithm::Ocb);
+        let encryptor =
+            PersistentSymmetricEncryptionKey::new(tpsk.key.clone(), pw, AeadAlgorithm::Ocb);
 
         builder
             .encrypt_to_key(&mut rng, &encryptor)
@@ -738,7 +745,7 @@ mod tests {
             unimplemented!();
         };
 
-        let sk = psk
+        let sk = tpsk
             .key
             .decrypt(&Password::empty(), pkesk.values().unwrap(), EskType::V6)
             .expect("decryption")
@@ -759,7 +766,8 @@ mod tests {
 
         let tpsk = TransferablePersistentSymmetricKey { key: make_psk() };
 
-        let signer = PersistentSymmetricSigningKey::new(&tpsk.key, &mut rng1, AeadAlgorithm::Ocb);
+        let signer =
+            PersistentSymmetricSigningKey::new(tpsk.key.clone(), &mut rng1, AeadAlgorithm::Ocb);
 
         let mut builder = MessageBuilder::from_bytes(&[][..], PLAIN.to_vec());
         builder.sign(&signer, Password::empty(), HashAlgorithm::Sha512);
@@ -776,7 +784,7 @@ mod tests {
         let _payload = msg.as_data_vec().expect("read");
 
         let pw = Password::empty();
-        let verifier = tpsk.to_verifier(&pw);
+        let verifier = PersistentSymmetricVerifyingKey::new(tpsk.key, pw);
 
         msg.verify(&verifier).expect("ok");
     }
@@ -812,7 +820,7 @@ EN6rcnCdGrHtbnaevXgEt/h+4qr8EKogUsV/JxmVOt6NUAF8jKM=
         let _payload = msg.as_data_vec().expect("read");
 
         let pw = Password::empty();
-        let verifier = tpsk.to_verifier(&pw);
+        let verifier = PersistentSymmetricVerifyingKey::new(tpsk.key, pw);
 
         msg.verify(&verifier).expect("ok");
     }
