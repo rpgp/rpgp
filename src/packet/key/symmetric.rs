@@ -13,11 +13,8 @@ use rand::{CryptoRng, Rng};
 
 use crate::{
     composed::PlainSessionKey,
-    crypto::{
-        aead::AeadAlgorithm, aead_key::InfoParameter, hash::HashAlgorithm,
-        public_key::PublicKeyAlgorithm,
-    },
-    errors::{bail, ensure, ensure_eq, unsupported_err, Error},
+    crypto::{aead::AeadAlgorithm, aead_key, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    errors::{bail, ensure, ensure_eq, unsupported_err, Error, Result},
     packet::{PacketHeader, PacketTrait, PubKeyInner, SignatureVersion},
     ser::Serialize,
     types::{
@@ -39,10 +36,7 @@ pub struct PersistentSymmetricKey {
 }
 
 impl PersistentSymmetricKey {
-    pub fn new(
-        details: super::PublicKey,
-        secret_params: SecretParams,
-    ) -> crate::errors::Result<Self> {
+    pub fn new(details: super::PublicKey, secret_params: SecretParams) -> Result<Self> {
         ensure_eq!(
             details.version(),
             KeyVersion::V6,
@@ -61,10 +55,7 @@ impl PersistentSymmetricKey {
     }
 
     /// Parses a `PersistentSymmetricKey` packet from the given buffer.
-    pub fn try_from_reader<B: BufRead>(
-        packet_header: PacketHeader,
-        input: B,
-    ) -> crate::errors::Result<Self> {
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, input: B) -> Result<Self> {
         ensure_eq!(
             Tag::PersistentSymmetricKey,
             packet_header.tag(),
@@ -104,13 +95,9 @@ impl PersistentSymmetricKey {
         &self.secret_params
     }
 
-    pub fn unlock<G, T>(
-        &self,
-        pw: &Password,
-        work: G,
-    ) -> crate::errors::Result<crate::errors::Result<T>>
+    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
     where
-        G: FnOnce(&PublicParams, &PlainSecretParams) -> crate::errors::Result<T>,
+        G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
         let pub_params = self.details.public_params();
         match self.secret_params {
@@ -141,7 +128,7 @@ impl PersistentSymmetricKey {
     /// If the Secret Key material in the packet is not locked, it is left unchanged.
     ///
     /// The current locking password for this key must be provided in `password`.
-    pub fn remove_password(&mut self, password: &Password) -> crate::errors::Result<()> {
+    pub fn remove_password(&mut self, password: &Password) -> Result<()> {
         if let SecretParams::Encrypted(enc) = &self.secret_params {
             let unlocked = enc.unlock(password, &self.details, Some(self.packet_header.tag()))?;
             self.secret_params = SecretParams::Plain(unlocked);
@@ -159,7 +146,7 @@ impl PersistentSymmetricKey {
         &mut self,
         password: &Password,
         s2k_params: crate::types::S2kParams,
-    ) -> crate::errors::Result<()> {
+    ) -> Result<()> {
         // Only AEAD encryption (S2K usage octet 253) may be used
         ensure!(
             matches!(s2k_params, crate::types::S2kParams::Aead { .. }),
@@ -190,7 +177,7 @@ impl PersistentSymmetricKey {
         hash: HashAlgorithm,
         aead: AeadAlgorithm,
         data: &[u8],
-    ) -> crate::errors::Result<SignatureBytes> {
+    ) -> Result<SignatureBytes> {
         let mut signature: Option<SignatureBytes> = None;
         self.unlock(key_pw, |pub_params, priv_key| {
             let PublicParams::AEAD(public) = &pub_params else {
@@ -318,15 +305,14 @@ impl PersistentSymmetricKey {
             // additional data the empty string; including the authentication tag.
 
             let version = version.into();
-            let info = InfoParameter {
+            let info = aead_key::InfoParameter {
                 packet_type: Tag::PublicKeyEncryptedSessionKey,
                 version,
                 aead,
                 sym_alg: public_params.sym_alg,
             };
 
-            let (key, iv) =
-                crate::crypto::aead_key::SecretKey::derive_key_iv(&secret.key, &salt, info);
+            let (key, iv) = aead_key::SecretKey::derive_key_iv(&secret.key, &salt, info);
 
             let mut buf = plain.into();
 
@@ -349,7 +335,7 @@ impl DecryptionKey for PersistentSymmetricKey {
         key_pw: &Password,
         values: &PkeskBytes,
         typ: EskType,
-    ) -> crate::errors::Result<crate::errors::Result<PlainSessionKey>> {
+    ) -> Result<Result<PlainSessionKey>> {
         self.unlock(key_pw, |pub_params, sec_params| {
             debug!("unlocked key");
 
@@ -400,7 +386,7 @@ impl KeyDetails for PersistentSymmetricKey {
 }
 
 impl Serialize for PersistentSymmetricKey {
-    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> crate::errors::Result<()> {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         // writes version and public part
         Serialize::to_writer(&self.details, writer)?;
         self.secret_params.to_writer(writer, self.version())?;
@@ -421,7 +407,7 @@ impl Serialize for PersistentSymmetricKey {
 pub struct PersistentSymmetricSigningKey<R: CryptoRng + Rng> {
     psk: PersistentSymmetricKey,
 
-    // FIXME: interior mutability to work around read-only access in SigningKey
+    // NOTE: Interior mutability to work around read-only access via SigningKey trait
     #[debug("Rng")]
     rng: RefCell<R>,
 
@@ -467,12 +453,7 @@ impl<R: CryptoRng + Rng> KeyDetails for PersistentSymmetricSigningKey<R> {
 }
 
 impl<R: CryptoRng + Rng> SigningKey for PersistentSymmetricSigningKey<R> {
-    fn sign(
-        &self,
-        key_pw: &Password,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> crate::errors::Result<SignatureBytes> {
+    fn sign(&self, key_pw: &Password, hash: HashAlgorithm, data: &[u8]) -> Result<SignatureBytes> {
         let mut rng = self.rng.borrow_mut();
 
         self.psk.sign(&mut *rng, key_pw, hash, self.aead, data)
@@ -534,7 +515,7 @@ impl EncryptionKey for PersistentSymmetricEncryptionKey {
         rng: R,
         plain: &[u8],
         typ: EskType,
-    ) -> crate::errors::Result<PkeskBytes> {
+    ) -> Result<PkeskBytes> {
         self.psk.encrypt(
             rng,
             &self.key_pw,
@@ -590,12 +571,7 @@ impl KeyDetails for PersistentSymmetricVerifyingKey {
 }
 
 impl VerifyingKey for PersistentSymmetricVerifyingKey {
-    fn verify(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> crate::errors::Result<()> {
+    fn verify(&self, hash: HashAlgorithm, data: &[u8], sig: &SignatureBytes) -> Result<()> {
         self.psk.verify(&self.key_pw, hash, data, sig)
     }
 }
@@ -622,11 +598,8 @@ mod tests {
         },
         packet::{
             key::{
-                symmetric::{
-                    PersistentSymmetricKey, PersistentSymmetricSigningKey,
-                    PersistentSymmetricVerifyingKey,
-                },
-                PersistentSymmetricEncryptionKey,
+                PersistentSymmetricEncryptionKey, PersistentSymmetricKey,
+                PersistentSymmetricSigningKey, PersistentSymmetricVerifyingKey,
             },
             Packet, PacketParser, PubKeyInner, PublicKey,
         },
