@@ -370,23 +370,29 @@ impl PublicOrSecret {
             .expect("Can not convert a secret into a public key")
     }
 
+    /// true for Public, false for Secret
+    ///
+    /// (false for PersistentSymmetric, if feature draft-ietf-openpgp-persistent-symmetric-keys is enabled)
     pub fn is_public(&self) -> bool {
         match self {
             PublicOrSecret::Secret(_) => false,
             PublicOrSecret::Public(_) => true,
 
             #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
-            PublicOrSecret::PersistentSymmetric(_) => true, // FIXME: what should this do?
+            PublicOrSecret::PersistentSymmetric(_) => false,
         }
     }
 
+    /// true for Secret, false for Public
+    ///
+    /// (true for PersistentSymmetric, if feature draft-ietf-openpgp-persistent-symmetric-keys is enabled)
     pub fn is_secret(&self) -> bool {
         match self {
             PublicOrSecret::Secret(_) => true,
             PublicOrSecret::Public(_) => false,
 
             #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
-            PublicOrSecret::PersistentSymmetric(_) => true, // FIXME: what should this do?
+            PublicOrSecret::PersistentSymmetric(_) => true,
         }
     }
 }
