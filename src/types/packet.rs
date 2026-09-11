@@ -197,6 +197,9 @@ impl UnassignedNonCriticalTag {
     /// Creates a new tag, returning `None` if it is not a valid `UnassignedNonCritical` tag.
     pub fn new(value: u8) -> Option<Self> {
         match value {
+            #[cfg(not(feature = "draft-ietf-openpgp-persistent-symmetric-keys"))]
+            40 => Some(Self(value)),
+
             41..=59 => Some(Self(value)),
             _ => None,
         }
