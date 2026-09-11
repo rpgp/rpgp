@@ -116,7 +116,7 @@ fn psk_openpgp_js_signature() {
     let (detached, _) = DetachedSignature::from_armor_single(BufReader::new(signed)).unwrap();
 
     let pw = Password::empty();
-    let verifier = tpsk.to_verifier(&pw);
+    let verifier = tpsk.into_verifier(pw);
 
     detached
         .verify(&verifier, PLAIN.as_bytes())

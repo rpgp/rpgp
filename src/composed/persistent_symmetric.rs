@@ -8,6 +8,9 @@
 
 use std::{fmt::Debug, io};
 
+use aead::rand_core::CryptoRng;
+use rand::Rng;
+
 use crate::{
     armor,
     composed::ArmorOptions,
@@ -15,7 +18,7 @@ use crate::{
     packet,
     packet::{
         PacketTrait, PersistentSymmetricEncryptionKey, PersistentSymmetricKey,
-        PersistentSymmetricVerifyingKey,
+        PersistentSymmetricSigningKey, PersistentSymmetricVerifyingKey,
     },
     ser::Serialize,
     types::{Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PublicParams, Timestamp},
@@ -33,16 +36,24 @@ impl From<PersistentSymmetricKey> for TransferablePersistentSymmetricKey {
 }
 
 impl TransferablePersistentSymmetricKey {
-    pub fn to_encryptor<'a>(
-        &'a self,
-        key_pw: &'a Password,
+    pub fn into_encryptor(
+        self,
+        key_pw: Password,
         aead: AeadAlgorithm,
-    ) -> PersistentSymmetricEncryptionKey<'a> {
-        PersistentSymmetricEncryptionKey::new(&self.key, key_pw, aead)
+    ) -> PersistentSymmetricEncryptionKey {
+        PersistentSymmetricEncryptionKey::new(self.key, key_pw, aead)
     }
 
-    pub fn to_verifier<'a>(&'a self, key_pw: &'a Password) -> PersistentSymmetricVerifyingKey<'a> {
-        PersistentSymmetricVerifyingKey::new(&self.key, key_pw)
+    pub fn into_signer<R: CryptoRng + Rng>(
+        self,
+        rng: R,
+        aead: AeadAlgorithm,
+    ) -> PersistentSymmetricSigningKey<R> {
+        PersistentSymmetricSigningKey::new(self.key, rng, aead)
+    }
+
+    pub fn into_verifier(self, key_pw: Password) -> PersistentSymmetricVerifyingKey {
+        PersistentSymmetricVerifyingKey::new(self.key, key_pw)
     }
 
     pub fn key(&self) -> &PersistentSymmetricKey {
