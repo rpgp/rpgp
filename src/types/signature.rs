@@ -24,7 +24,7 @@ pub enum SignatureBytes {
     /// This format was introduced in RFC 9580 and is currently only used for Ed25519 and Ed448.
     Native(#[debug("{}", hex::encode(_0))] Bytes),
 
-    /// A cryptographic "signature" from draft-ietf-openpgp-persistent-symmetric-keys
+    /// A cryptographic "signature" from draft-ietf-openpgp-persistent-symmetric-keys-03
     ///
     /// See <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html#name-algorithm-specific-fields-for>
     PersistentSymmetric {

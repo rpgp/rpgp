@@ -474,7 +474,7 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
     typ: EskType,
 ) -> Result<PkeskBytes> {
     match key.public_params() {
-        #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+        #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
         PublicParams::AEAD(_) => {
             unsupported_err!("AEAD is symmetric, encryption not supported here")
         }
@@ -860,7 +860,7 @@ impl KeyDetails for PubKeyInner {
 impl VerifyingKey for PubKeyInner {
     fn verify(&self, hash: HashAlgorithm, hashed: &[u8], sig: &SignatureBytes) -> Result<()> {
         match self.public_params {
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PublicParams::AEAD(_) => bail!("AEAD is symmetric, verification not supported here"),
 
             PublicParams::RSA(ref params) => {

@@ -1,4 +1,4 @@
-#![cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+#![cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
 
 //! Tests for persistent symmetric key support
 

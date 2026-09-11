@@ -146,7 +146,7 @@ malformed-artifact-compat = []
 
 pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
 draft-wussler-openpgp-forwarding = []
-draft-ietf-openpgp-persistent-symmetric-keys = []
+draft-ietf-openpgp-persistent-symmetric-keys-03 = []
 
 [profile.bench]
 debug = 2

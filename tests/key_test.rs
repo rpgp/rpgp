@@ -808,7 +808,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
             PublicOrSecret::Public(_) => armor::BlockType::PublicKey,
             PublicOrSecret::Secret(_) => armor::BlockType::PrivateKey,
 
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PublicOrSecret::PersistentSymmetric(_) => {
                 panic!("PersistentSymmetric is not expected here")
             }
@@ -850,7 +850,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
                     // Nothing todo
                 }
 
-                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
                 PublicOrSecret::PersistentSymmetric(_) => {
                     panic!("PersistentSymmetric is not expected here")
                 }

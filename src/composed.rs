@@ -99,7 +99,7 @@ mod shared;
 mod signature;
 mod signed_key;
 
-#[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+#[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
 pub use self::persistent_symmetric::*;
 pub use self::{
     any::Any, cleartext::CleartextSignedMessage, key::*, message::*, shared::Deserializable,

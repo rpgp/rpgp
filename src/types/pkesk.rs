@@ -89,7 +89,7 @@ impl PkeskBytes {
         mut i: B,
     ) -> Result<Self> {
         match alg {
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PublicKeyAlgorithm::AEAD => {
                 let aead = i.read_u8()?.into();
                 let salt = i.read_arr()?;
