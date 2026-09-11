@@ -454,7 +454,10 @@ impl<R: CryptoRng + Rng> KeyDetails for PersistentSymmetricSigningKey<R> {
 
 impl<R: CryptoRng + Rng> SigningKey for PersistentSymmetricSigningKey<R> {
     fn sign(&self, key_pw: &Password, hash: HashAlgorithm, data: &[u8]) -> Result<SignatureBytes> {
-        let mut rng = self.rng.borrow_mut();
+        // Use interior mutability to access Rng because SigningKey::sign takes a `&self`
+        let Ok(mut rng) = self.rng.try_borrow_mut() else {
+            bail!("PersistentSymmetricSigningKey::sign failed to borrow Rng");
+        };
 
         self.psk.sign(&mut *rng, key_pw, hash, self.aead, data)
     }
