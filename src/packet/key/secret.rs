@@ -624,7 +624,7 @@ fn create_signature(
 
     debug!("unlocked key");
     match *priv_key {
-        #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+        #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
         PlainSecretParams::AEAD(_) => {
             bail!("AEAD can not be used for signing operations with asymmetric keys")
         }

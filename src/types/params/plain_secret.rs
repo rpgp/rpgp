@@ -35,7 +35,7 @@ use crate::{
 /// Raw secret key material in unlocked/unencrypted form
 #[derive(Clone, PartialEq, Eq, derive_more::Debug, ZeroizeOnDrop)]
 pub enum PlainSecretParams {
-    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
     AEAD(crate::crypto::aead_key::SecretKey),
 
     RSA(rsa::SecretKey),
@@ -103,7 +103,7 @@ impl PlainSecretParams {
         public_params: &PublicParams,
     ) -> Result<Self> {
         let params = match (alg, public_params) {
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             (PublicKeyAlgorithm::AEAD, PublicParams::AEAD(pub_params)) => {
                 let sym_alg = pub_params.sym_alg;
 
@@ -436,7 +436,7 @@ impl PlainSecretParams {
         K: KeyDetails,
     {
         let decrypted_key = match (self, values) {
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             (
                 PlainSecretParams::AEAD(ref priv_key),
                 PkeskBytes::Aead {
@@ -768,7 +768,7 @@ impl PlainSecretParams {
 
     fn to_writer_raw<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PlainSecretParams::AEAD(key) => {
                 key.to_writer(writer)?;
             }
@@ -839,7 +839,7 @@ impl PlainSecretParams {
 
     fn write_len_raw(&self) -> usize {
         match self {
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PlainSecretParams::AEAD(key) => key.write_len(),
 
             PlainSecretParams::RSA(key) => key.write_len(),
@@ -926,7 +926,7 @@ mod tests {
 
         fn arbitrary_with(alg: Self::Parameters) -> Self::Strategy {
             match alg {
-                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
                 PublicKeyAlgorithm::AEAD => any::<crate::crypto::aead_key::SecretKey>()
                     .prop_map(PlainSecretParams::AEAD)
                     .boxed(),
@@ -1046,7 +1046,7 @@ mod tests {
             (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
         ) {
              match alg {
-                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
                 PublicKeyAlgorithm::AEAD => {},
                 _ => {
                     let mut buf = Vec::new();
@@ -1063,7 +1063,7 @@ mod tests {
             (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
         ) {
             match alg {
-                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
                 PublicKeyAlgorithm::AEAD => {},
                 _ => {
                     let mut buf = Vec::new();
@@ -1081,7 +1081,7 @@ mod tests {
             (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
         ) {
              match alg {
-                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
                 PublicKeyAlgorithm::AEAD => {},
                 _ => {
                     let mut buf = Vec::new();

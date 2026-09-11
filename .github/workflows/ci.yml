@@ -69,7 +69,7 @@ jobs:
 
     - name: psk
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      run: cargo nextest run --lib --bins --tests --all --features draft-ietf-openpgp-persistent-symmetric-keys
+      run: cargo nextest run --lib --bins --tests --all --features draft-ietf-openpgp-persistent-symmetric-keys-03
 
     - name: all-features
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
@@ -85,7 +85,7 @@ jobs:
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features pqc
 
     - name: psk ignored
-      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-ietf-openpgp-persistent-symmetric-keys
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-ietf-openpgp-persistent-symmetric-keys-03
 
   build_and_test_windows:
     name: Build and test (Windows)
@@ -121,7 +121,7 @@ jobs:
       run: cargo nextest run --lib --bins --tests --all --features pqc
 
     - name: tests - psk
-      run: cargo nextest run --lib --bins --tests --all --features draft-ietf-openpgp-persistent-symmetric-keys
+      run: cargo nextest run --lib --bins --tests --all --features draft-ietf-openpgp-persistent-symmetric-keys-03
 
     - name: tests ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
@@ -130,7 +130,7 @@ jobs:
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features pqc
 
     - name: tests ignored - psk
-      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-ietf-openpgp-persistent-symmetric-keys
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-ietf-openpgp-persistent-symmetric-keys-03
 
   cross:
     name: Cross compile
@@ -168,7 +168,7 @@ jobs:
       run: cross test --release --all --target ${{ matrix.target }} --features pqc
 
     - name: test - psk
-      run: cross test --release --all --target ${{ matrix.target }} --features draft-ietf-openpgp-persistent-symmetric-keys
+      run: cross test --release --all --target ${{ matrix.target }} --features draft-ietf-openpgp-persistent-symmetric-keys-03
 
   check_wasm:
     name: Check wasm targets
@@ -211,7 +211,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: check
-        args: --target wasm32-unknown-unknown --no-default-features --features wasm,draft-ietf-openpgp-persistent-symmetric-keys
+        args: --target wasm32-unknown-unknown --no-default-features --features wasm,draft-ietf-openpgp-persistent-symmetric-keys-03
 
   check_fmt:
     name: Checking fmt

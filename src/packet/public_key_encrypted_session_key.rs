@@ -155,7 +155,7 @@ impl PublicKeyEncryptedSessionKey {
         match pp {
             PublicParams::X25519(_) | PublicParams::X448(_) => {}
 
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PublicParams::AEAD(_) => {}
 
             #[cfg(feature = "pqc")]

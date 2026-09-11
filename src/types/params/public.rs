@@ -54,7 +54,7 @@ use super::PlainSecretParams;
 /// Raw public key material for any algorithm.
 #[derive(PartialEq, Eq, Clone, derive_more::Debug)]
 pub enum PublicParams {
-    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
     AEAD(AeadPublicParams),
 
     RSA(RsaPublicParams),
@@ -92,7 +92,7 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
 
     fn try_from(secret: &PlainSecretParams) -> Result<Self, Self::Error> {
         match secret {
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PlainSecretParams::AEAD(_) => crate::errors::bail!("can't get PublicParams"),
 
             PlainSecretParams::RSA(ref p) => Ok(Self::RSA(p.into())),
@@ -134,7 +134,7 @@ impl PublicParams {
         i: B,
     ) -> Result<PublicParams> {
         match typ {
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PublicKeyAlgorithm::AEAD => {
                 let params = AeadPublicParams::try_from_reader(i)?;
                 Ok(PublicParams::AEAD(params))
@@ -241,7 +241,7 @@ impl PublicParams {
     /// key as a signer
     pub fn hash_alg(&self) -> HashAlgorithm {
         match self {
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PublicParams::AEAD(params) => match params.sym_alg {
                 // Pick a hash algorithm that is matched with the symmetric algorithm
                 crate::crypto::sym::SymmetricKeyAlgorithm::AES256
@@ -307,7 +307,7 @@ fn unknown<B: BufRead>(mut i: B, len: Option<usize>) -> Result<PublicParams> {
 impl Serialize for PublicParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PublicParams::AEAD(params) => {
                 params.to_writer(writer)?;
             }
@@ -381,7 +381,7 @@ impl Serialize for PublicParams {
     fn write_len(&self) -> usize {
         let mut sum = 0;
         match self {
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PublicParams::AEAD(params) => {
                 sum += params.write_len();
             }
@@ -500,7 +500,7 @@ mod tests {
 
         fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
             match args {
-                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
                 PublicKeyAlgorithm::AEAD => any::<AeadPublicParams>()
                     .prop_map(PublicParams::AEAD)
                     .boxed(),

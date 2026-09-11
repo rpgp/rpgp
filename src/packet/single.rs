@@ -74,7 +74,7 @@ impl Packet {
                 })
             }
 
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             Tag::PersistentSymmetricKey => {
                 crate::packet::PersistentSymmetricKey::try_from_reader(packet_header, &mut body)
                     .map(Into::into)

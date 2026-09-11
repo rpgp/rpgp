@@ -323,7 +323,7 @@ fn subpacket<B: BufRead>(
 
 fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<SignatureBytes> {
     match typ {
-        #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+        #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
         PublicKeyAlgorithm::AEAD => {
             let aead = AeadAlgorithm::from(i.read_u8()?);
             let salt = i.read_arr()?;

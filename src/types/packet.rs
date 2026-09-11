@@ -151,7 +151,7 @@ pub enum Tag {
     /// Persistent Symmetric Key Packet (PSK)
     ///
     /// <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html#name-persistent-symmetric-key-pa>
-    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
     PersistentSymmetricKey = 40,
 
     /// Unassigned Non-Critical Packets [41-59]
@@ -197,7 +197,7 @@ impl UnassignedNonCriticalTag {
     /// Creates a new tag, returning `None` if it is not a valid `UnassignedNonCritical` tag.
     pub fn new(value: u8) -> Option<Self> {
         match value {
-            #[cfg(not(feature = "draft-ietf-openpgp-persistent-symmetric-keys"))]
+            #[cfg(not(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03"))]
             40 => Some(Self(value)),
 
             41..=59 => Some(Self(value)),
@@ -283,7 +283,7 @@ impl From<Tag> for u8 {
 
             Tag::UnassignedCritical(id) => id.into(),
 
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             Tag::PersistentSymmetricKey => 40,
             Tag::UnassignedNonCritical(id) => id.into(),
 
@@ -318,9 +318,9 @@ impl From<u8> for Tag {
             21 => Self::Padding,
             22..=39 => Self::UnassignedCritical(UnassignedCriticalTag(value)),
 
-            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             40 => Self::PersistentSymmetricKey,
-            #[cfg(not(feature = "draft-ietf-openpgp-persistent-symmetric-keys"))]
+            #[cfg(not(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03"))]
             40 => Self::UnassignedNonCritical(UnassignedNonCriticalTag(value)),
 
             41..=59 => Self::UnassignedNonCritical(UnassignedNonCriticalTag(value)),

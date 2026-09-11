@@ -12,7 +12,7 @@ pub mod aes_kw;
 pub mod sym;
 
 // Encryption & Signing
-#[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys")]
+#[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
 pub mod aead_key;
 pub mod dsa;
 pub mod ecdh;
