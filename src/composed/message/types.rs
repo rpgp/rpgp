@@ -1181,7 +1181,10 @@ impl BufRead for Message<'_> {
 #[derive(Debug, Default)]
 pub struct TheRing<'a> {
     pub secret_keys: Vec<&'a SignedSecretKey>,
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+    pub persistent_symmetric_keys: Vec<&'a crate::packet::PersistentSymmetricKey>,
     pub key_passwords: Vec<&'a Password>,
+
     pub message_password: Vec<&'a Password>,
     pub session_keys: Vec<PlainSessionKey>,
 
@@ -1196,6 +1199,11 @@ impl TheRing<'_> {
     ) -> Result<(Option<PlainSessionKey>, RingResult)> {
         let mut result = RingResult {
             secret_keys: vec![InnerRingResult::Unchecked; self.secret_keys.len()],
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            persistent_symmetric_keys: vec![
+                InnerRingResult::Unchecked;
+                self.persistent_symmetric_keys.len()
+            ],
             message_password: vec![InnerRingResult::Unchecked; self.message_password.len()],
             session_keys: vec![InnerRingResult::Unchecked; self.session_keys.len()],
         };
@@ -1234,20 +1242,20 @@ impl TheRing<'_> {
         let mut pkesk_session_keys = Vec::new();
 
         for esk in &pkesks {
+            let typ = match esk.version() {
+                PkeskVersion::V3 => EskType::V3_4,
+                PkeskVersion::V6 => EskType::V6,
+                PkeskVersion::Other(v) => {
+                    warn!("unexpected PKESK version {v}");
+                    continue;
+                }
+            };
+
+            let values = esk.values()?;
+
             debug!("checking esk: {:?}/{:?}", esk.id(), esk.fingerprint());
             for (i, key) in self.secret_keys.iter().enumerate() {
                 result.secret_keys[i] = InnerRingResult::NoMatch;
-
-                let typ = match esk.version() {
-                    PkeskVersion::V3 => EskType::V3_4,
-                    PkeskVersion::V6 => EskType::V6,
-                    PkeskVersion::Other(v) => {
-                        warn!("unexpected PKESK version {v}");
-                        continue;
-                    }
-                };
-
-                let values = esk.values()?;
 
                 // try primary key
                 debug!(
@@ -1299,6 +1307,30 @@ impl TheRing<'_> {
                         );
 
                         result.secret_keys[i] = res;
+
+                        if let Some(session_key) = session_key {
+                            pkesk_session_keys.push((i, session_key));
+                        }
+                    }
+                }
+            }
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            {
+                debug!(
+                    "checking esk with persistent symmetric keys: {:?}/{:?}",
+                    esk.id(),
+                    esk.fingerprint()
+                );
+                for (i, psk) in self.persistent_symmetric_keys.iter().enumerate() {
+                    result.persistent_symmetric_keys[i] = InnerRingResult::NoMatch;
+
+                    // try primary key
+                    debug!("checking persistent symmetric key: {:?}", psk.fingerprint());
+                    if esk.match_identity(psk.public_key()) {
+                        let (res, session_key) =
+                            self.try_decrypt(values, typ, &psk, psk.secret_params().is_encrypted());
+
+                        result.persistent_symmetric_keys[i] = res;
 
                         if let Some(session_key) = session_key {
                             pkesk_session_keys.push((i, session_key));
@@ -1467,6 +1499,8 @@ impl TheRing<'_> {
 #[derive(Debug)]
 pub struct RingResult {
     pub secret_keys: Vec<InnerRingResult>,
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+    pub persistent_symmetric_keys: Vec<InnerRingResult>,
     pub message_password: Vec<InnerRingResult>,
     pub session_keys: Vec<InnerRingResult>,
 }
