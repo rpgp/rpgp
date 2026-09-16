@@ -164,7 +164,7 @@ impl Decryptor for SecretKey {
         data.aead
             .decrypt_in_place(&data.sym_alg, &key, &iv, &[], &mut buf)?;
 
-        Ok(buf.to_vec().into())
+        Ok(Zeroizing::new(buf.into()))
     }
 }
 

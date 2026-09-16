@@ -130,6 +130,15 @@ impl PersistentSymmetricKey {
     /// The current locking password for this key must be provided in `password`.
     pub fn remove_password(&mut self, password: &Password) -> Result<()> {
         if let SecretParams::Encrypted(enc) = &self.secret_params {
+            // Only AEAD encryption (S2K usage octet 253) may be used
+            ensure!(
+                matches!(
+                    enc.string_to_key_params(),
+                    crate::types::S2kParams::Aead { .. }
+                ),
+                "Persistent Symmetric Key Packet may only be locked with AEAD"
+            );
+
             let unlocked = enc.unlock(password, &self.details, Some(self.packet_header.tag()))?;
             self.secret_params = SecretParams::Plain(unlocked);
         }
@@ -608,17 +617,18 @@ mod tests {
         },
         ser::Serialize,
         types::{
-            AeadPublicParams, DecryptionKey, EskType, KeyVersion, Password, PlainSecretParams,
-            PublicParams, SecretParams, Timestamp,
+            DecryptionKey, EskType, KeyVersion, Password, PlainSecretParams, PublicParams,
+            SecretParams, Timestamp,
         },
     };
 
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
     fn make_psk() -> PersistentSymmetricKey {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         const SYM_ALG: SymmetricKeyAlgorithm = SymmetricKeyAlgorithm::AES256;
 
-        let pp = PublicParams::AEAD(AeadPublicParams {
+        let pp = PublicParams::AEAD(crate::types::AeadPublicParams {
             sym_alg: SYM_ALG,
             fingerprint_seed: rng.gen(),
         });

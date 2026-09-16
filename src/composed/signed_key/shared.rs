@@ -385,14 +385,24 @@ impl PublicOrSecret {
 
     /// true for Secret, false for Public
     ///
-    /// (true for PersistentSymmetric, if feature draft-ietf-openpgp-persistent-symmetric-keys-03 is enabled)
+    /// (also false for PersistentSymmetric, since that type cannot be transformed into a SignedSecretKey)
     pub fn is_secret(&self) -> bool {
         match self {
             PublicOrSecret::Secret(_) => true,
             PublicOrSecret::Public(_) => false,
 
             #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicOrSecret::PersistentSymmetric(_) => false,
+        }
+    }
+
+    /// true for PersistentSymmetric, false otherwise
+    pub fn is_persistent_symmetric(&self) -> bool {
+        match self {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PublicOrSecret::PersistentSymmetric(_) => true,
+
+            _ => false,
         }
     }
 }
@@ -427,6 +437,21 @@ impl TryFrom<PublicOrSecret> for SignedSecretKey {
 
             #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PublicOrSecret::PersistentSymmetric(_) => Err(TryFromPublicOrSecretError),
+        }
+    }
+}
+
+#[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+impl TryFrom<PublicOrSecret> for crate::composed::TransferablePersistentSymmetricKey {
+    type Error = TryFromPublicOrSecretError;
+
+    fn try_from(public_or_secret: PublicOrSecret) -> Result<Self, Self::Error> {
+        match public_or_secret {
+            PublicOrSecret::Public(_) => Err(TryFromPublicOrSecretError),
+            PublicOrSecret::Secret(_) => Err(TryFromPublicOrSecretError),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicOrSecret::PersistentSymmetric(psk) => Ok(psk),
         }
     }
 }
