@@ -601,7 +601,7 @@ mod tests {
     use crate::{
         armor::{BlockType, Dearmor},
         composed::{
-            ArmorOptions, Esk, Message, MessageBuilder, TransferablePersistentSymmetricKey,
+            ArmorOptions, Esk, Message, MessageBuilder, TheRing, TransferablePersistentSymmetricKey,
         },
         crypto::{
             aead::{AeadAlgorithm, ChunkSize},
@@ -722,6 +722,8 @@ mod tests {
 
         eprintln!("{}", encrypted);
 
+        // -- manual decryption
+
         let (msg, _) = Message::from_armor(encrypted.as_bytes()).expect("parse");
 
         eprintln!("{:#?}", msg);
@@ -747,6 +749,18 @@ mod tests {
 
         let decrypted = dec.as_data_vec().expect("decryption");
 
+        assert_eq!(PLAIN, decrypted);
+
+        // -- TheRing decryption
+
+        let (msg, _) = Message::from_armor(encrypted.as_bytes()).expect("parse");
+        let ring = TheRing {
+            persistent_symmetric_keys: vec![&tpsk.key],
+            ..Default::default()
+        };
+        let (mut dec, _) = msg.decrypt_the_ring(ring, true).expect("decryption");
+
+        let decrypted = dec.as_data_vec().expect("decryption");
         assert_eq!(PLAIN, decrypted);
     }
 
