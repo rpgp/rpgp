@@ -21,7 +21,9 @@ use crate::{
         PersistentSymmetricSigningKey, PersistentSymmetricVerifyingKey,
     },
     ser::Serialize,
-    types::{Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PublicParams, Timestamp},
+    types::{
+        Fingerprint, KeyDetails, KeyId, KeyVersion, Password, PkeskVersion, PublicParams, Timestamp,
+    },
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -40,8 +42,9 @@ impl TransferablePersistentSymmetricKey {
         self,
         key_pw: Password,
         aead: AeadAlgorithm,
+        pkesk_version: PkeskVersion,
     ) -> PersistentSymmetricEncryptionKey {
-        PersistentSymmetricEncryptionKey::new(self.key, key_pw, aead)
+        PersistentSymmetricEncryptionKey::new(self.key, key_pw, aead, pkesk_version)
     }
 
     pub fn into_signer<R: CryptoRng + Rng>(
