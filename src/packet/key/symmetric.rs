@@ -19,8 +19,8 @@ use crate::{
     ser::Serialize,
     types::{
         DecryptionKey, EncryptionKey, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion,
-        Password, PkeskBytes, PlainSecretParams, PublicParams, SecretParams, SignatureBytes,
-        SigningKey, Tag, Timestamp, VerifyingKey,
+        Password, PkeskBytes, PkeskVersion, PlainSecretParams, PublicParams, SecretParams,
+        SignatureBytes, SigningKey, Tag, Timestamp, VerifyingKey,
     },
 };
 
@@ -287,7 +287,7 @@ impl PersistentSymmetricKey {
         plain: &[u8],
         typ: EskType,
         aead: AeadAlgorithm,
-        version: KeyVersion,
+        pkesk_version: PkeskVersion,
     ) -> Result<PkeskBytes, Error> {
         ensure!(
             matches!(typ, EskType::V6),
@@ -313,10 +313,9 @@ impl PersistentSymmetricKey {
             // using the symmetric-key cipher of the key and the indicated AEAD mode, with as
             // additional data the empty string; including the authentication tag.
 
-            let version = version.into();
             let info = aead_key::InfoParameter {
                 packet_type: Tag::PublicKeyEncryptedSessionKey,
-                version,
+                version: pkesk_version.into(),
                 aead,
                 sym_alg: public_params.sym_alg,
             };
@@ -481,15 +480,24 @@ impl<R: CryptoRng + Rng> SigningKey for PersistentSymmetricSigningKey<R> {
 #[derive(derive_more::Debug)]
 pub struct PersistentSymmetricEncryptionKey {
     psk: PersistentSymmetricKey,
-
     key_pw: Password,
-
     aead: AeadAlgorithm,
+    pkesk_version: PkeskVersion,
 }
 
 impl PersistentSymmetricEncryptionKey {
-    pub fn new(psk: PersistentSymmetricKey, key_pw: Password, aead: AeadAlgorithm) -> Self {
-        Self { psk, key_pw, aead }
+    pub fn new(
+        psk: PersistentSymmetricKey,
+        key_pw: Password,
+        aead: AeadAlgorithm,
+        pkesk_version: PkeskVersion,
+    ) -> Self {
+        Self {
+            psk,
+            key_pw,
+            aead,
+            pkesk_version,
+        }
     }
 }
 
@@ -528,14 +536,8 @@ impl EncryptionKey for PersistentSymmetricEncryptionKey {
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
-        self.psk.encrypt(
-            rng,
-            &self.key_pw,
-            plain,
-            typ,
-            self.aead,
-            self.psk.details.version(),
-        )
+        self.psk
+            .encrypt(rng, &self.key_pw, plain, typ, self.aead, self.pkesk_version)
     }
 }
 
@@ -617,8 +619,8 @@ mod tests {
         },
         ser::Serialize,
         types::{
-            DecryptionKey, EskType, KeyVersion, Password, PlainSecretParams, PublicParams,
-            SecretParams, Timestamp,
+            DecryptionKey, EskType, KeyVersion, Password, PkeskVersion, PlainSecretParams,
+            PublicParams, SecretParams, Timestamp,
         },
     };
 
@@ -703,8 +705,12 @@ mod tests {
         );
 
         let pw = Password::empty();
-        let encryptor =
-            PersistentSymmetricEncryptionKey::new(tpsk.key.clone(), pw, AeadAlgorithm::Ocb);
+        let encryptor = PersistentSymmetricEncryptionKey::new(
+            tpsk.key.clone(),
+            pw,
+            AeadAlgorithm::Ocb,
+            PkeskVersion::V6,
+        );
 
         builder
             .encrypt_to_key(&mut rng, &encryptor)
