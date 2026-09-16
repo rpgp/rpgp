@@ -7,7 +7,7 @@ use proptest::prelude::*;
 
 use super::Mpi;
 use crate::{
-    crypto::{aead::AeadAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
+    crypto::{public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
     errors::{unsupported_err, InvalidInputSnafu, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -16,8 +16,9 @@ use crate::{
 /// Values comprising a Public Key Encrypted Session Key
 #[derive(Clone, derive_more::Debug, Eq, PartialEq)]
 pub enum PkeskBytes {
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
     Aead {
-        aead: AeadAlgorithm,
+        aead: crate::crypto::aead::AeadAlgorithm,
         salt: [u8; 32],
         encrypted: Bytes,
     },
@@ -277,6 +278,7 @@ impl PkeskBytes {
 impl Serialize for PkeskBytes {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PkeskBytes::Aead {
                 aead,
                 salt,
@@ -286,6 +288,7 @@ impl Serialize for PkeskBytes {
                 writer.write_all(salt)?;
                 writer.write_all(encrypted)?;
             }
+
             PkeskBytes::Rsa { mpi } => {
                 mpi.to_writer(writer)?;
             }
@@ -418,9 +421,11 @@ impl Serialize for PkeskBytes {
     fn write_len(&self) -> usize {
         let mut sum = 0;
         match self {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PkeskBytes::Aead { encrypted, .. } => {
                 sum += 1 + 32 + encrypted.len();
             }
+
             PkeskBytes::Rsa { mpi } => {
                 sum += mpi.write_len();
             }

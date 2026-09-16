@@ -9,7 +9,9 @@ use crate::{
     ser::Serialize,
 };
 
+#[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
 mod aead;
+
 mod dsa;
 pub(crate) mod ecdh;
 mod ecdsa;
@@ -36,8 +38,11 @@ mod slh_dsa_shake128s;
 #[cfg(feature = "pqc")]
 mod slh_dsa_shake256s;
 
+#[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+pub use aead::AeadPublicParams;
+
 pub use self::{
-    aead::AeadPublicParams, dsa::DsaPublicParams, ecdh::EcdhPublicParams, ecdsa::EcdsaPublicParams,
+    dsa::DsaPublicParams, ecdh::EcdhPublicParams, ecdsa::EcdsaPublicParams,
     ed25519::Ed25519PublicParams, ed448::Ed448PublicParams, eddsa_legacy::EddsaLegacyPublicParams,
     elgamal::ElgamalPublicParams, rsa::RsaPublicParams, x25519::X25519PublicParams,
     x448::X448PublicParams,
@@ -55,7 +60,7 @@ use super::PlainSecretParams;
 #[derive(PartialEq, Eq, Clone, derive_more::Debug)]
 pub enum PublicParams {
     #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
-    AEAD(AeadPublicParams),
+    AEAD(aead::AeadPublicParams),
 
     RSA(RsaPublicParams),
     DSA(DsaPublicParams),
@@ -136,7 +141,7 @@ impl PublicParams {
         match typ {
             #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
             PublicKeyAlgorithm::AEAD => {
-                let params = AeadPublicParams::try_from_reader(i)?;
+                let params = aead::AeadPublicParams::try_from_reader(i)?;
                 Ok(PublicParams::AEAD(params))
             }
 
@@ -501,7 +506,7 @@ mod tests {
         fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
             match args {
                 #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
-                PublicKeyAlgorithm::AEAD => any::<AeadPublicParams>()
+                PublicKeyAlgorithm::AEAD => any::<aead::AeadPublicParams>()
                     .prop_map(PublicParams::AEAD)
                     .boxed(),
 
