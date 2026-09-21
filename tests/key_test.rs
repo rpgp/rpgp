@@ -1838,3 +1838,73 @@ fn test_bp_eddsa_pub() -> TestResult {
 
     Ok(())
 }
+
+#[test]
+fn test_non_canonical_mpi_in_backsig() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let path = "./tests/malformed/non-canonical-mpi-backsig.pub.asc";
+
+    #[cfg(not(feature = "malformed-artifact-compat"))]
+    {
+        let res = SignedPublicKey::from_armor_file(path);
+        assert!(res.is_err(), "expected parsing to fail: {res:?}");
+    }
+
+    #[cfg(feature = "malformed-artifact-compat")]
+    {
+        let (key, _) = SignedPublicKey::from_armor_file(path).expect("parse");
+
+        assert_eq!(
+            key.primary_key.fingerprint().to_string(),
+            "8d873f65e2e16c7887e741dea1f5398b10b017ea"
+        );
+
+        // Both subkeys are imported, each with its binding signature.
+        assert_eq!(key.public_subkeys.len(), 2);
+        assert_eq!(
+            key.public_subkeys[0].fingerprint().to_string(),
+            "8e360e95d2714a64f5c99aecede79c602287b7ac"
+        );
+        assert_eq!(
+            key.public_subkeys[1].fingerprint().to_string(),
+            "aff674f05535b128107ca14ca69464702730d8c0"
+        );
+
+        // The self-signatures on the primary key and its User ID are unaffected.
+        key.details
+            .verify_bindings(&key.primary_key)
+            .expect("primary key bindings");
+
+        // The malformed backsig is not exposed as a structured signature, so it can never be
+        // mistaken for a valid cross-certification of this signing capable subkey ...
+        let binding = &key.public_subkeys[0].signatures[0];
+        assert!(binding.key_flags().sign());
+        assert!(binding.embedded_signature().is_none());
+
+        // ... and the binding of the subkey carrying it does not verify.
+        assert!(
+            key.public_subkeys[0]
+                .verify_bindings(&key.primary_key)
+                .is_err(),
+            "binding of subkey with malformed backsig must not verify"
+        );
+        assert!(key.verify_bindings().is_err());
+
+        // The well-formed encryption subkey still verifies.
+        key.public_subkeys[1]
+            .verify_bindings(&key.primary_key)
+            .expect("second subkey binding");
+
+        // Importing does not corrupt the certificate: it re-serializes to the original packet
+        // stream byte-for-byte, so it can be stored and imported again.
+        let mut original = Vec::new();
+        armor::Dearmor::new(std::io::BufReader::new(File::open(path)?))
+            .read_to_end(&mut original)?;
+        let serialized = key.to_bytes().expect("serialize");
+        assert_eq!(serialized, original);
+        assert_eq!(SignedPublicKey::from_bytes(&*serialized)?, key);
+    }
+
+    Ok(())
+}
