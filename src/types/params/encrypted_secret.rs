@@ -3,7 +3,7 @@ use std::{io, io::Write};
 use byteorder::WriteBytesExt;
 use bytes::{Buf, Bytes, BytesMut};
 use digest::Digest;
-use zeroize::ZeroizeOnDrop;
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::{
     crypto::checksum,
@@ -122,7 +122,7 @@ impl EncryptedSecretParams {
                 let key = md5::Md5::digest(pw.read());
 
                 // Decryption
-                let mut plaintext: BytesMut = self.data.clone().into();
+                let mut plaintext: Zeroizing<Vec<u8>> = self.data.to_vec().into();
                 sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
 
                 // Checksum
@@ -169,17 +169,21 @@ impl EncryptedSecretParams {
                         )?;
 
                         // AEAD decrypt
-                        let mut ciphertext: BytesMut = self.data.clone().into();
-
-                        aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, &mut ciphertext)?;
+                        let mut plaintext: BytesMut = self.data.clone().into();
+                        aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, &mut plaintext)?;
 
                         // "ciphertext" now contains the decrypted key material
-                        PlainSecretParams::try_from_reader_no_checksum(
-                            ciphertext.reader(),
+                        let params = PlainSecretParams::try_from_reader_no_checksum(
+                            &plaintext[..],
                             pub_key.version(),
                             alg,
                             pub_key.public_params(),
-                        )
+                        );
+
+                        // Manually zeroize the decrypted BytesMut data
+                        plaintext.zeroize();
+
+                        params
                     }
 
                     _ => bail!("S2K usage AEAD is not allowed with S2K type {:?}", s2k.id()),
@@ -189,7 +193,7 @@ impl EncryptedSecretParams {
                 let key = s2k.derive_key(&pw.read(), sym_alg.key_size())?;
 
                 // Decryption
-                let mut plaintext: BytesMut = self.data.clone().into();
+                let mut plaintext: Zeroizing<Vec<u8>> = self.data.to_vec().into();
                 sym_alg.decrypt_with_iv_regular(key.as_ref(), iv, &mut plaintext)?;
 
                 // Checksum
@@ -200,7 +204,8 @@ impl EncryptedSecretParams {
                     return Err(InvalidInputSnafu.build());
                 }
 
-                let (plaintext, expected_sha1) = plaintext.as_ref().split_at(self.data.len() - 20);
+                let (plaintext, expected_sha1) =
+                    plaintext.as_slice().split_at(self.data.len() - 20);
                 let calculated_sha1 = checksum::calculate_sha1([plaintext])?;
                 if expected_sha1 != calculated_sha1 {
                     return Err(InvalidInputSnafu.build());
@@ -216,7 +221,7 @@ impl EncryptedSecretParams {
                 let key = s2k.derive_key(&pw.read(), sym_alg.key_size())?;
 
                 // Decryption
-                let mut plaintext: BytesMut = self.data.clone().into();
+                let mut plaintext: Zeroizing<Vec<u8>> = self.data.to_vec().into();
                 sym_alg.decrypt_with_iv_regular(key.as_ref(), iv, &mut plaintext)?;
                 if plaintext.len() < 2 {
                     return Err(InvalidInputSnafu.build());
