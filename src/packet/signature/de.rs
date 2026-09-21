@@ -12,6 +12,7 @@ use crate::{
     },
     errors::{bail, ensure, ensure_eq, format_err, unsupported_err, Result},
     packet::{
+        subpacket::{ReplacementKey, ReplacementKeyTarget},
         Notation, PacketHeader, RevocationCode, Subpacket, SubpacketData, SubpacketLength,
         SubpacketType,
     },
@@ -287,6 +288,7 @@ fn subpacket<B: BufRead>(
         PreferredEncryptionModes => preferred_encryption_modes(&mut body),
         IntendedRecipientFingerprint => intended_recipient_fingerprint(&mut body),
         PreferredAead => pref_aead_alg(&mut body),
+        ReplacementKey => replacement_key(&mut body),
         Experimental(n) => Ok(SubpacketData::Experimental(n, body.rest()?.freeze())),
         Other(n) => Ok(SubpacketData::Other(n, body.rest()?.freeze())),
     };
@@ -423,6 +425,66 @@ fn pref_aead_alg<B: BufRead>(mut i: B) -> Result<SubpacketData> {
     }
 
     Ok(SubpacketData::PreferredAeadAlgorithms(list))
+}
+
+/// Parse a Replacement Key Subpacket
+///
+/// Ref: <https://www.ietf.org/archive/id/draft-ietf-openpgp-replacementkey-07.html#name-format-of-the-replacement-k>
+fn replacement_key<B: BufRead>(mut i: B) -> Result<SubpacketData> {
+    let class = i.read_u8()?;
+
+    let replacement = if class & 0x01 == 0 {
+        // Forward reference
+        let target = replacement_target(&mut i)?;
+
+        ReplacementKey::Forward(target)
+    } else {
+        // Backward reference(s)
+        let mut targets = Vec::new();
+        while i.has_remaining()? {
+            let target = replacement_target(&mut i)?;
+            targets.push(target);
+        }
+
+        ReplacementKey::Backward(targets)
+    };
+
+    Ok(SubpacketData::ReplacementKeyData(replacement))
+}
+
+fn replacement_target<B: BufRead>(mut i: B) -> Result<ReplacementKeyTarget> {
+    // 1 	Record length (1)
+    let record_length = i.read_u8()?;
+
+    // 1 	Target Key Version (1)
+    // N1 	Target Key Fingerprint (1)
+    let fingerprint = versioned_fingerprint(&mut i)?;
+
+    let Some(version) = fingerprint.version() else {
+        // This should be impossible, unless `versioned_fingerprint` is broken
+        bail!("Fingerprint without version in replacement_target");
+    };
+
+    // M 	Target Key Imprint (1)
+    let imprint_len = record_length as usize - 1 - fingerprint.len();
+
+    if version <= KeyVersion::V6 {
+        ensure_eq!(
+            Some(imprint_len),
+            HashAlgorithm::Sha3_256.digest_size(),
+            "Found unexpected imprint length: {imprint_len}"
+        );
+
+        let imprint: Box<[u8]> = i.read_arr::<32>()?.into();
+
+        Ok(ReplacementKeyTarget {
+            fingerprint,
+            imprint,
+        })
+    } else {
+        // We don't know the length of the imprint
+        unsupported_err!("Key version {version:?} is unsupported");
+    }
 }
 
 /// Parse a Preferred Hash Algorithms subpacket
@@ -619,9 +681,8 @@ fn embedded_sig<B: BufRead>(
     Ok(SubpacketData::EmbeddedSignature(Box::new(sig)))
 }
 
-/// Parse an Issuer Fingerprint subpacket
-/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-issuer-fingerprint
-fn issuer_fingerprint<B: BufRead>(mut i: B) -> Result<SubpacketData> {
+/// Read a versioned Fingerprint (which is used as a building block in various subpackets)
+fn versioned_fingerprint<B: BufRead>(mut i: B) -> Result<Fingerprint> {
     let version = i.read_u8().map(KeyVersion::from)?;
 
     // This subpacket is only used for v4 and newer fingerprints
@@ -629,13 +690,22 @@ fn issuer_fingerprint<B: BufRead>(mut i: B) -> Result<SubpacketData> {
         unsupported_err!("invalid key version {version:?}");
     }
 
-    if let Some(fingerprint_len) = version.fingerprint_len() {
-        let fingerprint = i.take_bytes(fingerprint_len)?;
-        let fp = Fingerprint::new(version, &fingerprint)?;
+    let Some(fingerprint_len) = version.fingerprint_len() else {
+        unsupported_err!("invalid key version {version:?}");
+    };
 
-        return Ok(SubpacketData::IssuerFingerprint(fp));
-    }
-    unsupported_err!("invalid key version {version:?}");
+    let fingerprint = i.take_bytes(fingerprint_len)?;
+    let fp = Fingerprint::new(version, &fingerprint)?;
+
+    Ok(fp)
+}
+
+/// Parse an Issuer Fingerprint subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-issuer-fingerprint
+fn issuer_fingerprint<B: BufRead>(mut i: B) -> Result<SubpacketData> {
+    let fp = versioned_fingerprint(&mut i)?;
+
+    Ok(SubpacketData::IssuerFingerprint(fp))
 }
 
 /// Parse a preferred encryption modes subpacket (non-RFC subpacket for GnuPG "OCB" mode)
