@@ -35,14 +35,14 @@ impl Signature {
     fn try_from_reader_inner<B: BufRead>(
         packet_header: PacketHeader,
         mut i: B,
-        embedded: bool,
+        is_embedded: bool,
     ) -> Result<Self> {
         let version = i.read_u8().map(SignatureVersion::from)?;
 
         let signature = match version {
             SignatureVersion::V2 | SignatureVersion::V3 => v3_parser(packet_header, version, i)?,
-            SignatureVersion::V4 => v4_parser(packet_header, version, i, embedded)?,
-            SignatureVersion::V6 => v6_parser(packet_header, i, embedded)?,
+            SignatureVersion::V4 => v4_parser(packet_header, version, i, is_embedded)?,
+            SignatureVersion::V6 => v6_parser(packet_header, i, is_embedded)?,
             _ => {
                 let rest = i.rest()?.freeze();
                 Signature::unknown(packet_header, version, rest)

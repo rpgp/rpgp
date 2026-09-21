@@ -42,6 +42,7 @@ fn roundtrip_nested_embedded() {
 fn make_deep(count: usize) -> SignedSecretKey {
     let mut rng = ChaCha8Rng::seed_from_u64(0);
 
+    // --- Basic key setup
     let key_params = SecretKeyParamsBuilder::default()
         .version(KeyVersion::V6)
         .key_type(KeyType::Ed25519)
@@ -67,7 +68,7 @@ fn make_deep(count: usize) -> SignedSecretKey {
         .generate(&mut rng)
         .expect("failed to generate secret key");
 
-    // ---
+    // --- Add nested layers to the embedded signature
 
     let sig = &signed_key.secret_subkeys[0].signatures[0];
 
@@ -117,12 +118,11 @@ fn make_deep(count: usize) -> SignedSecretKey {
 
     signed_key.secret_subkeys[0].signatures[0] = outer;
 
-    // ---
-
+    // --- Return generated key
     signed_key
 }
 
-// make a recursive series of inner signatures
+/// Make a recursive series of inner signatures
 fn recursive_embedded(emb: &SignatureConfig, signer: &SecretSubkey, count: usize) -> Signature {
     let mut sig = emb
         .clone()
