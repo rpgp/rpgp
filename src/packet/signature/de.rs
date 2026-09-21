@@ -1,6 +1,5 @@
 use std::{io::BufRead, str};
 
-use bytes::Buf;
 use log::{debug, warn};
 use smallvec::SmallVec;
 
@@ -282,10 +281,7 @@ fn subpacket<B: BufRead>(
         RevocationReason => rev_reason(&mut body),
         Features => features(&mut body),
         SignatureTarget => sig_target(&mut body),
-        #[cfg(not(feature = "malformed-artifact-compat"))]
         EmbeddedSignature => embedded_sig(packet_version, &mut body),
-        #[cfg(feature = "malformed-artifact-compat")]
-        EmbeddedSignature => embedded_sig_lenient(packet_len, packet_version, &mut body),
         IssuerFingerprint => issuer_fingerprint(&mut body),
         PreferredEncryptionModes => preferred_encryption_modes(&mut body),
         IntendedRecipientFingerprint => intended_recipient_fingerprint(&mut body),
@@ -322,37 +318,6 @@ fn subpacket<B: BufRead>(
     }
 
     res
-}
-
-/// Parses an embedded signature subpacket like [`embedded_sig`], but keeps it identical as an
-/// opaque subpacket if the structured form does not re-serialize to the length it was read with.
-///
-/// Third party implementations have produced embedded signatures we cannot reproduce,
-/// e.g. carrying an MPI whose declared bit length does not match its value, which we normalize
-/// on parse. Note that the backsig is then no longer available as a structured signature, so a
-/// signing capable subkey carrying one fails to verify rather than passing silently.
-#[cfg(feature = "malformed-artifact-compat")]
-fn embedded_sig_lenient<B: BufRead>(
-    packet_len: SubpacketLength,
-    packet_version: PacketHeaderVersion,
-    mut body: B,
-) -> Result<SubpacketData> {
-    let raw = body.rest()?.freeze();
-    let data = embedded_sig(packet_version, &raw[..])?;
-
-    if packet_len.len() != data.write_len() + 1 {
-        warn!(
-            "keeping embedded signature as opaque subpacket: declared length {}, re-serializes to {}",
-            packet_len.len(),
-            data.write_len() + 1
-        );
-        return Ok(SubpacketData::Other(
-            SubpacketType::EmbeddedSignature.as_u8(false),
-            raw,
-        ));
-    }
-
-    Ok(data)
 }
 
 fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<SignatureBytes> {
@@ -648,7 +613,27 @@ fn embedded_sig<B: BufRead>(
         Tag::Signature,
         PacketLength::Fixed(signature_bytes.len().try_into()?),
     )?;
-    let sig = Signature::try_from_reader(header, signature_bytes.reader())?;
+    let sig = Signature::try_from_reader(header, &signature_bytes[..])?;
+
+    // Keep packet identical as an
+    // opaque subpacket if the structured form does not re-serialize to the length it was read with.
+    //
+    // Third party implementations have produced embedded signatures we cannot reproduce,
+    // e.g. carrying an MPI whose declared bit length does not match its value, which we normalize
+    // on parse. Note that the backsig is then no longer available as a structured signature, so a
+    // signing capable subkey carrying one fails to verify rather than passing silently.
+    #[cfg(feature = "malformed-artifact-compat")]
+    if signature_bytes.len() != sig.write_len() {
+        warn!(
+            "keeping embedded signature as opaque subpacket: declared length {}, re-serializes to {}",
+            signature_bytes.len(),
+            sig.write_len()
+        );
+        return Ok(SubpacketData::Other(
+            SubpacketType::EmbeddedSignature.as_u8(false),
+            signature_bytes,
+        ));
+    }
 
     Ok(SubpacketData::EmbeddedSignature(Box::new(sig)))
 }
