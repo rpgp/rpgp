@@ -2,7 +2,7 @@ use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngCore};
 use zeroize::Zeroizing;
 
 use crate::{
@@ -97,7 +97,7 @@ impl S2kParams {
     /// - AES256
     /// - CFB
     /// - Iterated and Salted with 224 rounds
-    pub fn new_default<R: Rng + CryptoRng>(mut rng: R, key_version: KeyVersion) -> Self {
+    pub fn new_default<R: CryptoRng + RngCore>(rng: &mut R, key_version: KeyVersion) -> Self {
         match key_version {
             KeyVersion::V6 => {
                 let sym_alg = SymmetricKeyAlgorithm::AES256;
@@ -214,12 +214,12 @@ pub enum StringToKey {
 }
 
 impl StringToKey {
-    pub fn new_default<R: CryptoRng + Rng>(rng: R) -> Self {
+    pub fn new_default<R: CryptoRng + RngCore>(rng: &mut R) -> Self {
         StringToKey::new_iterated(rng, HashAlgorithm::default(), DEFAULT_ITER_SALTED_COUNT)
     }
 
-    pub fn new_iterated<R: CryptoRng + Rng>(
-        mut rng: R,
+    pub fn new_iterated<R: CryptoRng + RngCore>(
+        rng: &mut R,
         hash_alg: HashAlgorithm,
         count: u8,
     ) -> Self {
@@ -254,7 +254,7 @@ impl StringToKey {
     ///
     /// - [RFC 9106 &sect; 4.5 - Argon2 Parameter Choice](https://www.rfc-editor.org/rfc/rfc9106#section-4-5)
     /// - [RFC 9580 &sect; 3.7.1.4 - Argon2 S2K Specifier Type 4](https://www.rfc-editor.org/rfc/rfc9580#section-3.7.1.4)
-    pub fn new_argon2<R: CryptoRng + Rng>(mut rng: R, t: u8, p: u8, m_enc: u8) -> Self {
+    pub fn new_argon2<R: CryptoRng + RngCore>(mut rng: R, t: u8, p: u8, m_enc: u8) -> Self {
         let mut salt = [0u8; 16];
         rng.fill(&mut salt[..]);
 

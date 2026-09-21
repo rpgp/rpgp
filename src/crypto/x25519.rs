@@ -2,7 +2,7 @@ use std::cmp::PartialEq;
 
 use hkdf::HkdfExtract;
 use log::debug;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngCore};
 use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
@@ -164,7 +164,7 @@ pub fn hkdf(
 /// X25519 encryption.
 ///
 /// Returns (ephemeral, encrypted session key)
-pub fn encrypt<R: CryptoRng + Rng>(
+pub fn encrypt<R: CryptoRng + RngCore>(
     mut rng: R,
     recipient_public: &x25519_dalek::PublicKey,
     plain: &[u8],

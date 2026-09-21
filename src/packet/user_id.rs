@@ -4,7 +4,7 @@ use std::{
 };
 
 use bytes::Bytes;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 
 use crate::{
     errors::{ensure, Result},
@@ -106,13 +106,13 @@ impl UserId {
     /// Create a self-signature.
     pub fn sign<R, S, K>(
         &self,
-        rng: R,
+        rng: &mut R,
         signer_sec_key: &S,
         signer_pub_key: &K,
         key_pw: &Password,
     ) -> Result<SignedUser>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + RngCore,
         S: SigningKey,
         K: KeyDetails + Serialize,
     {
@@ -130,14 +130,14 @@ impl UserId {
     /// Create a third-party signature.
     pub fn sign_third_party<R, S, K>(
         &self,
-        mut rng: R,
+        rng: &mut R,
         signer: &S,
         signer_pw: &Password,
         signee: &K,
         typ: SignatureType,
     ) -> Result<SignedUser>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + RngCore,
         S: SigningKey,
         K: KeyDetails + Serialize,
     {
@@ -151,7 +151,7 @@ impl UserId {
             Subpacket::regular(SubpacketData::IssuerFingerprint(signer.fingerprint()))?,
         ];
 
-        let mut config = SignatureConfig::from_key(&mut rng, signer, typ)?;
+        let mut config = SignatureConfig::from_key(rng, signer, typ)?;
 
         config.hashed_subpackets = hashed_subpackets;
         if signer.version() <= KeyVersion::V4 {
@@ -160,8 +160,14 @@ impl UserId {
             ))?];
         }
 
-        let sig =
-            config.sign_certification_third_party(signer, signer_pw, signee, self.tag(), &self)?;
+        let sig = config.sign_certification_third_party(
+            rng,
+            signer,
+            signer_pw,
+            signee,
+            self.tag(),
+            &self,
+        )?;
 
         Ok(SignedUser::new(self.clone(), vec![sig]))
     }
