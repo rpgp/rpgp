@@ -111,14 +111,14 @@ fn v4_parser<B: BufRead>(
     packet_header: PacketHeader,
     version: SignatureVersion,
     mut i: B,
-    embedded: bool,
+    is_embedded: bool,
 ) -> Result<Signature> {
     debug_assert_eq!(version, SignatureVersion::V4);
 
     // One-octet signature type.
     let typ = i.read_u8().map(SignatureType::from)?;
 
-    if embedded {
+    if is_embedded {
         // An embedded signature may only be a primary key binding
         ensure_eq!(
             typ,
@@ -137,7 +137,7 @@ fn v4_parser<B: BufRead>(
     // Hashed subpacket data set (zero or more subpackets).
     let hsub_len: usize = i.read_be_u16()?.into();
     let hsub_raw = i.read_take(hsub_len);
-    let hsub = subpackets(packet_header.version(), hsub_len, hsub_raw, embedded)?;
+    let hsub = subpackets(packet_header.version(), hsub_len, hsub_raw, is_embedded)?;
     debug!(
         "found {} hashed subpackets in {} bytes",
         hsub.len(),
@@ -148,7 +148,7 @@ fn v4_parser<B: BufRead>(
     // Unhashed subpacket data set (zero or more subpackets).
     let usub_len: usize = i.read_be_u16()?.into();
     let usub_raw = i.read_take(usub_len);
-    let usub = subpackets(packet_header.version(), usub_len, usub_raw, embedded)?;
+    let usub = subpackets(packet_header.version(), usub_len, usub_raw, is_embedded)?;
     debug!(
         "found {} unhashed subpackets in {} bytes",
         usub.len(),
@@ -178,12 +178,12 @@ fn v4_parser<B: BufRead>(
 fn v6_parser<B: BufRead>(
     packet_header: PacketHeader,
     mut i: B,
-    embedded: bool,
+    is_embedded: bool,
 ) -> Result<Signature> {
     // One-octet signature type.
     let typ = i.read_u8().map(SignatureType::from)?;
 
-    if embedded {
+    if is_embedded {
         // An embedded signature may only be a primary key binding
         ensure_eq!(
             typ,
@@ -202,7 +202,7 @@ fn v6_parser<B: BufRead>(
     // Hashed subpacket data set (zero or more subpackets).
     let hsub_len: usize = i.read_be_u32()?.try_into()?;
     let hsub_raw = i.read_take(hsub_len);
-    let hsub = subpackets(packet_header.version(), hsub_len, hsub_raw, embedded)?;
+    let hsub = subpackets(packet_header.version(), hsub_len, hsub_raw, is_embedded)?;
     debug!(
         "found {} hashed subpackets in {} bytes",
         hsub.len(),
@@ -213,7 +213,7 @@ fn v6_parser<B: BufRead>(
     // Unhashed subpacket data set (zero or more subpackets).
     let usub_len: usize = i.read_be_u32()?.try_into()?;
     let usub_raw = i.read_take(usub_len);
-    let usub = subpackets(packet_header.version(), usub_len, usub_raw, embedded)?;
+    let usub = subpackets(packet_header.version(), usub_len, usub_raw, is_embedded)?;
     debug!(
         "found {} unhashed subpackets in {} bytes",
         usub.len(),
@@ -257,7 +257,7 @@ fn subpackets<B: BufRead>(
     packet_version: PacketHeaderVersion,
     len: usize,
     mut i: B,
-    embedded: bool,
+    is_embedded: bool,
 ) -> Result<Vec<Subpacket>> {
     let mut packets = Vec::with_capacity(len.min(32));
 
@@ -277,7 +277,7 @@ fn subpackets<B: BufRead>(
             packet_len,
             packet_version,
             &mut body,
-            embedded,
+            is_embedded,
         )?;
         debug!("found subpacket {packet:?}");
 
@@ -298,7 +298,7 @@ fn subpacket<B: BufRead>(
     packet_len: SubpacketLength,
     packet_version: PacketHeaderVersion,
     mut body: B,
-    embedded: bool,
+    is_embedded: bool,
 ) -> Result<Subpacket> {
     use super::subpacket::SubpacketType::*;
 
@@ -328,7 +328,10 @@ fn subpacket<B: BufRead>(
         Features => features(&mut body),
         SignatureTarget => sig_target(&mut body),
         EmbeddedSignature => {
-            ensure!(!embedded, "Encountered nested embedded signature subpacket");
+            ensure!(
+                !is_embedded,
+                "Encountered nested embedded signature subpacket"
+            );
             embedded_sig(packet_version, &mut body)
         }
         IssuerFingerprint => issuer_fingerprint(&mut body),
