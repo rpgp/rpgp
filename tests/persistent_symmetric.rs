@@ -7,11 +7,11 @@ use std::{fs::File, io::BufReader, path::Path};
 use pgp::{
     armor,
     composed::{
-        Deserializable, DetachedSignature, Esk, Message, TheRing,
+        Deserializable, DetachedSignature, Esk, Message, PublicOrSecret, TheRing,
         TransferablePersistentSymmetricKey,
     },
     packet::{Packet, PacketParser, PersistentSymmetricKey},
-    types::{DecryptionKey, EskType, KeyDetails, Password},
+    types::{DecryptionKey, EskType, KeyDetails, Password, PlainSecretParams},
 };
 
 const PLAIN: &str = "Hello World";
@@ -121,4 +121,32 @@ fn psk_openpgp_js_signature() {
     detached
         .verify(&verifier, PLAIN.as_bytes())
         .expect("Verify failed");
+}
+
+#[test]
+fn psk_openpgp_js_unlock() {
+    const LOCKED: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+6HcGarKqJwAAAAAhCRoGyHyB8qS38ocJKANzxr0cbqMkI1l0UmpJykZn4kPx/RoJ
+AwsDCBz8DhY8OyUt4Pr12GfCYGPJwfS0es1bF1gDrLzumG/ahoY1ol7n4aQytd49
+JFUTK5ePmrY/XBD+8qyIHLME+TTyZw83DA==
+-----END PGP PRIVATE KEY BLOCK-----";
+
+    let (mut iter, _) =
+        PublicOrSecret::from_armor_many(BufReader::new(LOCKED.as_bytes())).expect("parse");
+
+    let PublicOrSecret::PersistentSymmetric(tpsk) = iter.next().expect("next").expect("parsed")
+    else {
+        unreachable!("expected PSK")
+    };
+
+    let pw = Password::from("password");
+
+    tpsk.key()
+        .unlock(&pw, |_public, plain_secret| {
+            assert!(matches!(plain_secret, PlainSecretParams::AEAD(_)));
+            Ok(())
+        })
+        .expect("unlock")
+        .expect("work")
 }
