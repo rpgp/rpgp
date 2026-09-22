@@ -22,6 +22,16 @@ pub enum SignatureBytes {
     ///
     /// This format was introduced in RFC 9580 and is currently only used for Ed25519 and Ed448.
     Native(#[debug("{}", hex::encode(_0))] Bytes),
+
+    /// A cryptographic "signature" from draft-ietf-openpgp-persistent-symmetric-keys-03
+    ///
+    /// See <https://www.ietf.org/archive/id/draft-ietf-openpgp-persistent-symmetric-keys-03.html#name-algorithm-specific-fields-for>
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+    PersistentSymmetric {
+        aead: crate::crypto::aead::AeadAlgorithm,
+        salt: [u8; 32],
+        tag: Box<[u8]>,
+    },
 }
 
 impl SignatureBytes {
@@ -39,6 +49,15 @@ impl SignatureBytes {
             SignatureBytes::Native(sig) => {
                 writer.write_all(sig)?;
             }
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            SignatureBytes::PersistentSymmetric { aead, salt, tag } => {
+                use byteorder::WriteBytesExt;
+
+                writer.write_u8((*aead).into())?;
+                writer.write_all(salt)?;
+                writer.write_all(tag)?;
+            }
         }
 
         Ok(())
@@ -48,6 +67,9 @@ impl SignatureBytes {
         match self {
             SignatureBytes::Mpis(mpis) => mpis.write_len(),
             SignatureBytes::Native(sig) => sig.len(),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            SignatureBytes::PersistentSymmetric { tag, .. } => 1 + 32 + tag.len(),
         }
     }
 }
@@ -61,6 +83,11 @@ impl<'a> TryFrom<&'a SignatureBytes> for &'a [Mpi] {
 
             // We reject this operation because it doesn't fit with the intent of the Sig abstraction
             SignatureBytes::Native(_) => bail!("Native Sig can't be transformed into Mpis"),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            SignatureBytes::PersistentSymmetric { .. } => {
+                bail!("PersistentSymmetric Sig can't be transformed into Mpis")
+            }
         }
     }
 }
@@ -74,6 +101,11 @@ impl<'a> TryFrom<&'a SignatureBytes> for &'a [u8] {
             SignatureBytes::Mpis(_) => bail!("Mpi-based Sig can't be transformed into &[u8]"),
 
             SignatureBytes::Native(native) => Ok(native),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            SignatureBytes::PersistentSymmetric { .. } => {
+                bail!("PersistentSymmetric Sig can't be transformed into &[u8]")
+            }
         }
     }
 }
