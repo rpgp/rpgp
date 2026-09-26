@@ -116,6 +116,8 @@ impl SignedSecretKey {
     }
 
     /// Verifies all stored bindings.
+    ///
+    /// TODO: document what exactly is verified
     pub fn verify_bindings(&self) -> Result<()> {
         self.details
             .verify_bindings(self.primary_key.public_key())?;
@@ -242,6 +244,23 @@ impl SignedSecretSubKey {
         SignedSecretSubKey { key, signatures }
     }
 
+    /// Verifies that all subkey signatures are valid
+    /// and there is at least one signature.
+    ///
+    /// Note that both "Subkey Binding Signature (type ID 0x18)"
+    /// and "Subkey Revocation Signature (Type ID 0x28)"
+    /// signatures are accepted.
+    ///
+    /// Caller should still handle subkey revocations independently
+    /// as revoked subkeys are accepted here.
+    ///
+    /// According to <https://www.rfc-editor.org/rfc/rfc9580.html#section-10.1.1-5>
+    /// every subkey in OpenPGP certificate MUST have
+    /// at least one Subkey Binding signature.
+    /// This function however returns successfully
+    /// even if only Subkey Revocation Signatures are present.
+    /// User must ensuring that subkeys have at least one Subkey Binding signature
+    /// before distributing OpenPGP certificates.
     pub fn verify_bindings<V>(&self, key: &V) -> Result<()>
     where
         V: VerifyingKey + Serialize,
@@ -250,6 +269,9 @@ impl SignedSecretSubKey {
 
         for sig in &self.signatures {
             sig.verify_subkey_binding(key, self.key.public_key())?;
+
+            // TODO: verify backward signatures
+            // or document that they are not verified.
         }
 
         Ok(())
