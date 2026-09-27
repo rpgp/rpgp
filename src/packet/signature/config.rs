@@ -12,8 +12,8 @@ use crate::{
     },
     errors::{bail, ensure, unimplemented_err, unsupported_err, Result},
     packet::{
-        types::serialize_for_hashing, Signature, SignatureType, SignatureVersion, Subpacket,
-        SubpacketData, SubpacketType,
+        types::serialize_for_hashing, ReplacementKey, Signature, SignatureType, SignatureVersion,
+        Subpacket, SubpacketData, SubpacketType,
     },
     ser::Serialize,
     types::{Fingerprint, KeyDetails, KeyId, KeyVersion, Password, SigningKey, Tag, Timestamp},
@@ -731,6 +731,30 @@ impl SignatureConfig {
                 _ => None,
             })
             .collect()
+    }
+
+    /// Replacement Key information.
+    ///
+    /// This subpacket points at previous related keys, or updates to this one.
+    ///
+    /// <https://www.ietf.org/archive/id/draft-ietf-openpgp-replacementkey-07.html>
+    ///
+    /// Returns Issuer Fingerprint subpacket data from both the hashed and unhashed area.
+    pub fn replacement_key(&self) -> Option<&ReplacementKey> {
+        let vec: Vec<_> = self
+            .hashed_subpackets()
+            .filter_map(|sp| match &sp.data {
+                SubpacketData::ReplacementKeyData(replacement) => Some(replacement),
+                _ => None,
+            })
+            .collect();
+
+        match vec[..] {
+            // Only exactly one replacement key subpacket may exist in one signature.
+            // Ref <https://www.ietf.org/archive/id/draft-ietf-openpgp-replacementkey-07.html#name-graph-topology>
+            [replacement] => Some(replacement),
+            _ => None,
+        }
     }
 }
 
