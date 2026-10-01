@@ -723,6 +723,28 @@ fn create_signature(
             };
             priv_key.sign(hash, data)
         }
+        #[cfg(feature = "pqc-nist-bp")]
+        PlainSecretParams::MlKem768NistP384(_) => {
+            bail!("ML KEM 768 NIST P 384 can not be used for signing operations")
+        }
+        #[cfg(feature = "pqc-nist-bp")]
+        PlainSecretParams::MlKem1024NistP521(_) => {
+            bail!("ML KEM 1024 NIST P 521 can not be used for signing operations")
+        }
+        #[cfg(feature = "pqc-nist-bp")]
+        PlainSecretParams::MlDsa65NistP384(ref priv_key) => {
+            let PublicParams::MlDsa65NistP384(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        #[cfg(feature = "pqc-nist-bp")]
+        PlainSecretParams::MlDsa87NistP521(ref priv_key) => {
+            let PublicParams::MlDsa87NistP521(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
         PlainSecretParams::Unknown { alg, .. } => {
             unsupported_err!("{:?} signing", alg);
         }
