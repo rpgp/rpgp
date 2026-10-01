@@ -172,7 +172,7 @@ impl EncryptedSecretParams {
                         let mut plaintext: BytesMut = self.data.clone().into();
                         aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, &mut plaintext)?;
 
-                        // "ciphertext" now contains the decrypted key material
+                        // Parse the decrypted key material
                         let params = PlainSecretParams::try_from_reader_no_checksum(
                             &plaintext[..],
                             pub_key.version(),
