@@ -2,6 +2,32 @@
 
 All notable changes to rpgp will be documented in this file.
 
+## [0.21.0](https://github.com/rpgp/rpgp/compare/v0.20.0..0.21.0) - 2026-10-03
+
+### ⛰️  Features
+
+- [**breaking**] Update pqc references to the now published RFC 9980 ([#825](https://github.com/rpgp/rpgp/issues/825)) - ([fdea8f8](https://github.com/rpgp/rpgp/commit/fdea8f8b84a25d1f740cb6698f85a6f224cea7a5))
+- Optionally parse certs with non-canonical MPIs in embedded signatures ([#854](https://github.com/rpgp/rpgp/issues/854)) - ([c90a46b](https://github.com/rpgp/rpgp/commit/c90a46b8d3c015c9222100a71b0baf1e355a51ac))
+
+### 🐛 Bug Fixes
+
+- [**breaking**] Don't panic on short x25519 session key - ([e007cb7](https://github.com/rpgp/rpgp/commit/e007cb77ad4195c1aa5acdfd78aa5ce6d44ec5cd))
+- Reject nested embedded signature subpackets ([#852](https://github.com/rpgp/rpgp/issues/852)) - ([56420ba](https://github.com/rpgp/rpgp/commit/56420ba137bcc69eed2af6691405fc181b45e12a))
+- Zeroize in secret key unlocking ([#856](https://github.com/rpgp/rpgp/issues/856)) - ([72a4ce9](https://github.com/rpgp/rpgp/commit/72a4ce9cc2d59780898d84e35e7e47381ad93db9))
+
+### 📚 Documentation
+
+- More documentation for Message ([#808](https://github.com/rpgp/rpgp/issues/808)) - ([3cda138](https://github.com/rpgp/rpgp/commit/3cda13893a2fb1471c21a8355111b27765f333db))
+
+### ⚙️ Miscellaneous Tasks
+
+- Drop the asm feature for sha1 ([#814](https://github.com/rpgp/rpgp/issues/814)) - ([e2721b0](https://github.com/rpgp/rpgp/commit/e2721b090796e8f9134771f806ed9a1de2ad9d18))
+- Update nightly Rust and apply new clippy fixes - ([819c8dc](https://github.com/rpgp/rpgp/commit/819c8dce175925050e2ce1ee6676a49d335547a8))
+- Upgrade crossbeam-epoch to 0.9.20 to fix RUSTSEC-2026-0204 ([#826](https://github.com/rpgp/rpgp/issues/826)) - ([4e6848d](https://github.com/rpgp/rpgp/commit/4e6848dc6d8bf79c401de5dc2a55d675b1e622ca))
+- Upgrade spin to 0.9.9 (from yanked version) - ([82aae1f](https://github.com/rpgp/rpgp/commit/82aae1f2eb84b19f5f76edc024ef2ca62cb12283))
+- [**breaking**] Drop the unused MAX_BUFFER_SIZE const - ([37d728c](https://github.com/rpgp/rpgp/commit/37d728c53267361d9da49f717d893154d2f97f3e))
+- Bump rust toolchain for "cross" to 1.91 ([#853](https://github.com/rpgp/rpgp/issues/853)) - ([d19c915](https://github.com/rpgp/rpgp/commit/d19c915cf67c3eccbf4544a6dd47acfde5a5f031))
+
 ## [0.20.0](https://github.com/rpgp/rpgp/compare/v0.19.0..0.20.0) - 2026-06-23
 
 ### ⛰️  Features
