@@ -170,6 +170,10 @@ impl EncryptedSecretParams {
 
                         // AEAD decrypt
                         let mut plaintext: BytesMut = self.data.clone().into();
+
+                        // CAUTION: The decrypted plaintext gets zeroized *manually*, below!
+                        // The control flow must not be able to branch away before that zeroize call!
+                        // (E.g. error cases must not be raised before zeroize)
                         aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, &mut plaintext)?;
 
                         // Parse the decrypted key material
