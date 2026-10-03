@@ -16,6 +16,12 @@ use crate::{
 /// Values comprising a Public Key Encrypted Session Key
 #[derive(Clone, derive_more::Debug, Eq, PartialEq)]
 pub enum PkeskBytes {
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+    Aead {
+        aead: crate::crypto::aead::AeadAlgorithm,
+        salt: [u8; 32],
+        encrypted: Bytes,
+    },
     Rsa {
         mpi: Mpi,
     },
@@ -84,6 +90,20 @@ impl PkeskBytes {
         mut i: B,
     ) -> Result<Self> {
         match alg {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicKeyAlgorithm::AEAD => {
+                let aead = i.read_u8()?.into();
+                let salt = i.read_arr()?;
+
+                let encrypted = i.rest()?.freeze();
+
+                Ok(PkeskBytes::Aead {
+                    aead,
+                    salt,
+                    encrypted,
+                })
+            }
+
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSASign
             | PublicKeyAlgorithm::RSAEncrypt => {
@@ -258,6 +278,17 @@ impl PkeskBytes {
 impl Serialize for PkeskBytes {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PkeskBytes::Aead {
+                aead,
+                salt,
+                encrypted,
+            } => {
+                writer.write_u8((*aead).into())?;
+                writer.write_all(salt)?;
+                writer.write_all(encrypted)?;
+            }
+
             PkeskBytes::Rsa { mpi } => {
                 mpi.to_writer(writer)?;
             }
@@ -390,6 +421,11 @@ impl Serialize for PkeskBytes {
     fn write_len(&self) -> usize {
         let mut sum = 0;
         match self {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PkeskBytes::Aead { encrypted, .. } => {
+                sum += 1 + 32 + encrypted.len();
+            }
+
             PkeskBytes::Rsa { mpi } => {
                 sum += mpi.write_len();
             }
