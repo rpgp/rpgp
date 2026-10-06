@@ -408,8 +408,8 @@ impl Signature {
     /// Version 6 signatures and version 6 keys are strongly linked:
     /// - only a v6 key may produce a v6 signature
     /// - a v6 key may only produce v6 signatures
-    fn check_signature_key_version_alignment(
-        key: &impl KeyDetails,
+    pub(crate) fn check_signature_key_version_alignment<K: KeyDetails + ?Sized>(
+        key: &K,
         config: &SignatureConfig,
     ) -> Result<()> {
         // Every signature made by a version 6 key MUST be a version 6 signature.
@@ -456,7 +456,7 @@ impl Signature {
         Ok(())
     }
 
-    /// Verify this signature.
+    /// Verify this data signature.
     pub fn verify<R>(&self, key: &impl VerifyingKey, data: R) -> Result<()>
     where
         R: Read,
@@ -469,6 +469,11 @@ impl Signature {
         else {
             unsupported_err!("signature version {:?}", self.version());
         };
+
+        ensure!(
+            [SignatureType::Binary, SignatureType::Text].contains(&config.typ),
+            format!("verify: unacceptable signature type {:?}", config.typ)
+        );
 
         Self::check_signature_key_version_alignment(&key, config)?;
         Self::check_signature_hash_strength(config)?;
