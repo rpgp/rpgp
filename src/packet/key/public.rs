@@ -633,6 +633,73 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
         PublicParams::SlhDsaShake256s(_) => {
             bail!("SLH DSA Shake 256s is only used for signing")
         }
+        #[cfg(feature = "pqc-nist-bp")]
+        PublicParams::MlDsa65NistP384(_) => {
+            bail!("ML DSA 65 NIST P384 is only used for signing")
+        }
+        #[cfg(feature = "pqc-nist-bp")]
+        PublicParams::MlDsa87NistP521(_) => {
+            bail!("ML DSA 87 NIST P521 is only used for signing")
+        }
+        #[cfg(feature = "pqc-nist-bp")]
+        PublicParams::MlKem768NistP384(ref params) => {
+            let (sym_alg, plain) = match typ {
+                EskType::V6 => (None, plain),
+                EskType::V3_4 => {
+                    ensure!(!plain.is_empty(), "plain may not be empty");
+
+                    (
+                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                        &plain[1..],           // strip symmetric algorithm
+                    )
+                }
+            };
+
+            let (ecdh_ciphertext, ml_kem_ciphertext, session_key) =
+                crypto::ml_kem768_nistp384::encrypt(
+                    &mut rng,
+                    &params.nistp384_key,
+                    &params.ml_kem_key,
+                    plain,
+                )?;
+
+            Ok(PkeskBytes::MlKem768NistP384 {
+                ecdh_ciphertext,
+                ml_kem_ciphertext,
+                session_key: session_key.into(),
+                sym_alg,
+            })
+        }
+        #[cfg(feature = "pqc-nist-bp")]
+        PublicParams::MlKem1024NistP521(ref params) => {
+            let (sym_alg, plain) = match typ {
+                EskType::V6 => (None, plain),
+                EskType::V3_4 => {
+                    ensure!(!plain.is_empty(), "plain may not be empty");
+
+                    (
+                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                        &plain[1..],           // strip symmetric algorithm
+                    )
+                }
+            };
+
+            let (ecdh_ciphertext, ml_kem_ciphertext, session_key) =
+                crypto::ml_kem1024_nistp521::encrypt(
+                    &mut rng,
+                    &params.nistp521_key,
+                    &params.ml_kem_key,
+                    plain,
+                )?;
+
+            Ok(PkeskBytes::MlKem1024NistP521 {
+                ecdh_ciphertext,
+                ml_kem_ciphertext,
+                session_key: session_key.into(),
+                sym_alg,
+            })
+        }
+
         PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
     }
 }
@@ -920,6 +987,23 @@ impl VerifyingKey for PubKeyInner {
             PublicParams::SlhDsaShake256s(ref params) => {
                 crypto::slh_dsa_shake256s::verify(&params.key, hash, hashed, sig.try_into()?)
             }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlDsa65NistP384(ref params) => crypto::ml_dsa65_nistp384::verify(
+                &params.nistp384,
+                &params.ml_dsa,
+                hash,
+                hashed,
+                sig.try_into()?,
+            ),
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlDsa87NistP521(ref params) => crypto::ml_dsa87_nistp521::verify(
+                &params.nistp521,
+                &params.ml_dsa,
+                hash,
+                hashed,
+                sig.try_into()?,
+            ),
+
             PublicParams::X25519 { .. } => {
                 bail!("X25519 can not be used for verify operations");
             }
@@ -938,6 +1022,14 @@ impl VerifyingKey for PubKeyInner {
             #[cfg(feature = "pqc")]
             PublicParams::MlKem1024X448(_) => {
                 bail!("ML KEM 1024 X448 can not be used for verify operations");
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlKem768NistP384(_) => {
+                bail!("ML KEM 768 NIST P384 can not be used for verify operations");
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlKem1024NistP521(_) => {
+                bail!("ML KEM 1024 NIST P521 can not be used for verify operations");
             }
             PublicParams::ECDH(
                 ref params @ EcdhPublicParams::Curve25519Legacy { .. }
