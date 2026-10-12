@@ -1,6 +1,6 @@
-use std::fmt;
 #[cfg(not(feature = "wasm"))]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{fmt, ops::Add};
 
 use byteorder::BigEndian;
 #[cfg(feature = "wasm")]
@@ -79,6 +79,13 @@ impl Serialize for Timestamp {
 
     fn write_len(&self) -> usize {
         4
+    }
+}
+
+impl Add<crate::types::Duration> for Timestamp {
+    type Output = Timestamp;
+    fn add(self, d: crate::types::Duration) -> Self::Output {
+        Timestamp::from_secs(self.as_secs() + d.as_secs())
     }
 }
 
