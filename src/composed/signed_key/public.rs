@@ -113,6 +113,8 @@ impl SignedPublicKey {
     }
 
     /// Verifies all stored bindings.
+    ///
+    /// TODO: document what exactly is verified or put references.
     pub fn verify_bindings(&self) -> Result<()> {
         self.details.verify_bindings(&self.primary_key)?;
         for subkey in &self.public_subkeys {
@@ -289,15 +291,23 @@ impl SignedPublicSubKey {
         SignedPublicSubKey { key, signatures }
     }
 
+    /// Verifies that all subkey signatures are valid
+    /// and subkey has at least one signature.
+    ///
+    ///
     pub fn verify_bindings<V>(&self, key: &V) -> Result<()>
     where
         V: VerifyingKey + Serialize,
     {
         ensure!(!self.signatures.is_empty(), "missing subkey bindings");
 
-        // TODO: It's sufficient if the latest binding signature is valid
         for sig in &self.signatures {
             sig.verify_subkey_binding(key, &self.key)?;
+
+            // TODO: if the signature is a revocation signature,
+            // should there be a backward signature?
+            // Possibly drop backward signature verification
+            // and document that backward signatures are not verified.
 
             // If the subkey is signing capable, check the embedded backward signature
             if sig.key_flags().sign() {
