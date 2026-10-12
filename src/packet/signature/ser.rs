@@ -128,6 +128,7 @@ impl Subpacket {
                 SubpacketType::IntendedRecipientFingerprint
             }
             SubpacketData::PreferredAeadAlgorithms(_) => SubpacketType::PreferredAead,
+            SubpacketData::ReplacementKeyData(_) => SubpacketType::ReplacementKey,
             SubpacketData::Experimental(n, _) => SubpacketType::Experimental(*n),
             SubpacketData::Other(n, _) => SubpacketType::Other(*n),
             SubpacketData::SignatureTarget(_, _, _) => SubpacketType::SignatureTarget,
@@ -244,6 +245,9 @@ impl Serialize for SubpacketData {
                         .collect::<Vec<_>>(),
                 )?;
             }
+            SubpacketData::ReplacementKeyData(r) => {
+                r.to_writer(writer)?;
+            }
             SubpacketData::Experimental(_, body) => {
                 writer.write_all(body)?;
             }
@@ -298,6 +302,7 @@ impl Serialize for SubpacketData {
             SubpacketData::PreferredEncryptionModes(algs) => algs.len(),
             SubpacketData::IntendedRecipientFingerprint(fp) => 1 + fp.len(),
             SubpacketData::PreferredAeadAlgorithms(algs) => algs.len() * 2,
+            SubpacketData::ReplacementKeyData(r) => r.write_len(),
             SubpacketData::Experimental(_, body) => body.len(),
             SubpacketData::Other(_, body) => body.len(),
             SubpacketData::SignatureTarget(_, _, hash) => 2 + hash.len(),
