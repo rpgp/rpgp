@@ -303,6 +303,8 @@ impl Serialize for SignedKeyDetails {
 pub enum PublicOrSecret {
     Public(SignedPublicKey),
     Secret(SignedSecretKey),
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+    PersistentSymmetric(crate::composed::TransferablePersistentSymmetricKey),
 }
 
 impl PublicOrSecret {
@@ -310,6 +312,9 @@ impl PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.verify_bindings(),
             PublicOrSecret::Secret(k) => k.verify_bindings(),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicOrSecret::PersistentSymmetric(_) => Ok(()), // PSK have no binding signatures
         }
     }
 
@@ -321,6 +326,9 @@ impl PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.to_armored_writer(writer, opts),
             PublicOrSecret::Secret(k) => k.to_armored_writer(writer, opts),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicOrSecret::PersistentSymmetric(k) => k.to_armored_writer(writer, opts),
         }
     }
 
@@ -328,6 +336,9 @@ impl PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.to_armored_bytes(opts),
             PublicOrSecret::Secret(k) => k.to_armored_bytes(opts),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicOrSecret::PersistentSymmetric(k) => k.to_armored_bytes(opts),
         }
     }
 
@@ -335,6 +346,9 @@ impl PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.to_armored_string(opts),
             PublicOrSecret::Secret(k) => k.to_armored_string(opts),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicOrSecret::PersistentSymmetric(k) => k.to_armored_string(opts),
         }
     }
 
@@ -356,17 +370,39 @@ impl PublicOrSecret {
             .expect("Can not convert a secret into a public key")
     }
 
+    /// true for Public, false for Secret
+    ///
+    /// (false for PersistentSymmetric, if feature draft-ietf-openpgp-persistent-symmetric-keys-03 is enabled)
     pub fn is_public(&self) -> bool {
         match self {
             PublicOrSecret::Secret(_) => false,
             PublicOrSecret::Public(_) => true,
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicOrSecret::PersistentSymmetric(_) => false,
         }
     }
 
+    /// true for Secret, false for Public
+    ///
+    /// (also false for PersistentSymmetric, since that type cannot be transformed into a SignedSecretKey)
     pub fn is_secret(&self) -> bool {
         match self {
             PublicOrSecret::Secret(_) => true,
             PublicOrSecret::Public(_) => false,
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicOrSecret::PersistentSymmetric(_) => false,
+        }
+    }
+
+    /// true for PersistentSymmetric, false otherwise
+    pub fn is_persistent_symmetric(&self) -> bool {
+        match self {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicOrSecret::PersistentSymmetric(_) => true,
+
+            _ => false,
         }
     }
 }
@@ -384,6 +420,9 @@ impl TryFrom<PublicOrSecret> for SignedPublicKey {
         match public_or_secret {
             PublicOrSecret::Public(k) => Ok(k),
             PublicOrSecret::Secret(_) => Err(TryFromPublicOrSecretError),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicOrSecret::PersistentSymmetric(_) => Err(TryFromPublicOrSecretError),
         }
     }
 }
@@ -395,6 +434,24 @@ impl TryFrom<PublicOrSecret> for SignedSecretKey {
         match public_or_secret {
             PublicOrSecret::Public(_) => Err(TryFromPublicOrSecretError),
             PublicOrSecret::Secret(k) => Ok(k),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicOrSecret::PersistentSymmetric(_) => Err(TryFromPublicOrSecretError),
+        }
+    }
+}
+
+#[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+impl TryFrom<PublicOrSecret> for crate::composed::TransferablePersistentSymmetricKey {
+    type Error = TryFromPublicOrSecretError;
+
+    fn try_from(public_or_secret: PublicOrSecret) -> Result<Self, Self::Error> {
+        match public_or_secret {
+            PublicOrSecret::Public(_) => Err(TryFromPublicOrSecretError),
+            PublicOrSecret::Secret(_) => Err(TryFromPublicOrSecretError),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicOrSecret::PersistentSymmetric(psk) => Ok(psk),
         }
     }
 }
@@ -404,6 +461,9 @@ impl Serialize for PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.to_writer(writer),
             PublicOrSecret::Secret(k) => k.to_writer(writer),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicOrSecret::PersistentSymmetric(k) => k.to_writer(writer),
         }
     }
 
@@ -411,6 +471,9 @@ impl Serialize for PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.write_len(),
             PublicOrSecret::Secret(k) => k.write_len(),
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicOrSecret::PersistentSymmetric(k) => k.write_len(),
         }
     }
 }

@@ -154,6 +154,10 @@ impl PublicKeyEncryptedSessionKey {
         // If needed, appended a checksum of the session key
         match pp {
             PublicParams::X25519(_) | PublicParams::X448(_) => {}
+
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicParams::AEAD(_) => {}
+
             #[cfg(feature = "pqc")]
             PublicParams::MlKem768X25519(_) | PublicParams::MlKem1024X448(_) => {}
             _ => data.extend_from_slice(&checksum::calculate_simple(sk.as_ref()).to_be_bytes()),
