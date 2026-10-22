@@ -3,7 +3,7 @@ use std::io::Read;
 use byteorder::{BigEndian, ByteOrder};
 use digest::DynDigest;
 use log::debug;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 
 use crate::{
     crypto::{
@@ -93,14 +93,14 @@ impl From<&SignatureVersionSpecific> for SignatureVersion {
 }
 
 impl SignatureConfig {
-    pub fn from_key<R: CryptoRng + Rng, S: SigningKey>(
-        mut rng: R,
+    pub fn from_key<RNG: CryptoRng + RngCore, S: SigningKey>(
+        rng: &mut RNG,
         key: &S,
         typ: SignatureType,
     ) -> Result<Self> {
         match key.version() {
             KeyVersion::V4 => Ok(SignatureConfig::v4(typ, key.algorithm(), key.hash_alg())),
-            KeyVersion::V6 => SignatureConfig::v6(&mut rng, typ, key.algorithm(), key.hash_alg()),
+            KeyVersion::V6 => SignatureConfig::v6(rng, typ, key.algorithm(), key.hash_alg()),
             v => unsupported_err!("unsupported key version: {:?}", v),
         }
     }
@@ -168,7 +168,10 @@ impl SignatureConfig {
 
     /// Generate v6 signature salt with the appropriate length for `hash_alg`
     /// https://www.rfc-editor.org/rfc/rfc9580.html#name-hash-algorithms
-    fn v6_salt_for<R: CryptoRng + Rng>(mut rng: R, hash_alg: HashAlgorithm) -> Result<Vec<u8>> {
+    fn v6_salt_for<R: CryptoRng + RngCore>(
+        rng: &mut R,
+        hash_alg: HashAlgorithm,
+    ) -> Result<Vec<u8>> {
         let Some(salt_len) = hash_alg.salt_len() else {
             bail!("Unknown v6 signature salt length for hash algorithm {hash_alg:?}");
         };
@@ -183,8 +186,8 @@ impl SignatureConfig {
     /// Generates a new salt via `rng`.
     ///
     /// OpenPGP v6 signatures are specified in RFC 9580, they are produced by OpenPGP v6 keys.
-    pub fn v6<R: CryptoRng + Rng>(
-        rng: R,
+    pub fn v6<R: CryptoRng + RngCore>(
+        rng: &mut R,
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
@@ -221,14 +224,20 @@ impl SignatureConfig {
     }
 
     /// Sign the given data.
-    pub fn sign<R>(self, key: &impl SigningKey, key_pw: &Password, mut data: R) -> Result<Signature>
+    pub fn sign<R, RNG: CryptoRng + RngCore>(
+        self,
+        rng: &mut RNG,
+        key: &impl SigningKey,
+        key_pw: &Password,
+        mut data: R,
+    ) -> Result<Signature>
     where
         R: Read,
     {
         let mut hasher = self.into_hasher()?;
         std::io::copy(&mut data, &mut hasher)?;
 
-        hasher.sign(key, key_pw)
+        hasher.sign(rng, key, key_pw)
     }
 
     pub fn into_hasher(self) -> Result<SignatureHasher> {
@@ -248,8 +257,9 @@ impl SignatureConfig {
     }
 
     /// Create a certification self-signature.
-    pub fn sign_certification<S, K>(
+    pub fn sign_certification<S, K, RNG: CryptoRng + RngCore>(
         self,
+        rng: &mut RNG,
         key: &S,
         pub_key: &K,
         key_pw: &Password,
@@ -260,12 +270,13 @@ impl SignatureConfig {
         S: SigningKey,
         K: KeyDetails + Serialize,
     {
-        self.sign_certification_third_party(key, key_pw, pub_key, tag, id)
+        self.sign_certification_third_party(rng, key, key_pw, pub_key, tag, id)
     }
 
     /// Create a certification third-party signature.
-    pub fn sign_certification_third_party<K>(
+    pub fn sign_certification_third_party<K, RNG: CryptoRng + RngCore>(
         self,
+        rng: &mut RNG,
         signer: &impl SigningKey,
         signer_pw: &Password,
         signee: &K,
@@ -334,7 +345,7 @@ impl SignatureConfig {
         let hash = &hasher.finalize()[..];
 
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
+        let signature = signer.sign(rng, signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -344,8 +355,9 @@ impl SignatureConfig {
     /// The primary key is expected as `signer`, the subkey as `signee`.
     ///
     /// Produces a "Subkey Binding Signature (type ID 0x18)"
-    pub fn sign_subkey_binding<S, K1, K2>(
+    pub fn sign_subkey_binding<RNG: CryptoRng + RngCore, S, K1, K2>(
         self,
+        rng: &mut RNG,
         signer: &S,
         signer_pub: &K1,
         signer_pw: &Password,
@@ -379,7 +391,7 @@ impl SignatureConfig {
 
         let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
+        let signature = signer.sign(rng, signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -390,8 +402,9 @@ impl SignatureConfig {
     /// The subkey is expected as `signer`, the primary key as `signee`.
     ///
     /// Produces a "Primary Key Binding Signature (type ID 0x19)"
-    pub fn sign_primary_key_binding<S, K1, K2>(
+    pub fn sign_primary_key_binding<RNG: CryptoRng + RngCore, S, K1, K2>(
         self,
+        rng: &mut RNG,
         signer: &S,
         signer_pub: &K1,
         signer_pw: &Password,
@@ -425,13 +438,19 @@ impl SignatureConfig {
 
         let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
+        let signature = signer.sign(rng, signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
 
     /// Signs a direct key signature or a revocation.
-    pub fn sign_key<S, K>(self, signing_key: &S, key_pw: &Password, key: &K) -> Result<Signature>
+    pub fn sign_key<RNG1: CryptoRng + RngCore, S, K>(
+        self,
+        rng: &mut RNG1,
+        signing_key: &S,
+        key_pw: &Password,
+        key: &K,
+    ) -> Result<Signature>
     where
         S: SigningKey,
         K: KeyDetails + Serialize,
@@ -464,7 +483,7 @@ impl SignatureConfig {
 
         let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signing_key.sign(key_pw, self.hash_alg, hash)?;
+        let signature = signing_key.sign(rng, key_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -753,7 +772,12 @@ pub struct SignatureHasher {
 
 impl SignatureHasher {
     /// Finalizes the signature.
-    pub fn sign<S>(self, key: &S, key_pw: &Password) -> Result<Signature>
+    pub fn sign<RNG: CryptoRng + RngCore, S>(
+        self,
+        rng: &mut RNG,
+        key: &S,
+        key_pw: &Password,
+    ) -> Result<Signature>
     where
         S: SigningKey + ?Sized,
     {
@@ -786,7 +810,7 @@ impl SignatureHasher {
         let hash = &hasher.finalize()[..];
 
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = key.sign(key_pw, config.hash_alg, hash)?;
+        let signature = key.sign(rng, key_pw, config.hash_alg, hash)?;
 
         Signature::from_config(config, signed_hash_value, signature)
     }
@@ -867,6 +891,7 @@ mod tests {
 
         let dks = config
             .sign_key(
+                &mut rng,
                 &alice.primary_key,
                 &Password::empty(),
                 &bob.primary_key.public_key(),

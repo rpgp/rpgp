@@ -3,7 +3,7 @@ use std::io::{self, BufRead};
 use byteorder::{LittleEndian, WriteBytesExt};
 use bytes::Bytes;
 use num_enum::{FromPrimitive, IntoPrimitive};
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 
 use crate::{
     errors::{ensure, ensure_eq, Result},
@@ -236,15 +236,15 @@ impl UserAttribute {
     }
 
     /// Create a self-signature
-    pub fn sign<R, P, K>(
+    pub fn sign<RNG, P, K>(
         &self,
-        rng: R,
+        rng: &mut RNG,
         signer_sec_key: &P,
         signer_pub_key: &K,
         key_pw: &Password,
     ) -> Result<SignedUserAttribute>
     where
-        R: CryptoRng + Rng,
+        RNG: CryptoRng + RngCore,
         P: SigningKey,
         K: KeyDetails + Serialize,
     {
@@ -260,16 +260,16 @@ impl UserAttribute {
     }
 
     /// Create a third-party signature
-    pub fn sign_third_party<R, P, K>(
+    pub fn sign_third_party<RNG, P, K>(
         &self,
-        mut rng: R,
+        rng: &mut RNG,
         signer: &P,
         signer_pw: &Password,
         signee: &K,
         typ: SignatureType,
     ) -> Result<SignedUserAttribute>
     where
-        R: CryptoRng + Rng,
+        RNG: CryptoRng + RngCore,
         P: SigningKey,
         K: KeyDetails + Serialize,
     {
@@ -283,7 +283,7 @@ impl UserAttribute {
             Subpacket::regular(SubpacketData::IssuerFingerprint(signer.fingerprint()))?,
         ];
 
-        let mut config = SignatureConfig::from_key(&mut rng, signer, typ)?;
+        let mut config = SignatureConfig::from_key(rng, signer, typ)?;
 
         config.hashed_subpackets = hashed_subpackets;
         if signer.version() <= KeyVersion::V4 {
@@ -292,8 +292,14 @@ impl UserAttribute {
             ))?];
         }
 
-        let sig =
-            config.sign_certification_third_party(signer, signer_pw, signee, self.tag(), &self)?;
+        let sig = config.sign_certification_third_party(
+            rng,
+            signer,
+            signer_pw,
+            signee,
+            self.tag(),
+            &self,
+        )?;
 
         Ok(SignedUserAttribute::new(self.clone(), vec![sig]))
     }

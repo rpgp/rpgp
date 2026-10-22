@@ -1,6 +1,6 @@
 use bytes::BytesMut;
 use log::debug;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngCore};
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
@@ -582,7 +582,7 @@ fn pad(plain: &[u8]) -> Vec<u8> {
 }
 
 /// ECDH encryption.
-pub fn encrypt<R: CryptoRng + Rng>(
+pub fn encrypt<R: CryptoRng + RngCore>(
     mut rng: R,
     params: &EcdhPublicParams,
     fingerprint: &[u8],
@@ -679,7 +679,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
 
 /// Derive a shared secret in encryption, for a Rust Crypto curve.
 /// Returns a pair of `(our_public key, shared_secret)`.
-fn derive_shared_secret_encryption<C, R: CryptoRng + Rng>(
+fn derive_shared_secret_encryption<C, R: CryptoRng + RngCore>(
     mut rng: R,
     their_public: &elliptic_curve::PublicKey<C>,
 ) -> Result<(Vec<u8>, Vec<u8>)>

@@ -8,7 +8,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use crc24::Crc24Hasher;
 use generic_array::typenum::U64;
 use log::debug;
-use rand::{CryptoRng, Rng};
+use rand::{thread_rng, CryptoRng, Rng, RngCore};
 
 use super::{ArmorOptions, RawSessionKey};
 use crate::{
@@ -216,7 +216,6 @@ impl<'a> SigningConfig<'a> {
         }
     }
 }
-
 /// The default chunk size for partial packets.
 pub const DEFAULT_PARTIAL_CHUNK_SIZE: u32 = 1024 * 512;
 
@@ -251,13 +250,13 @@ impl Builder<'_, DummyReader> {
     }
 }
 
-fn prepare<R>(
-    mut rng: R,
+fn prepare<RNG>(
+    rng: &mut RNG,
     typ: SignatureType,
     keys: &[SigningConfig<'_>],
 ) -> Result<Vec<(crate::packet::SignatureConfig, OnePassSignature)>>
 where
-    R: Rng + CryptoRng,
+    RNG: CryptoRng + RngCore,
 {
     let mut out = Vec::new();
 
@@ -272,9 +271,7 @@ where
         // prepare signing
         let mut sig_config = match config.key.version() {
             KeyVersion::V4 => crate::packet::SignatureConfig::v4(typ, algorithm, hash_alg),
-            KeyVersion::V6 => {
-                crate::packet::SignatureConfig::v6(&mut rng, typ, algorithm, hash_alg)?
-            }
+            KeyVersion::V6 => crate::packet::SignatureConfig::v6(rng, typ, algorithm, hash_alg)?,
             v => bail!("unsupported key version {:?}", v),
         };
 
@@ -312,13 +309,13 @@ where
 
 impl<'a, R: Read> Builder<'a, R, NoEncryption> {
     /// Encrypt this message using Seipd V1.
-    pub fn seipd_v1<RAND>(
+    pub fn seipd_v1<RNG>(
         self,
-        mut rng: RAND,
+        mut rng: RNG,
         sym_alg: SymmetricKeyAlgorithm,
     ) -> Builder<'a, R, EncryptionSeipdV1>
     where
-        RAND: CryptoRng + Rng,
+        RNG: CryptoRng + RngCore,
     {
         let session_key = sym_alg.new_session_key(&mut rng);
         Builder {
@@ -340,15 +337,15 @@ impl<'a, R: Read> Builder<'a, R, NoEncryption> {
 
 impl<'a, R: Read> Builder<'a, R, NoEncryption> {
     /// Encrypt this message using Seipd V2.
-    pub fn seipd_v2<RAND>(
+    pub fn seipd_v2<RNG>(
         self,
-        mut rng: RAND,
+        mut rng: RNG,
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
         chunk_size: ChunkSize,
     ) -> Builder<'a, R, EncryptionSeipdV2>
     where
-        RAND: CryptoRng + Rng,
+        RNG: CryptoRng + RngCore,
     {
         let session_key = sym_alg.new_session_key(&mut rng);
 
@@ -439,14 +436,14 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     /// [PK ESK]: https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio
     /// # References
     /// [RFC 9580 &sect; 5.1 - Public Key Encrypted Session Key Packet](https://www.rfc-editor.org/rfc/rfc9580#section-5.1)
-    pub fn encrypt_to_key<RAND, E>(&mut self, mut rng: RAND, enc: &E) -> Result<&mut Self>
+    pub fn encrypt_to_key<RAND, E>(&mut self, rng: RAND, enc: &E) -> Result<&mut Self>
     where
-        RAND: CryptoRng + Rng,
+        RAND: CryptoRng + RngCore,
         E: EncryptionKey,
     {
         // Encrypt (asym) the session key using the provided public key.
         let pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
-            &mut rng,
+            rng,
             &self.encryption.session_key,
             self.encryption.sym_alg,
             enc,
@@ -458,14 +455,14 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     /// Encrypt to a public key, but leave the recipient field unset
     ///
     /// See [encrypt_to_key][Self::encrypt_to_key] for more information
-    pub fn encrypt_to_key_anonymous<RAND, E>(&mut self, mut rng: RAND, enc: &E) -> Result<&mut Self>
+    pub fn encrypt_to_key_anonymous<RAND, E>(&mut self, rng: RAND, enc: &E) -> Result<&mut Self>
     where
-        RAND: CryptoRng + Rng,
+        RAND: CryptoRng + RngCore,
         E: EncryptionKey,
     {
         // Encrypt (asym) the session key using the provided public key.
         let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
-            &mut rng,
+            rng,
             &self.encryption.session_key,
             self.encryption.sym_alg,
             enc,
@@ -604,14 +601,14 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// [PK ESK]: https://www.rfc-editor.org/rfc/rfc9580#name-public-key-encrypted-sessio
     /// # References
     /// [RFC 9580 &sect; 5.1 - Public Key Encrypted Session Key Packet](https://www.rfc-editor.org/rfc/rfc9580#section-5.1)
-    pub fn encrypt_to_key<RAND, E>(&mut self, mut rng: RAND, enc: &E) -> Result<&mut Self>
+    pub fn encrypt_to_key<RAND, E>(&mut self, rng: RAND, enc: &E) -> Result<&mut Self>
     where
-        RAND: CryptoRng + Rng,
+        RAND: CryptoRng + RngCore,
         E: EncryptionKey,
     {
         // Encrypt (asym) the session key using the provided public key.
         let pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
-            &mut rng,
+            rng,
             &self.encryption.session_key,
             enc,
         )?;
@@ -622,14 +619,14 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// Encrypt to a public key, but leave the recipient field unset
     ///
     /// See [encrypt_to_key][Self::encrypt_to_key] for more information
-    pub fn encrypt_to_key_anonymous<RAND, E>(&mut self, mut rng: RAND, enc: &E) -> Result<&mut Self>
+    pub fn encrypt_to_key_anonymous<RAND, E>(&mut self, rng: RAND, enc: &E) -> Result<&mut Self>
     where
-        RAND: CryptoRng + Rng,
+        RAND: CryptoRng + RngCore,
         E: EncryptionKey,
     {
         // Encrypt (asym) the session key using the provided public key.
         let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
-            &mut rng,
+            rng,
             &self.encryption.session_key,
             enc,
         )?;
@@ -682,16 +679,16 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// - [ArmorOptions]
     pub fn encrypt_with_password<RAND>(
         &mut self,
-        mut rng: RAND,
+        rng: RAND,
         s2k: StringToKey,
         msg_pw: &Password,
     ) -> Result<&mut Self>
     where
-        RAND: Rng + CryptoRng,
+        RAND: CryptoRng + RngCore,
     {
         // Encrypt (sym) the session key using the provided password.
         let esk = SymKeyEncryptedSessionKey::encrypt_v6(
-            &mut rng,
+            rng,
             msg_pw,
             &self.encryption.session_key,
             s2k,
@@ -819,9 +816,9 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out to a writer.
-    pub fn to_writer<RAND, W>(self, rng: RAND, out: W) -> Result<()>
+    pub fn to_writer<RNG, W>(self, rng: RNG, out: W) -> Result<()>
     where
-        RAND: Rng + CryptoRng,
+        RNG: CryptoRng + RngCore,
         W: std::io::Write,
     {
         let sign_typ = self.sign_typ;
@@ -897,14 +894,14 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data not as binary, but ascii armor encoded.
-    pub fn to_armored_writer<RAND, W>(
+    pub fn to_armored_writer<RNG, W>(
         self,
-        rng: RAND,
+        rng: RNG,
         opts: ArmorOptions<'_>,
         mut out: W,
     ) -> Result<()>
     where
-        RAND: Rng + CryptoRng,
+        RNG: CryptoRng + RngCore,
         W: std::io::Write,
     {
         let typ = armor::BlockType::Message;
@@ -935,9 +932,9 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out directly to a file.
-    pub fn to_file<RAND, P>(self, rng: RAND, out_path: P) -> Result<()>
+    pub fn to_file<RNG, P>(self, rng: RNG, out_path: P) -> Result<()>
     where
-        RAND: Rng + CryptoRng,
+        RNG: CryptoRng + RngCore,
         P: AsRef<Path>,
     {
         let out_path: &Path = out_path.as_ref();
@@ -960,14 +957,14 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out directly to a file.
-    pub fn to_armored_file<RAND, P>(
+    pub fn to_armored_file<RNG, P>(
         self,
-        rng: RAND,
+        rng: RNG,
         out_path: P,
         opts: ArmorOptions<'_>,
     ) -> Result<()>
     where
-        RAND: Rng + CryptoRng,
+        RNG: CryptoRng + RngCore,
         P: AsRef<Path>,
     {
         let out_path: &Path = out_path.as_ref();
@@ -990,20 +987,18 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out directly to a `Vec<u8>`.
-    pub fn to_vec<RAND>(self, rng: RAND) -> Result<Vec<u8>>
-    where
-        RAND: Rng + CryptoRng,
-    {
+    pub fn to_vec<RNG: CryptoRng + RngCore>(self, rng: RNG) -> Result<Vec<u8>> {
         let mut out = Vec::new();
         self.to_writer(rng, &mut out)?;
         Ok(out)
     }
 
     /// Write the data as ascii armored data, directly to a `String`.
-    pub fn to_armored_string<RAND>(self, rng: RAND, opts: ArmorOptions<'_>) -> Result<String>
-    where
-        RAND: Rng + CryptoRng,
-    {
+    pub fn to_armored_string<RNG: CryptoRng + RngCore>(
+        self,
+        rng: RNG,
+        opts: ArmorOptions<'_>,
+    ) -> Result<String> {
         let mut out = Vec::new();
         self.to_armored_writer(rng, opts, &mut out)?;
         let out = std::string::String::from_utf8(out).expect("ascii armor is utf8");
@@ -1012,8 +1007,8 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn to_writer_inner<RAND, R, W, E>(
-    mut rng: RAND,
+fn to_writer_inner<RNG, R, W, E>(
+    mut rng: RNG,
     _name: Bytes,
     source: R,
     source_len: Option<u32>,
@@ -1026,7 +1021,7 @@ fn to_writer_inner<RAND, R, W, E>(
     out: W,
 ) -> Result<()>
 where
-    RAND: Rng + CryptoRng,
+    RNG: CryptoRng + RngCore,
     R: std::io::Read,
     W: std::io::Write,
     E: Encryption,
@@ -1349,19 +1344,16 @@ impl<R: std::io::Read> std::io::Read for SignatureHashers<R> {
 }
 
 impl<'a, R: std::io::Read> SignGenerator<'a, R> {
-    fn new<RAND>(
-        mut rng: RAND,
+    fn new<RNG: CryptoRng + RngCore>(
+        rng: &mut RNG,
         typ: SignatureType,
         literal_data_header: LiteralDataHeader,
         chunk_size: u32,
         source: R,
         signers: Vec<SigningConfig<'a>>,
         source_len: Option<u32>,
-    ) -> Result<Self>
-    where
-        RAND: CryptoRng + Rng,
-    {
-        let prep = prepare(&mut rng, typ, &signers)?;
+    ) -> Result<Self> {
+        let prep = prepare(rng, typ, &signers)?;
         let mut configs = VecDeque::with_capacity(prep.len());
         let mut sign_hashers = VecDeque::with_capacity(prep.len());
         let mut ops = VecDeque::with_capacity(prep.len());
@@ -1491,9 +1483,11 @@ impl<R: std::io::Read> std::io::Read for SignGenerator<'_, R> {
                         {
                             let mut writer = buffer.writer();
 
+                            let mut rng = thread_rng(); // FIXME
+
                             // sign and write the signature into the buffer
                             hasher
-                                .sign(signer.key, &signer.key_pw)
+                                .sign(&mut rng, signer.key, &signer.key_pw)
                                 .and_then(|sig| sig.to_writer_with_header(&mut writer))
                                 .map_err(|e| {
                                     std::io::Error::new(

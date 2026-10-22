@@ -1,7 +1,7 @@
 use digest::{const_oid::AssociatedOid, Digest};
 use md5::Md5;
 use num_bigint::ModInverse;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngCore};
 use ripemd::Ripemd160;
 use rsa::{
     pkcs1v15::{Pkcs1v15Encrypt, Signature as RsaSignature, SigningKey, VerifyingKey},
@@ -152,8 +152,16 @@ impl Decryptor for SecretKey {
 }
 
 impl Signer for SecretKey {
+    type SignerFields = ();
+
     /// Sign using RSA, with PKCS1v15 padding.
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
+    fn sign<RNG: CryptoRng + RngCore + ?Sized>(
+        &self,
+        _rng: &mut RNG,
+        hash: HashAlgorithm,
+        digest: &[u8],
+        _fields: Self::SignerFields,
+    ) -> Result<SignatureBytes> {
         let sig = match hash {
             HashAlgorithm::None => return Err(format_err!("none")),
             HashAlgorithm::Md5 => sign_int::<Md5>(self.0.clone(), digest),
@@ -180,7 +188,7 @@ impl From<RsaPrivateKey> for SecretKey {
 }
 
 /// RSA encryption using PKCS1v15 padding.
-pub fn encrypt<R: CryptoRng + Rng>(
+pub fn encrypt<R: CryptoRng + RngCore>(
     mut rng: R,
     key: &RsaPublicKey,
     plaintext: &[u8],

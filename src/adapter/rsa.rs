@@ -17,8 +17,8 @@ use crate::{
     errors::{bail, Result},
     packet::{PubKeyInner, PublicKey},
     types::{
-        Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicParams, RsaPublicParams,
-        SignatureBytes, SigningKey, Timestamp, VerifyingKey,
+        Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicParams, RngTrait,
+        RsaPublicParams, SignatureBytes, SigningKey, Timestamp, VerifyingKey,
     },
 };
 
@@ -115,6 +115,7 @@ where
 {
     fn sign(
         &self,
+        _rng: &mut dyn RngTrait,
         _key_pw: &Password,
         hash: HashAlgorithm,
         prehashed_data: &[u8],

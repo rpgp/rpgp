@@ -1,7 +1,7 @@
 use cx448::x448;
 use hkdf::HkdfExtract;
 use log::debug;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngCore};
 use sha2::Sha512;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
@@ -165,7 +165,7 @@ pub fn hkdf(
 /// X448 encryption.
 ///
 /// Returns (ephemeral, encrypted session key)
-pub fn encrypt<R: CryptoRng + Rng>(
+pub fn encrypt<R: CryptoRng + RngCore>(
     mut rng: R,
     recipient_public: &X448PublicParams,
     plain: &[u8],

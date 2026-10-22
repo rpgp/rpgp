@@ -12,7 +12,8 @@ use pgp::{
     packet::{self, PubKeyInner, PublicKey, SecretSubkey, SignatureConfig},
     types::{
         EcdhPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, PacketHeaderVersion,
-        Password, PkeskBytes, PublicParams, SignatureBytes, SigningKey, Timestamp, VerifyingKey,
+        Password, PkeskBytes, PublicParams, RngTrait, SignatureBytes, SigningKey, Timestamp,
+        VerifyingKey,
     },
 };
 use rand::SeedableRng;
@@ -100,6 +101,7 @@ impl KeyDetails for FakeHsm {
 impl SigningKey for FakeHsm {
     fn sign(
         &self,
+        _rng: &mut dyn RngTrait,
         _key_pw: &Password,
         _hash: HashAlgorithm,
         data: &[u8],
@@ -480,7 +482,8 @@ fn card_sign() {
                 .unwrap(),
         ];
 
-        let signature = config.sign(&hsm, &"".into(), DATA).unwrap();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let signature = config.sign(&mut rng, &hsm, &"".into(), DATA).unwrap();
 
         signature.verify(&pubkey, DATA).expect("ok");
     }
@@ -510,7 +513,10 @@ fn ecdsa_signer() {
             .unwrap(),
     ];
 
-    let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+    let signature = config
+        .sign(&mut rng, &signer, &Password::empty(), DATA)
+        .unwrap();
 
     signature.verify(&signer, DATA).expect("ok");
 }
@@ -540,7 +546,10 @@ fn rsa_signer() {
             .unwrap(),
     ];
 
-    let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+    let signature = config
+        .sign(&mut rng, &signer, &Password::empty(), DATA)
+        .unwrap();
 
     signature.verify(&signer, DATA).expect("ok");
 }
@@ -573,7 +582,7 @@ fn ecdsa_signed_public_key() {
     );
 
     let signed_public_key = SignedPublicKey::bind_with_signing_key(
-        rand::thread_rng(),
+        &mut rand::thread_rng(),
         &signer,
         signer.public_key().clone(),
         details,
@@ -656,7 +665,7 @@ fn ecdsa_signed_public_key_with_signing_subkey() {
     };
 
     let signed_public_key = SignedPublicKey::bind_with_signing_key(
-        rand::thread_rng(),
+        &mut rand::thread_rng(),
         &signer,
         signer.public_key().clone(),
         details,

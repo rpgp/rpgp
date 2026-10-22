@@ -95,7 +95,7 @@ fn keygen(
 
     // Produce binding self-signatures that link all the components together
     let signed = secret_key_params
-        .generate(thread_rng())
+        .generate(&mut thread_rng())
         .expect("Generate plain key");
 
     Ok(signed)

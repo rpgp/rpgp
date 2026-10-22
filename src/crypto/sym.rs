@@ -11,7 +11,7 @@ use des::TdesEde3;
 use idea::Idea;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngCore};
 use twofish::Twofish;
 use zeroize::Zeroizing;
 
@@ -431,7 +431,7 @@ impl SymmetricKeyAlgorithm {
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
-    pub fn encrypt<R: CryptoRng + Rng>(
+    pub fn encrypt<R: CryptoRng + RngCore>(
         self,
         mut rng: R,
         key: &[u8],
@@ -462,7 +462,7 @@ impl SymmetricKeyAlgorithm {
         Ok(ciphertext)
     }
 
-    pub fn encrypt_protected<R: CryptoRng + Rng>(
+    pub fn encrypt_protected<R: CryptoRng + RngCore>(
         self,
         mut rng: R,
         key: &[u8],

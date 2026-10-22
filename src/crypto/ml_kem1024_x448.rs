@@ -6,7 +6,7 @@ use ml_kem::{
     kem::{Decapsulate, DecapsulationKey, Encapsulate, EncapsulationKey},
     KemCore, MlKem1024, MlKem1024Params,
 };
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngCore};
 use sha3::{Digest, Sha3_256};
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
@@ -220,7 +220,7 @@ fn multi_key_combine(
 /// - ecdh_ciphertext
 /// - ml_kem_ciphertext
 /// - encrypted data
-pub fn encrypt<R: CryptoRng + Rng>(
+pub fn encrypt<R: CryptoRng + RngCore>(
     mut rng: R,
     ecdh_public_key: &PublicKey,
     ml_kem_public_key: &EncapsulationKey<MlKem1024Params>,
@@ -256,7 +256,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
 }
 
 /// <https://www.rfc-editor.org/info/rfc9980/#name-x448-kem>
-fn x448_kem_encaps<R: CryptoRng + Rng>(
+fn x448_kem_encaps<R: CryptoRng + RngCore>(
     mut rng: R,
     public_key: &PublicKey,
 ) -> (PublicKey, [u8; 56]) {
@@ -270,7 +270,7 @@ fn x448_kem_encaps<R: CryptoRng + Rng>(
     (ephemeral_public, *shared_secret.as_bytes())
 }
 
-fn ml_kem_encaps<R: CryptoRng + Rng>(
+fn ml_kem_encaps<R: CryptoRng + RngCore>(
     mut rng: R,
     public_key: &EncapsulationKey<MlKem1024Params>,
 ) -> (Box<[u8; 1568]>, [u8; 32]) {

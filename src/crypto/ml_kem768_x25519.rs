@@ -5,7 +5,7 @@ use ml_kem::{
     kem::{Decapsulate, DecapsulationKey, Encapsulate, EncapsulationKey},
     KemCore, MlKem768, MlKem768Params,
 };
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, RngCore};
 use sha3::{Digest, Sha3_256};
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::{ZeroizeOnDrop, Zeroizing};
@@ -224,7 +224,7 @@ fn multi_key_combine(
 /// - ecdh_ciphertext
 /// - ml_kem_ciphertext
 /// - encrypted data
-pub fn encrypt<R: CryptoRng + Rng>(
+pub fn encrypt<R: CryptoRng + RngCore>(
     mut rng: R,
     ecdh_public_key: &x25519_dalek::PublicKey,
     ml_kem_public_key: &EncapsulationKey<MlKem768Params>,
@@ -260,7 +260,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
 }
 
 /// <https://www.rfc-editor.org/info/rfc9980/#name-x25519-kem>
-fn x25519_kem_encaps<R: CryptoRng + Rng>(
+fn x25519_kem_encaps<R: CryptoRng + RngCore>(
     mut rng: R,
     public_key: &x25519_dalek::PublicKey,
 ) -> ([u8; 32], [u8; 32]) {
@@ -276,7 +276,7 @@ fn x25519_kem_encaps<R: CryptoRng + Rng>(
     (ephemeral_public.to_bytes(), shared_secret.to_bytes())
 }
 
-fn ml_kem_encaps<R: CryptoRng + Rng>(
+fn ml_kem_encaps<R: CryptoRng + RngCore>(
     mut rng: R,
     public_key: &EncapsulationKey<MlKem768Params>,
 ) -> (Box<[u8; 1088]>, [u8; 32]) {

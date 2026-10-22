@@ -46,6 +46,6 @@ pub fn build_key(kt: KeyType, kt_sub: KeyType) -> SignedSecretKey {
         .build()
         .unwrap();
     key_params
-        .generate(thread_rng())
+        .generate(&mut thread_rng())
         .expect("failed to generate secret key, encrypted")
 }

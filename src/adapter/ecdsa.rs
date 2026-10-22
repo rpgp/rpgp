@@ -18,7 +18,7 @@ use crate::{
     packet::{PubKeyInner, PublicKey},
     types::{
         EcdsaPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicParams,
-        SignatureBytes, SigningKey, Timestamp, VerifyingKey,
+        RngTrait, SignatureBytes, SigningKey, Timestamp, VerifyingKey,
     },
 };
 
@@ -133,6 +133,7 @@ where
 {
     fn sign(
         &self,
+        _rng: &mut dyn RngTrait,
         _key_pw: &Password,
         hash: HashAlgorithm,
         prehashed_data: &[u8],

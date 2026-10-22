@@ -8,7 +8,7 @@ use pgp::{
     packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
     types::Seipdv1ReadMode,
 };
-use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{CryptoRng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use snafu::AsErrorSource;
@@ -17,7 +17,7 @@ const SYM_ALG: SymmetricKeyAlgorithm = SymmetricKeyAlgorithm::AES256;
 
 fn make_seipdv1_msg<RAND>(mut rng: RAND, len: usize) -> (Vec<u8>, RawSessionKey)
 where
-    RAND: CryptoRng + Rng,
+    RAND: CryptoRng + RngCore,
 {
     let input_data: Vec<u8> = b"hello world".iter().cycle().cloned().take(len).collect();
 
@@ -42,7 +42,7 @@ where
 
 fn random_session_key<RAND>(mut rng: RAND) -> RawSessionKey
 where
-    RAND: CryptoRng + Rng,
+    RAND: CryptoRng + RngCore,
 {
     let mut raw = vec![0u8; SYM_ALG.key_size()];
     rng.fill_bytes(&mut raw);
