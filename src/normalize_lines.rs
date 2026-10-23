@@ -150,8 +150,8 @@ fn replace_newlines<'a>(input: &'a [u8], replacement: &[u8]) -> Cow<'a, [u8]> {
 mod tests {
     use std::io::Read;
 
-    use rand::{Rng, SeedableRng};
-    use rand_chacha::ChaCha8Rng;
+    use chacha20::ChaCha8Rng;
+    use rand::{RngExt, SeedableRng};
 
     use super::*;
     use crate::util::test::{check_strings, random_string, ChaosReader};
@@ -206,7 +206,7 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(1);
 
         for _ in 0..100 {
-            let size = rng.gen_range(1..10000);
+            let size = rng.random_range(1..10000);
             let input = random_string(&mut rng, size);
             let reader = ChaosReader::new(&mut rng, input.clone());
 

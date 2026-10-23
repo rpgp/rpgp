@@ -35,10 +35,10 @@
 //!     errors::Result,
 //!     types::Password,
 //! };
-//! use rand::thread_rng;
+//! use rand::rng;
 //! use smallvec::smallvec;
 //!
-//! let mut rng = thread_rng();
+//! let mut rng = rng();
 //!
 //! // Configure the shape of an OpenPGP Transferable Secret Key that we want to generate
 //! let mut key_params = SecretKeyParamsBuilder::default();

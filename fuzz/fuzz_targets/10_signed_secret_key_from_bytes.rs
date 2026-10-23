@@ -1,12 +1,12 @@
 #![no_main]
 
+use chacha20::ChaCha8Rng;
 use libfuzzer_sys::fuzz_target;
 use pgp::{
     composed::Deserializable,
     types::{EncryptionKey, KeyDetails, Password, SigningKey, VerifyingKey},
 };
 use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 
 // build secret key from binary
 fuzz_target!(|data: &[u8]| {

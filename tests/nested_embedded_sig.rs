@@ -1,3 +1,4 @@
+use chacha20::ChaCha8Rng;
 use pgp::{
     composed::{
         Deserializable, KeyType, SecretKeyParamsBuilder, SignedSecretKey, SubkeyParamsBuilder,
@@ -8,7 +9,6 @@ use pgp::{
     types::{CompressionAlgorithm, KeyVersion, Password},
 };
 use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 
 #[test]
 /// Create a TSK with a deeply nested embedded subpacket structure,
