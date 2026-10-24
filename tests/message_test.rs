@@ -958,23 +958,35 @@ fn test_mock_pq_cert_leniency_unknown_algo_mpi() {
 #[test]
 fn test_mock_pq_cert_leniency_ecdsa_opaque() {
     pretty_env_logger::try_init().ok();
-    let res = SignedPublicKey::from_armor_file("./tests/mock_pq/ecdsa_opaque_small.pub.asc");
+    let (key, _) =
+        SignedPublicKey::from_armor_file("./tests/mock_pq/ecdsa_opaque_small.pub.asc").unwrap();
 
-    assert!(res.is_err());
+    // The subkey's key material is not an MPI, so it can't be parsed, and is skipped.
+    // The rest of the certificate stays usable.
+    assert!(key.public_subkeys.is_empty());
+    key.verify_bindings().unwrap();
 }
 #[test]
 fn test_mock_pq_cert_leniency_eddsa_opaque() {
     pretty_env_logger::try_init().ok();
-    let res = SignedPublicKey::from_armor_file("./tests/mock_pq/eddsa_opaque_small.pub.asc");
+    let (key, _) =
+        SignedPublicKey::from_armor_file("./tests/mock_pq/eddsa_opaque_small.pub.asc").unwrap();
 
-    assert!(res.is_err());
+    // The subkey's key material is not an MPI, so it can't be parsed, and is skipped.
+    // The rest of the certificate stays usable.
+    assert!(key.public_subkeys.is_empty());
+    key.verify_bindings().unwrap();
 }
 #[test]
 fn test_mock_pq_cert_leniency_ecdh_opaque() {
     pretty_env_logger::try_init().ok();
-    let res = SignedPublicKey::from_armor_file("./tests/mock_pq/ecdh_opaque_small.pub.asc");
+    let (key, _) =
+        SignedPublicKey::from_armor_file("./tests/mock_pq/ecdh_opaque_small.pub.asc").unwrap();
 
-    assert!(res.is_err());
+    // The subkey's key material is not an MPI, so it can't be parsed, and is skipped.
+    // The rest of the certificate stays usable.
+    assert!(key.public_subkeys.is_empty());
+    key.verify_bindings().unwrap();
 }
 
 #[test]
