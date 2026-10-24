@@ -154,10 +154,10 @@ parse_dumps!(
     (
         test_parse_dumps_0,
         0,
-        17_711,
+        17_712,
         // Hash::Other(4)
         0,
-        3282,
+        3281,
         20_993
     ),
     (
@@ -231,11 +231,11 @@ parse_dumps!(
     (
         test_parse_dumps_8,
         8,
-        17_718,
+        17_720,
         // - Hash::Other(5)
         // - Elgamal verify
         5,
-        3278,
+        3276,
         21_001
     ),
     (
@@ -1922,9 +1922,11 @@ fn test_tolerate_bad_subkey() -> TestResult {
         SignedPublicKey::from_armor_single(File::open("./tests/ecdh/interop/bad_subkey.pub")?)
             .expect("parse");
 
-    assert_eq!(public.public_subkeys.len(), 1);
+    // The ECDH subkey has an unknown curve, and its key material is not an MPI.
+    // It can't be parsed, so it's skipped (together with its binding signature).
+    assert!(public.public_subkeys.is_empty());
 
-    let sig = DetachedSignature::from_file("./tests/ecdh/interop/sig")?;
+    let (sig, _) = DetachedSignature::from_armor_file("./tests/ecdh/interop/sig")?;
 
     sig.verify(&public.primary_key, DATA.as_bytes())
         .expect("verify ok");
