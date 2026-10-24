@@ -7,7 +7,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::{
     crypto::{ecc_curve::ECCCurve, hash::HashAlgorithm, Signer},
-    errors::{bail, ensure, ensure_eq, unsupported_err, Error, Result},
+    errors::{bail, ensure, unsupported_err, Error, Result},
     ser::Serialize,
     types::{EcdsaPublicParams, Mpi, SignatureBytes},
 };
@@ -274,16 +274,18 @@ pub fn verify(
     match p {
         EcdsaPublicParams::P256 { key, .. } => {
             const FLEN: usize = 32;
-            ensure_eq!(sig.len(), 2);
-            let r = sig[0].as_ref();
-            let s = sig[1].as_ref();
+            let [r, s] = sig else {
+                bail!("invalid signature: expected 2 values, got {}", sig.len());
+            };
+            let r = r.as_ref();
+            let s = s.as_ref();
             ensure!(r.len() <= FLEN, "invalid R (len)");
             ensure!(s.len() <= FLEN, "invalid S (len)");
-            let mut sig_bytes = [0u8; 2 * FLEN];
-
             // add padding if the values were encoded short
-            sig_bytes[(FLEN - r.len())..FLEN].copy_from_slice(r);
-            sig_bytes[FLEN + (FLEN - s.len())..].copy_from_slice(s);
+            let mut sig_bytes = vec![0u8; FLEN - r.len()];
+            sig_bytes.extend_from_slice(r);
+            sig_bytes.resize(2 * FLEN - s.len(), 0);
+            sig_bytes.extend_from_slice(s);
 
             let sig = p256::ecdsa::Signature::try_from(&sig_bytes[..])?;
             let pk = p256::ecdsa::VerifyingKey::from_affine(key.as_affine().to_owned())?;
@@ -294,19 +296,20 @@ pub fn verify(
         }
         EcdsaPublicParams::P384 { key, .. } => {
             const FLEN: usize = 48;
-            ensure_eq!(sig.len(), 2);
-
-            let r = sig[0].as_ref();
-            let s = sig[1].as_ref();
+            let [r, s] = sig else {
+                bail!("invalid signature: expected 2 values, got {}", sig.len());
+            };
+            let r = r.as_ref();
+            let s = s.as_ref();
 
             ensure!(r.len() <= FLEN, "invalid R (len)");
             ensure!(s.len() <= FLEN, "invalid S (len)");
 
-            let mut sig_bytes = [0u8; 2 * FLEN];
-
             // add padding if the values were encoded short
-            sig_bytes[(FLEN - r.len())..FLEN].copy_from_slice(r);
-            sig_bytes[FLEN + (FLEN - s.len())..].copy_from_slice(s);
+            let mut sig_bytes = vec![0u8; FLEN - r.len()];
+            sig_bytes.extend_from_slice(r);
+            sig_bytes.resize(2 * FLEN - s.len(), 0);
+            sig_bytes.extend_from_slice(s);
 
             let pk = p384::ecdsa::VerifyingKey::from_affine(key.as_affine().to_owned())?;
             let sig = p384::ecdsa::Signature::try_from(&sig_bytes[..])?;
@@ -317,19 +320,20 @@ pub fn verify(
         }
         EcdsaPublicParams::P521 { key, .. } => {
             const FLEN: usize = 66;
-            ensure_eq!(sig.len(), 2);
-
-            let r = sig[0].as_ref();
-            let s = sig[1].as_ref();
+            let [r, s] = sig else {
+                bail!("invalid signature: expected 2 values, got {}", sig.len());
+            };
+            let r = r.as_ref();
+            let s = s.as_ref();
 
             ensure!(r.len() <= FLEN, "invalid R (len)");
             ensure!(s.len() <= FLEN, "invalid S (len)");
 
-            let mut sig_bytes = [0u8; 2 * FLEN];
-
             // add padding if the values were encoded short
-            sig_bytes[(FLEN - r.len())..FLEN].copy_from_slice(r);
-            sig_bytes[FLEN + (FLEN - s.len())..].copy_from_slice(s);
+            let mut sig_bytes = vec![0u8; FLEN - r.len()];
+            sig_bytes.extend_from_slice(r);
+            sig_bytes.resize(2 * FLEN - s.len(), 0);
+            sig_bytes.extend_from_slice(s);
 
             let pk = p521::ecdsa::VerifyingKey::from_affine(key.as_affine().to_owned())?;
             let sig = p521::ecdsa::Signature::try_from(&sig_bytes[..])?;
@@ -340,16 +344,18 @@ pub fn verify(
         }
         EcdsaPublicParams::Secp256k1 { key, .. } => {
             const FLEN: usize = 32;
-            ensure_eq!(sig.len(), 2);
-            let r = sig[0].as_ref();
-            let s = sig[1].as_ref();
+            let [r, s] = sig else {
+                bail!("invalid signature: expected 2 values, got {}", sig.len());
+            };
+            let r = r.as_ref();
+            let s = s.as_ref();
             ensure!(r.len() <= FLEN, "invalid R (len)");
             ensure!(s.len() <= FLEN, "invalid S (len)");
-            let mut sig_bytes = [0u8; 2 * FLEN];
-
             // add padding if the values were encoded short
-            sig_bytes[(FLEN - r.len())..FLEN].copy_from_slice(r);
-            sig_bytes[FLEN + (FLEN - s.len())..].copy_from_slice(s);
+            let mut sig_bytes = vec![0u8; FLEN - r.len()];
+            sig_bytes.extend_from_slice(r);
+            sig_bytes.resize(2 * FLEN - s.len(), 0);
+            sig_bytes.extend_from_slice(s);
 
             let pk = k256::ecdsa::VerifyingKey::from_affine(key.as_affine().to_owned())?;
             let sig = k256::ecdsa::Signature::try_from(&sig_bytes[..])?;

@@ -363,7 +363,9 @@ impl EcdhPublicParams {
             ECCCurve::Curve25519Legacy => {
                 ensure_eq!(p.len(), 33, "invalid public key length");
                 // public part of the ephemeral key (removes 0x40 prefix)
-                let public_key = &p.as_ref()[1..];
+                let Some(public_key) = p.as_ref().get(1..) else {
+                    bail!("invalid public key length");
+                };
 
                 // create montgomery point
                 let mut public_key_arr = [0u8; 32];
