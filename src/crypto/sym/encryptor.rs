@@ -168,14 +168,17 @@ where
         debug!("protected encrypt stream");
 
         let bs = <M as BlockSizeUser>::block_size();
-        let mut prefix = vec![0u8; bs + 2];
+        let mut prefix = Vec::with_capacity(bs + 2);
 
         // prefix
-        rng.fill_bytes(&mut prefix[..bs]);
+        prefix.resize(bs, 0);
+        rng.fill_bytes(&mut prefix);
 
         // add quick check
-        prefix[bs] = prefix[bs - 2];
-        prefix[bs + 1] = prefix[bs - 1];
+        let Some(&quick_check) = prefix.last_chunk::<2>() else {
+            bail!("block size {} is too small", bs);
+        };
+        prefix.extend_from_slice(&quick_check);
 
         // checksum over unencrypted data
         let mut hasher = Sha1::default();
@@ -301,12 +304,12 @@ where
                 let mdc_header = [0xD3, 0x14];
                 hasher.update(mdc_header);
 
-                let mut mdc = BytesMut::zeroed(22);
-                mdc[..2].copy_from_slice(&mdc_header);
+                let mut mdc = BytesMut::with_capacity(22);
+                mdc.extend_from_slice(&mdc_header);
 
                 // mdc body
-                let checksum = &hasher.finalize()[..20];
-                mdc[2..22].copy_from_slice(checksum);
+                let checksum = hasher.finalize();
+                mdc.extend_from_slice(&checksum);
 
                 encryptor.encrypt(&mut mdc[..]);
                 *self = Self::Mdc { mdc: mdc.freeze() };
@@ -334,18 +337,15 @@ where
         match self {
             Self::Prefix { prefix, .. } => {
                 // Prefix
-                let to_write = buf.len().min(prefix.remaining());
-                prefix.copy_to_slice(&mut buf[..to_write]);
+                let to_write = prefix.reader().read(buf)?;
                 Ok(to_write)
             }
             Self::Data { buffer, .. } => {
-                let to_write = buf.len().min(buffer.remaining());
-                buffer.copy_to_slice(&mut buf[..to_write]);
+                let to_write = buffer.reader().read(buf)?;
                 Ok(to_write)
             }
             Self::Mdc { mdc } => {
-                let to_write = buf.len().min(mdc.remaining());
-                mdc.copy_to_slice(&mut buf[..to_write]);
+                let to_write = mdc.reader().read(buf)?;
                 Ok(to_write)
             }
             Self::Done => Ok(0),
@@ -361,19 +361,19 @@ where
                 Self::Prefix { prefix, .. } => {
                     // Prefix
                     let to_write = prefix.remaining();
-                    buf.extend_from_slice(&prefix[..to_write]);
+                    buf.extend_from_slice(prefix);
                     prefix.advance(to_write);
                     read += to_write;
                 }
                 Self::Data { buffer, .. } => {
                     let to_write = buffer.remaining();
-                    buf.extend_from_slice(&buffer[..to_write]);
+                    buf.extend_from_slice(buffer);
                     buffer.advance(to_write);
                     read += to_write;
                 }
                 Self::Mdc { mdc } => {
                     let to_write = mdc.remaining();
-                    buf.extend_from_slice(&mdc[..to_write]);
+                    buf.extend_from_slice(mdc);
                     mdc.advance(to_write);
                     read += to_write;
                 }
