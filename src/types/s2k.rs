@@ -276,12 +276,12 @@ impl StringToKey {
 
     /// true, if this StringToKey uses a salt
     pub fn uses_salt(&self) -> bool {
-        matches![
+        matches!(
             self,
             StringToKey::Salted { .. }
                 | StringToKey::IteratedAndSalted { .. }
                 | StringToKey::Argon2 { .. }
-        ]
+        )
     }
 
     /// RFC 9580 limits the use of S2K KDF results that are based on MD5, SHA-1, or RIPEMD-160.

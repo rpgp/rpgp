@@ -211,7 +211,7 @@ impl Serialize for EcdhPublicParams {
 
                 // https://www.ietf.org/archive/id/draft-wussler-openpgp-forwarding-00.html#name-generating-the-forwardee-ke
                 #[cfg(feature = "draft-wussler-openpgp-forwarding")]
-                if matches![ecdh_kdf_type, EcdhKdfType::Replaced { .. }] {
+                if matches!(ecdh_kdf_type, EcdhKdfType::Replaced { .. }) {
                     sum += 20
                 }
             }
