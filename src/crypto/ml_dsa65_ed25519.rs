@@ -5,7 +5,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
-    errors::{ensure, ensure_eq, Result},
+    errors::{bail, ensure, ensure_eq, Result},
     ser::Serialize,
     types::{MlDsa65Ed25519PublicParams, SignatureBytes},
 };
@@ -133,10 +133,13 @@ pub fn verify(
     );
     ensure_eq!(sig_bytes.len(), 64 + 3309, "invalid signature length");
 
-    let ed_sig = ed25519_dalek::Signature::try_from(&sig_bytes[..64])?;
+    let Some((ed_bytes, ml_bytes)) = sig_bytes.split_at_checked(64) else {
+        bail!("invalid signature length");
+    };
+    let ed_sig = ed25519_dalek::Signature::try_from(ed_bytes)?;
     ed_key.verify(hashed, &ed_sig)?;
 
-    let ml_sig = sig_bytes[64..].try_into()?;
+    let ml_sig = ml_bytes.try_into()?;
     ml_dsa_key.verify(hashed, &ml_sig)?;
 
     Ok(())

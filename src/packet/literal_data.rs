@@ -330,7 +330,7 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
         // Check the body of this read for any illegal linebreaks
 
         // Skip the first byte if it is a matching LF
-        let mut pos = if self.last_was_cr && buf[0] == b'\n' {
+        let mut pos = if self.last_was_cr && buf.first() == Some(&b'\n') {
             1
         } else {
             0
@@ -340,14 +340,14 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
         // (because we want to look ahead one byte, if "pos" is a CR)
         while pos < len - 1 {
             // A standalone linefeed is not ok
-            if buf[pos] == b'\n' {
+            if buf.get(pos) == Some(&b'\n') {
                 return Err(io::Error::other(
                     "Illegal line ending (LF without preceding CR)",
                 ));
             }
 
             // Skip CR followed by LF in one go
-            if buf[pos] == b'\r' && buf[pos + 1] == b'\n' {
+            if buf.get(pos) == Some(&b'\r') && buf.get(pos + 1) == Some(&b'\n') {
                 pos += 2;
             } else {
                 pos += 1;
@@ -356,7 +356,7 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
 
         // If `buf` doesn't end in CR+LF, then `pos` now points at the very last byte.
         // In this case, if the last byte is an LF, it is un-matched, and we throw an error.
-        if pos < len && buf[pos] == b'\n' {
+        if pos < len && buf.get(pos) == Some(&b'\n') {
             return Err(io::Error::other(
                 "Illegal line ending (LF without preceding CR)",
             ));
@@ -364,7 +364,7 @@ impl<R: io::Read> io::Read for CrLfCheckReader<R> {
 
         // Remember if the last character is a CR.
         // If so, we'll allow a matching LF at the start of the next read.
-        self.last_was_cr = buf[len - 1] == b'\r';
+        self.last_was_cr = buf.get(len - 1) == Some(&b'\r');
 
         Ok(len)
     }
@@ -407,7 +407,9 @@ impl<R: io::Read> io::Read for Utf8CheckReader<R> {
 
                     // handle the remaining data, which may be a fragment of UTF-8 that will be
                     // completed in the next read
-                    let rest = &data[valid_up_to..];
+                    let rest = data.get(valid_up_to..).ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidData, "Invalid UTF-8 data")
+                    })?;
 
                     match rest.len() {
                         0 => Ok(None),
@@ -440,13 +442,17 @@ impl<R: io::Read> io::Read for Utf8CheckReader<R> {
             return Ok(0);
         }
 
+        let data = buf
+            .get(..len)
+            .ok_or_else(|| io::Error::other("read more than the buffer holds"))?;
+
         self.rest = if let Some(mut check) = self.rest.take() {
             // check overhang from last read + the new data from this read
-            check.extend_from_slice(&buf[..len]);
+            check.extend_from_slice(data);
             check_utf8(&check)?
         } else {
             // we have no overhang from the last read, just check the data from this read
-            check_utf8(&buf[..len])?
+            check_utf8(data)?
         };
 
         Ok(len)
@@ -559,9 +565,11 @@ impl<R: io::Read> io::Read for LiteralDataFixedGenerator<R> {
         let header_bytes_left = self.header.len() - self.header_written;
         if header_bytes_left > 0 {
             // write header
-            let to_write = header_bytes_left.min(buf.len());
-            buf[..to_write]
-                .copy_from_slice(&self.header[self.header_written..self.header_written + to_write]);
+            let to_write = self
+                .header
+                .get(self.header_written..)
+                .ok_or_else(|| io::Error::other("header_written exceeds the header"))?
+                .read(buf)?;
             self.header_written += to_write;
             Ok(to_write)
         } else {
@@ -640,7 +648,10 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
                 return Ok(0);
             }
 
-            let data = &self.buffer[..buf_size];
+            let data = self
+                .buffer
+                .get(..buf_size)
+                .ok_or_else(|| io::Error::other("read more than the buffer holds"))?;
 
             let packet_length = if self.is_first && buf_size < chunk_size {
                 // all data fits into a single packet
@@ -696,8 +707,7 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
             self.current_packet = packet_ser;
         }
 
-        let to_write = self.current_packet.remaining().min(buf.len());
-        self.current_packet.copy_to_slice(&mut buf[..to_write]);
+        let to_write = (&mut self.current_packet).reader().read(buf)?;
         Ok(to_write)
     }
 }

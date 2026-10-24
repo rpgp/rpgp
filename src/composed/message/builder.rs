@@ -1229,30 +1229,27 @@ fn encrypt_write<R: std::io::Read, W: std::io::Write>(
             let mut is_first = true;
 
             loop {
-                let (length, mut buf) = if is_first {
+                let (length, read) = if is_first {
                     let read = fill_buffer(&mut encrypted, &mut buffer, Some(first_chunk_size))?;
                     if read < first_chunk_size {
                         // finished reading, all data fits into a single chunk
                         let size = (read + config_len).try_into()?;
                         debug!("single chunk of size {size}");
-                        (PacketLength::Fixed(size), &buffer[..read])
+                        (PacketLength::Fixed(size), read)
                     } else {
-                        (
-                            PacketLength::Partial(partial_chunk_size.try_into()?),
-                            &buffer[..read],
-                        )
+                        (PacketLength::Partial(partial_chunk_size.try_into()?), read)
                     }
                 } else {
                     let read = fill_buffer(&mut encrypted, &mut buffer, Some(partial_chunk_size))?;
                     if read < partial_chunk_size {
                         // last chunk
-                        (PacketLength::Fixed(read.try_into()?), &buffer[..read])
+                        (PacketLength::Fixed(read.try_into()?), read)
                     } else {
-                        (
-                            PacketLength::Partial(partial_chunk_size.try_into()?),
-                            &buffer[..read],
-                        )
+                        (PacketLength::Partial(partial_chunk_size.try_into()?), read)
                     }
+                };
+                let Some(mut buf) = buffer.get(..read) else {
+                    bail!("read more than the buffer holds");
                 };
 
                 if is_first {
@@ -1342,7 +1339,10 @@ impl<R: std::io::Read> std::io::Read for SignatureHashers<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let read = self.source.read(buf)?;
 
-        self.update_hashers(&buf[..read]);
+        let data = buf
+            .get(..read)
+            .ok_or_else(|| std::io::Error::other("read more than the buffer holds"))?;
+        self.update_hashers(data);
 
         Ok(read)
     }
@@ -1443,8 +1443,7 @@ impl<R: std::io::Read> std::io::Read for SignGenerator<'_, R> {
                         }
                     }
 
-                    let to_write = buf.len().min(buffer.remaining());
-                    buffer.copy_to_slice(&mut buf[..to_write]);
+                    let to_write = (&mut buffer).reader().read(buf)?;
 
                     self.state = State::Ops {
                         ops,
@@ -1510,8 +1509,7 @@ impl<R: std::io::Read> std::io::Read for SignGenerator<'_, R> {
                         }
                     }
 
-                    let to_write = buf.len().min(buffer.remaining());
-                    buffer.copy_to_slice(&mut buf[..to_write]);
+                    let to_write = (&mut buffer).reader().read(buf)?;
 
                     self.state = State::Signatures {
                         buffer,

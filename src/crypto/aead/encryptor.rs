@@ -47,7 +47,7 @@ impl<R: io::Read> StreamEncryptor<R> {
         }
 
         let (info, message_key, nonce) =
-            aead_setup_rfc9580(sym_alg, aead, chunk_size, &salt[..], session_key);
+            aead_setup_rfc9580(sym_alg, aead, chunk_size, &salt[..], session_key)?;
         let chunk_size_expanded: usize = chunk_size
             .as_byte_size()
             .try_into()
@@ -135,8 +135,11 @@ impl<R: io::Read> StreamEncryptor<R> {
 
         // Update nonce to include the next chunk index
         self.chunk_index += 1;
-        let l = self.nonce.len() - 8;
-        self.nonce[l..].copy_from_slice(&self.chunk_index.to_be_bytes());
+        let counter = self
+            .nonce
+            .last_chunk_mut::<8>()
+            .ok_or_else(|| io::Error::other("nonce is too short"))?;
+        *counter = self.chunk_index.to_be_bytes();
 
         Ok(())
     }
@@ -154,8 +157,7 @@ impl<R: io::Read> io::Read for StreamEncryptor<R> {
             }
         }
 
-        let to_write = buf.len().min(self.buffer.remaining());
-        self.buffer.copy_to_slice(&mut buf[..to_write]);
+        let to_write = (&mut self.buffer).reader().read(buf)?;
 
         Ok(to_write)
     }

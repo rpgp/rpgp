@@ -276,12 +276,12 @@ impl StringToKey {
 
     /// true, if this StringToKey uses a salt
     pub fn uses_salt(&self) -> bool {
-        matches![
+        matches!(
             self,
             StringToKey::Salted { .. }
                 | StringToKey::IteratedAndSalted { .. }
                 | StringToKey::Argon2 { .. }
-        ]
+        )
     }
 
     /// RFC 9580 limits the use of S2K KDF results that are based on MD5, SHA-1, or RIPEMD-160.
@@ -319,13 +319,13 @@ impl StringToKey {
                 let rounds = (key_size as f32 / digest_size as f32).ceil() as usize;
 
                 let mut key = Zeroizing::new(vec![0u8; key_size]);
-                let zeros = vec![0u8; rounds];
+                let mut zeros = Vec::with_capacity(rounds);
 
-                for round in 0..rounds {
+                for chunk in key.chunks_mut(digest_size) {
                     let mut hasher = hash_alg.new_hasher()?;
 
                     // add 0s prefix
-                    hasher.update(&zeros[..round]);
+                    hasher.update(&zeros);
 
                     match self {
                         StringToKey::Simple { .. } => {
@@ -359,26 +359,25 @@ impl StringToKey {
                                 count -= data_size;
                             }
 
-                            if count < salt.len() {
-                                hasher.update(&salt[..count]);
+                            if let Some(head) = salt.get(..count) {
+                                hasher.update(head);
                             } else {
                                 hasher.update(salt);
                                 count -= salt.len();
-                                hasher.update(&passphrase[..count]);
+                                let Some(head) = passphrase.get(..count) else {
+                                    bail!("S2K count exceeds the salted passphrase");
+                                };
+                                hasher.update(head);
                             }
                         }
                         _ => unimplemented_err!("S2K {:?} is not available", self),
                     }
 
-                    let start = round * digest_size;
-                    let end = if round == rounds - 1 {
-                        key_size
-                    } else {
-                        (round + 1) * digest_size
-                    };
-
                     let hash = hasher.finalize();
-                    key[start..end].copy_from_slice(&hash[..end - start]);
+                    for (byte, hashed) in chunk.iter_mut().zip(hash.iter()) {
+                        *byte = *hashed;
+                    }
+                    zeros.push(0);
                 }
 
                 key

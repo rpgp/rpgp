@@ -1,3 +1,5 @@
+#![allow(clippy::indexing_slicing)]
+
 use pgp::{
     composed::{
         Deserializable, KeyType, SecretKeyParamsBuilder, SignedSecretKey, SubkeyParamsBuilder,

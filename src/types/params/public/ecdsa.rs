@@ -6,7 +6,7 @@ use elliptic_curve::sec1::ToEncodedPoint;
 
 use crate::{
     crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve},
-    errors::{ensure, format_err, Result},
+    errors::{format_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::Mpi,
@@ -71,36 +71,40 @@ impl EcdsaPublicParams {
         match curve {
             ECCCurve::P256 => {
                 let p = Mpi::try_from_reader(&mut i)?;
-                ensure!(p.len() <= 65, "invalid public key length");
                 let mut key = [0u8; 65];
-                key[..p.len()].copy_from_slice(p.as_ref());
+                key.get_mut(..p.len())
+                    .ok_or_else(|| format_err!("invalid public key length"))?
+                    .copy_from_slice(p.as_ref());
 
                 let public = p256::PublicKey::from_sec1_bytes(&key)?;
                 Ok(EcdsaPublicParams::P256 { key: public })
             }
             ECCCurve::P384 => {
                 let p = Mpi::try_from_reader(&mut i)?;
-                ensure!(p.len() <= 97, "invalid public key length");
                 let mut key = [0u8; 97];
-                key[..p.len()].copy_from_slice(p.as_ref());
+                key.get_mut(..p.len())
+                    .ok_or_else(|| format_err!("invalid public key length"))?
+                    .copy_from_slice(p.as_ref());
 
                 let public = p384::PublicKey::from_sec1_bytes(&key)?;
                 Ok(EcdsaPublicParams::P384 { key: public })
             }
             ECCCurve::P521 => {
                 let p = Mpi::try_from_reader(&mut i)?;
-                ensure!(p.len() <= 133, "invalid public key length");
                 let mut key = [0u8; 133];
-                key[..p.len()].copy_from_slice(p.as_ref());
+                key.get_mut(..p.len())
+                    .ok_or_else(|| format_err!("invalid public key length"))?
+                    .copy_from_slice(p.as_ref());
 
                 let public = p521::PublicKey::from_sec1_bytes(&key)?;
                 Ok(EcdsaPublicParams::P521 { key: public })
             }
             ECCCurve::Secp256k1 => {
                 let p = Mpi::try_from_reader(&mut i)?;
-                ensure!(p.len() <= 65, "invalid public key length");
                 let mut key = [0u8; 65];
-                key[..p.len()].copy_from_slice(p.as_ref());
+                key.get_mut(..p.len())
+                    .ok_or_else(|| format_err!("invalid public key length"))?
+                    .copy_from_slice(p.as_ref());
 
                 let public = k256::PublicKey::from_sec1_bytes(&key)?;
                 Ok(EcdsaPublicParams::Secp256k1 { key: public })

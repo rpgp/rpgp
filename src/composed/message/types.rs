@@ -857,7 +857,7 @@ impl<'a> Message<'a> {
                 // high 16 bits in the signature packet, even though RFC 9580 doesn't strictly require this)
                 ensure_eq!(
                     signed_hash_value,
-                    &calculated_hash[0..2],
+                    calculated_hash.get(0..2).unwrap_or_default(),
                     "signature: invalid signed hash value"
                 );
                 key.verify(config.hash_alg, calculated_hash, signature_bytes)?;
@@ -1204,7 +1204,9 @@ impl TheRing<'_> {
             // Do we have a session key already?
             if !self.session_keys.is_empty() {
                 let session_key = self.session_keys.remove(0);
-                result.session_keys[0] = InnerRingResult::Ok;
+                if let Some(first) = result.session_keys.first_mut() {
+                    *first = InnerRingResult::Ok;
+                }
                 return Ok((Some(session_key), result));
             }
         }
@@ -1235,8 +1237,13 @@ impl TheRing<'_> {
 
         for esk in &pkesks {
             debug!("checking esk: {:?}/{:?}", esk.id(), esk.fingerprint());
-            for (i, key) in self.secret_keys.iter().enumerate() {
-                result.secret_keys[i] = InnerRingResult::NoMatch;
+            for (i, (key, key_result)) in self
+                .secret_keys
+                .iter()
+                .zip(&mut result.secret_keys)
+                .enumerate()
+            {
+                *key_result = InnerRingResult::NoMatch;
 
                 let typ = match esk.version() {
                     PkeskVersion::V3 => EskType::V3_4,
@@ -1262,7 +1269,7 @@ impl TheRing<'_> {
                         key.primary_key.secret_params().is_encrypted(),
                     );
 
-                    result.secret_keys[i] = res;
+                    *key_result = res;
 
                     if let Some(session_key) = session_key {
                         pkesk_session_keys.push((i, session_key));
@@ -1273,7 +1280,7 @@ impl TheRing<'_> {
                 for subkey in &key.secret_subkeys {
                     // Once we have found a session key with `key`, stop considering more subkeys.
                     // (This avoids potentially overwriting a good decryption result with failed ones.)
-                    if result.secret_keys[i] == InnerRingResult::Ok {
+                    if *key_result == InnerRingResult::Ok {
                         break;
                     }
 
@@ -1287,7 +1294,7 @@ impl TheRing<'_> {
                         {
                             debug!("draft_forwarding unset in DecryptionOptions, not trying forwardee key: {:?}",  subkey.key.public_key().fingerprint());
 
-                            result.secret_keys[i] = InnerRingResult::Invalid;
+                            *key_result = InnerRingResult::Invalid;
                             continue; // go to next subkey
                         }
 
@@ -1298,7 +1305,7 @@ impl TheRing<'_> {
                             subkey.secret_params().is_encrypted(),
                         );
 
-                        result.secret_keys[i] = res;
+                        *key_result = res;
 
                         if let Some(session_key) = session_key {
                             pkesk_session_keys.push((i, session_key));
@@ -1312,7 +1319,12 @@ impl TheRing<'_> {
         let mut skesk_session_keys: Vec<(usize, PlainSessionKey)> = Vec::new();
 
         for esk in skesks {
-            for (i, pw) in self.message_password.iter().enumerate() {
+            for (i, (pw, pw_result)) in self
+                .message_password
+                .iter()
+                .zip(&mut result.message_password)
+                .enumerate()
+            {
                 // Skip v5 SKESK unless gnupg_aead is enabled
                 if !self.decrypt_options.gnupg_aead && esk.version() == SkeskVersion::V5 {
                     debug!("skipping v5 SKESK because allow_gnupg_aead is not enabled: {esk:?}");
@@ -1322,11 +1334,11 @@ impl TheRing<'_> {
                 match decrypt_session_key_with_password(esk, pw) {
                     Ok(session_key) => {
                         skesk_session_keys.push((i, session_key));
-                        result.message_password[i] = InnerRingResult::Ok;
+                        *pw_result = InnerRingResult::Ok;
                         break;
                     }
                     Err(_err) => {
-                        result.message_password[i] = InnerRingResult::Invalid;
+                        *pw_result = InnerRingResult::Invalid;
                     }
                 }
             }
