@@ -627,7 +627,13 @@ impl PlainSecretParams {
 
         match typ {
             EskType::V3_4 => {
-                let sym_alg = SymmetricKeyAlgorithm::from(decrypted_key[0]);
+                let Some(sym_alg) = decrypted_key
+                    .first()
+                    .map(|id| SymmetricKeyAlgorithm::from(*id))
+                else {
+                    bail!("empty decrypted session key")
+                };
+
                 ensure!(
                     sym_alg != SymmetricKeyAlgorithm::Plaintext,
                     "session key algorithm cannot be plaintext"
