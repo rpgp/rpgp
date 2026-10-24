@@ -92,8 +92,12 @@ where
         };
 
         if self.extra_len > 0 {
+            let extra = self
+                .extra
+                .get(..self.extra_len)
+                .ok_or_else(|| io::Error::other("line buffer overflow"))?;
             self.panicked = true;
-            self.w.write_all(&self.extra[..self.extra_len])?;
+            self.w.write_all(extra)?;
             self.w.write_all(self.line_break.as_ref())?;
             self.panicked = false;
             // write succeeded, do not write the encoding of extra again if finish() is retried
@@ -131,12 +135,16 @@ where
         let line_break = self.line_break.as_ref();
 
         let orig_extra_len = self.extra_len;
+        let overflow = || io::Error::other("line buffer overflow");
 
         // process leftover stuff from last write
         if self.extra_len + input.len() < sl {
             // still not enough
+            self.extra
+                .get_mut(orig_extra_len..orig_extra_len + input.len())
+                .ok_or_else(overflow)?
+                .copy_from_slice(input);
             self.extra_len += input.len();
-            self.extra[orig_extra_len..self.extra_len].copy_from_slice(input);
             Ok(input.len())
         } else {
             let mut buffer_pos = 0;
@@ -144,7 +152,11 @@ where
 
             if self.extra_len > 0 {
                 let copied = ::std::cmp::min(orig_extra_len, self.buffer.len());
-                self.buffer[buffer_pos..buffer_pos + copied].copy_from_slice(&self.extra[..copied]);
+                let extra = self.extra.get(..copied).ok_or_else(overflow)?;
+                self.buffer
+                    .get_mut(buffer_pos..buffer_pos + copied)
+                    .ok_or_else(overflow)?
+                    .copy_from_slice(extra);
                 self.extra_len -= copied;
                 buffer_pos += copied;
             }
@@ -152,8 +164,13 @@ where
             if buffer_pos < sl {
                 let missing = ::std::cmp::min(sl - buffer_pos, input.len() - input_pos);
 
-                self.buffer[buffer_pos..buffer_pos + missing]
-                    .copy_from_slice(&input[input_pos..input_pos + missing]);
+                let src = input
+                    .get(input_pos..input_pos + missing)
+                    .ok_or_else(overflow)?;
+                self.buffer
+                    .get_mut(buffer_pos..buffer_pos + missing)
+                    .ok_or_else(overflow)?
+                    .copy_from_slice(src);
 
                 buffer_pos += missing;
                 input_pos += missing;
@@ -165,11 +182,15 @@ where
             }
 
             // insert line break
-            self.buffer[buffer_pos..buffer_pos + line_break.len()].copy_from_slice(line_break);
+            self.buffer
+                .get_mut(buffer_pos..buffer_pos + line_break.len())
+                .ok_or_else(overflow)?
+                .copy_from_slice(line_break);
             buffer_pos += line_break.len();
 
+            let line = self.buffer.get(..buffer_pos).ok_or_else(overflow)?;
             self.panicked = true;
-            let r = self.w.write_all(&self.buffer[..buffer_pos]);
+            let r = self.w.write_all(line);
             self.panicked = false;
 
             match r {

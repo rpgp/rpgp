@@ -134,7 +134,11 @@ impl<W: std::io::Write> std::io::Write for Base64Encoder<W> {
         while !buf.is_empty() {
             match self.0.write(buf) {
                 Ok(0) => {}
-                Ok(n) => buf = &buf[n..],
+                Ok(n) => {
+                    buf = buf.get(n..).ok_or_else(|| {
+                        std::io::Error::other("writer reported more bytes than it was given")
+                    })?
+                }
                 Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(e),
             }
