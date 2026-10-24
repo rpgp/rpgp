@@ -303,7 +303,9 @@ impl Decryptor for SecretKey {
 
                 let their_public = {
                     // public part of the ephemeral key (removes 0x40 prefix)
-                    let ephemeral_public_key = &data.public_point.as_ref()[1..];
+                    let Some(ephemeral_public_key) = data.public_point.as_ref().get(1..) else {
+                        bail!("invalid public point");
+                    };
 
                     // create montgomery point
                     let mut ephemeral_public_key_arr = [0u8; 32];
@@ -370,8 +372,8 @@ impl Decryptor for SecretKey {
 
             // 1. Try with stripped leading zeroes (-> work around old go crypto bug)
             let mut strip_leading = shared_secret.as_slice();
-            while strip_leading.starts_with(&[0]) {
-                strip_leading = &strip_leading[1..];
+            while let [0, rest @ ..] = strip_leading {
+                strip_leading = rest;
             }
 
             if let Ok(sk) = derive_session_key(
@@ -390,8 +392,8 @@ impl Decryptor for SecretKey {
 
             // 2. Try with stripped trailing zeroes (-> work around old OpenPGP.js bug)
             let mut strip_trailing = shared_secret.as_slice();
-            while strip_trailing.ends_with(&[0]) {
-                strip_trailing = &strip_trailing[..strip_trailing.len() - 1];
+            while let [rest @ .., 0] = strip_trailing {
+                strip_trailing = rest;
             }
 
             if let Ok(sk) = derive_session_key(
@@ -458,9 +460,8 @@ pub fn derive_session_key(
     let z = kdf(hash, shared_secret, alg_sym.key_size(), &param)?;
 
     // Perform AES Key Unwrap
-    let mut encrypted_session_key_vec = vec![0; encrypted_key_len];
-    encrypted_session_key_vec[(encrypted_key_len - encrypted_session_key.len())..]
-        .copy_from_slice(encrypted_session_key);
+    let mut encrypted_session_key_vec = vec![0; encrypted_key_len - encrypted_session_key.len()];
+    encrypted_session_key_vec.extend_from_slice(encrypted_session_key);
 
     let mut decrypted_key_padded = aes_kw::unwrap(&z, &encrypted_session_key_vec)?;
     // PKCS5-style unpadding (PKCS5 is PKCS7 with a blocksize of 8).
@@ -491,10 +492,10 @@ pub fn derive_session_key(
         let unpadded_len = len - *pad as usize;
 
         // All bytes that constitute the padding must have the value of `pad`
-        if decrypted_key_padded[unpadded_len..]
-            .iter()
-            .any(|byte| byte != pad)
-        {
+        let padding = decrypted_key_padded
+            .get(unpadded_len..)
+            .ok_or(Error::UnpadError)?;
+        if padding.iter().any(|byte| byte != pad) {
             return Err(Error::UnpadError);
         }
 
