@@ -182,8 +182,11 @@ impl SymKeyEncryptedSessionKey {
                 let iv = vec![0u8; sym_algorithm.block_size()];
                 sym_algorithm.decrypt_with_iv_regular(key, &iv, &mut decrypted_key)?;
 
-                let sym_alg = SymmetricKeyAlgorithm::from(decrypted_key[0]);
-                let key = RawSessionKey::from(&decrypted_key[1..]);
+                let (&sym_alg, key) = decrypted_key
+                    .split_first()
+                    .ok_or_else(|| format_err!("decrypted session key is empty"))?;
+                let sym_alg = SymmetricKeyAlgorithm::from(sym_alg);
+                let key = RawSessionKey::from(key);
 
                 // v4 SKESK decryption doesn't guarantee integrity.
                 // Check plausibility of decrypted data.
