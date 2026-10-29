@@ -627,7 +627,10 @@ impl PlainSecretParams {
 
         match typ {
             EskType::V3_4 => {
-                let sym_alg = SymmetricKeyAlgorithm::from(decrypted_key[0]);
+                let Some((&sym_alg, rest)) = decrypted_key.split_first() else {
+                    bail!("unexpected decrypted_key length (0) for V3/4 ESK");
+                };
+                let sym_alg = SymmetricKeyAlgorithm::from(sym_alg);
                 ensure!(
                     sym_alg != SymmetricKeyAlgorithm::Plaintext,
                     "session key algorithm cannot be plaintext"
@@ -644,30 +647,26 @@ impl PlainSecretParams {
                     sym_alg
                 );
 
-                let key: RawSessionKey = decrypted_key[1..=key_size].into();
-                let checksum = decrypted_key[key_size + 1..key_size + 3]
-                    .try_into()
-                    .expect("fixed size");
+                let Some((key, checksum)) = rest.split_last_chunk::<2>() else {
+                    bail!("decrypted_key is missing its checksum");
+                };
+                let key: RawSessionKey = key.into();
 
-                checksum::simple(checksum, key.as_ref())?;
+                checksum::simple(*checksum, key.as_ref())?;
 
                 Ok(PlainSessionKey::V3_4 { key, sym_alg })
             }
 
             EskType::V6 => {
-                let len = decrypted_key.len();
+                let Some((key, checksum)) = decrypted_key.split_last_chunk::<2>() else {
+                    bail!(
+                        "unexpected decrypted_key length ({}) for V6 ESK",
+                        decrypted_key.len()
+                    );
+                };
+                let key: RawSessionKey = key.into();
 
-                // ensure minimal length so that we don't panic in the slice splitting, below
-                ensure!(
-                    len >= 2,
-                    "unexpected decrypted_key length ({}) for V6 ESK",
-                    len,
-                );
-
-                let key: RawSessionKey = decrypted_key[0..len - 2].into();
-                let checksum = decrypted_key[len - 2..].try_into().expect("fixed size");
-
-                checksum::simple(checksum, key.as_ref())?;
+                checksum::simple(*checksum, key.as_ref())?;
 
                 Ok(PlainSessionKey::V6 { key })
             }

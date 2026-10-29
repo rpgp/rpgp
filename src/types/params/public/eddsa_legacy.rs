@@ -41,8 +41,11 @@ impl EddsaLegacyPublicParams {
             ECCCurve::Ed25519Legacy => {
                 let q = Mpi::try_from_reader(&mut i)?;
                 ensure_eq!(q.len(), 33, "invalid Q (len)");
-                ensure_eq!(q.as_ref()[0], 0x40, "invalid Q (prefix)");
-                let public = &q.as_ref()[1..];
+                let (&prefix, public) = q
+                    .as_ref()
+                    .split_first()
+                    .ok_or_else(|| format_err!("invalid Q (len)"))?;
+                ensure_eq!(prefix, 0x40, "invalid Q (prefix)");
 
                 let key: ed25519_dalek::VerifyingKey = public.try_into()?;
                 Ok(Self::Ed25519 { key })

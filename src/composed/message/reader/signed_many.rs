@@ -256,8 +256,11 @@ impl<'a> SignatureManyReader<'a> {
                     let mut buffer = BytesMut::with_capacity(BUFFER_SIZE);
                     let read = fill_buffer_bytes(&mut source, &mut buffer, BUFFER_SIZE)?;
 
+                    let data = buffer
+                        .get(..read)
+                        .ok_or_else(|| io::Error::other("read more than the buffer holds"))?;
                     for hasher in hashers.iter_mut().filter_map(|h| h.as_mut()) {
-                        hasher.hash_buf(&buffer[..read]);
+                        hasher.hash_buf(data);
                     }
 
                     *self = Self::Body {
@@ -287,8 +290,11 @@ impl<'a> SignatureManyReader<'a> {
 
                     let read = fill_buffer_bytes(&mut source, &mut buffer, BUFFER_SIZE)?;
 
+                    let data = buffer
+                        .get(..read)
+                        .ok_or_else(|| io::Error::other("read more than the buffer holds"))?;
                     for hasher in hashers.iter_mut().filter_map(|h| h.as_mut()) {
-                        hasher.hash_buf(&buffer[..read]);
+                        hasher.hash_buf(data);
                     }
 
                     if read == 0 {
@@ -540,8 +546,7 @@ impl Read for SignatureManyReader<'_> {
         match self {
             Self::Init { .. } => unreachable!("invalid state"),
             Self::Body { buffer, .. } => {
-                let to_write = buffer.remaining().min(buf.len());
-                buffer.copy_to_slice(&mut buf[..to_write]);
+                let to_write = buffer.reader().read(buf)?;
                 Ok(to_write)
             }
             Self::Done { .. } => Ok(0),

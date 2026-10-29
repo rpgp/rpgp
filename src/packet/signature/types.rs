@@ -520,7 +520,7 @@ impl Signature {
         // high 16 bits in the signature packet, even though RFC 9580 doesn't strictly require this)
         ensure_eq!(
             signed_hash_value,
-            &hash[0..2],
+            hash.get(0..2).unwrap_or_default(),
             "signature: invalid signed hash value"
         );
 
@@ -643,7 +643,7 @@ impl Signature {
         let hash = &hasher.finalize()[..];
         ensure_eq!(
             signed_hash_value,
-            &hash[0..2],
+            hash.get(0..2).unwrap_or_default(),
             "certification: invalid signed hash value"
         );
 
@@ -699,7 +699,7 @@ impl Signature {
         let hash = &hasher.finalize()[..];
         ensure_eq!(
             signed_hash_value,
-            &hash[0..2],
+            hash.get(0..2).unwrap_or_default(),
             "subkey binding: invalid signed hash value"
         );
 
@@ -752,7 +752,7 @@ impl Signature {
         let hash = &hasher.finalize()[..];
         ensure_eq!(
             signed_hash_value,
-            &hash[0..2],
+            hash.get(0..2).unwrap_or_default(),
             "key binding: invalid signed hash value"
         );
 
@@ -818,7 +818,7 @@ impl Signature {
         let hash = &hasher.finalize()[..];
         ensure_eq!(
             signed_hash_value,
-            &hash[0..2],
+            hash.get(0..2).unwrap_or_default(),
             "key: invalid signed hash value"
         );
 
@@ -1507,14 +1507,14 @@ impl Default for Features {
 
 impl From<&[u8]> for Features {
     fn from(value: &[u8]) -> Self {
-        match value.len() {
-            0 => Self {
+        match value.split_first() {
+            None => Self {
                 first: None,
                 rest: vec![],
             },
-            _ => Self {
-                first: Some(KnownFeatures(value[0])),
-                rest: value[1..].to_vec(),
+            Some((&first, rest)) => Self {
+                first: Some(KnownFeatures(first)),
+                rest: rest.to_vec(),
             },
         }
     }

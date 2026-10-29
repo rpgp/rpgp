@@ -311,9 +311,11 @@ impl<R: io::Read> io::Read for CompressedDataFixedGenerator<R> {
         let header_bytes_left = self.header.len() - self.header_written;
         if header_bytes_left > 0 {
             // write header
-            let to_write = header_bytes_left.min(buf.len());
-            buf[..to_write]
-                .copy_from_slice(&self.header[self.header_written..self.header_written + to_write]);
+            let to_write = self
+                .header
+                .get(self.header_written..)
+                .ok_or_else(|| io::Error::other("header_written exceeds the header"))?
+                .read(buf)?;
             self.header_written += to_write;
             Ok(to_write)
         } else {
@@ -385,7 +387,10 @@ impl<R: io::Read> io::Read for CompressedDataPartialGenerator<R> {
                 return Ok(0);
             }
 
-            let data = &self.buffer[..buf_size];
+            let data = self
+                .buffer
+                .get(..buf_size)
+                .ok_or_else(|| io::Error::other("read more than the buffer holds"))?;
 
             let packet_length = if self.is_first && buf_size < chunk_size {
                 // all data fits into a single packet
@@ -439,8 +444,7 @@ impl<R: io::Read> io::Read for CompressedDataPartialGenerator<R> {
             self.current_packet = packet_ser;
         }
 
-        let to_write = self.current_packet.remaining().min(buf.len());
-        self.current_packet.copy_to_slice(&mut buf[..to_write]);
+        let to_write = (&mut self.current_packet).reader().read(buf)?;
         Ok(to_write)
     }
 }
