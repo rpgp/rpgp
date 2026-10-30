@@ -13,7 +13,7 @@ use crate::{
     errors::{bail, ensure, ensure_eq, format_err, Error, Result},
     packet::{
         InnerSignature, LiteralDataHeader, Packet, PacketHeader, PacketTrait, ProtectedDataConfig,
-        PublicKeyEncryptedSessionKey, Signature, SymKeyEncryptedSessionKey,
+        PublicKeyEncryptedSessionKey, Signature, SignatureType, SymKeyEncryptedSessionKey,
     },
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -860,6 +860,15 @@ impl<'a> Message<'a> {
                     &calculated_hash[0..2],
                     "signature: invalid signed hash value"
                 );
+
+                ensure!(
+                    [SignatureType::Binary, SignatureType::Text].contains(&config.typ),
+                    format!("signature: unacceptable type {:?}", config.typ)
+                );
+
+                Signature::check_signature_key_version_alignment(key, config)?;
+                Signature::check_signature_hash_strength(config)?;
+
                 key.verify(config.hash_alg, calculated_hash, signature_bytes)?;
                 Ok(signature)
             }
