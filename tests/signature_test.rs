@@ -7,7 +7,7 @@ use pgp::{
     types::{KeyDetails, PacketHeaderVersion, Password, Tag, Timestamp},
 };
 use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
+use chacha20::ChaCha8Rng;
 
 #[test]
 fn sig_odd() {
