@@ -52,11 +52,17 @@ impl EncryptedSecretParams {
             | S2kParams::Aead { .. }
             | S2kParams::MalleableCfb { .. } => {
                 // 2 octets
-                self.data[self.data.len() - 2..].to_vec()
+                self.data
+                    .last_chunk::<2>()
+                    .map(|c| c.to_vec())
+                    .unwrap_or_default()
             }
             S2kParams::Cfb { .. } => {
                 // 20 octets SHA1
-                self.data[self.data.len() - 20..].to_vec()
+                self.data
+                    .last_chunk::<20>()
+                    .map(|c| c.to_vec())
+                    .unwrap_or_default()
             }
         }
     }

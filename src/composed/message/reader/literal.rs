@@ -170,8 +170,7 @@ impl<R: BufRead> Read for LiteralDataReader<R> {
         self.fill_inner()?;
         match self {
             Self::Body { buffer, .. } | Self::Done { buffer, .. } => {
-                let to_write = buffer.remaining().min(buf.len());
-                buffer.copy_to_slice(&mut buf[..to_write]);
+                let to_write = buffer.reader().read(buf)?;
                 Ok(to_write)
             }
             Self::Error => Err(io::Error::other("LiteralDataReader errored")),

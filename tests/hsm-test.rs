@@ -1,4 +1,4 @@
-#![allow(clippy::result_large_err)]
+#![allow(clippy::result_large_err, clippy::indexing_slicing)]
 use std::{fmt::Debug, fs::File};
 
 use p256::pkcs8::DecodePrivateKey;

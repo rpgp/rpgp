@@ -40,7 +40,7 @@ impl<R: std::io::Read> NormalizedReader<R> {
         // the previous read was guaranteed to have filled up the buffer (otherwise we would have
         // switched to `self.is_done`, so this is the last byte of the previous read.
         // If this is a CR, it wasn’t handled in the previous call.
-        let last_char = self.in_buffer[self.in_buffer.len() - 1];
+        let [.., last_char] = self.in_buffer;
 
         let read = fill_buffer(&mut self.source, &mut self.in_buffer, None)?;
         if read < self.in_buffer.len() {
@@ -49,12 +49,12 @@ impl<R: std::io::Read> NormalizedReader<R> {
             self.is_done = true;
         }
 
-        self.cleanup_buffer(read, last_char);
+        self.cleanup_buffer(read, last_char)?;
         Ok(())
     }
 
     /// Normalizes the line endings in the current buffer
-    fn cleanup_buffer(&mut self, read: usize, last_char: u8) {
+    fn cleanup_buffer(&mut self, read: usize, last_char: u8) -> std::io::Result<()> {
         const CR: u8 = b'\r';
         const LF: u8 = b'\n';
 
@@ -63,7 +63,7 @@ impl<R: std::io::Read> NormalizedReader<R> {
         let mut end = read;
 
         // Did this read fill up `self.in_buffer` and end with a CR?
-        if read == self.in_buffer.len() && self.in_buffer[self.in_buffer.len() - 1] == CR {
+        if read == self.in_buffer.len() && self.in_buffer.last() == Some(&CR) {
             // The next boundary could be an edge case, so we are excluding the last byte of this
             // read in this round of processing.
             end = read - 1;
@@ -88,9 +88,14 @@ impl<R: std::io::Read> NormalizedReader<R> {
         }
 
         // Normalize the remaining part of the buffer ...
-        let res = replace_newlines(&self.in_buffer[start..end], self.line_break.as_ref());
+        let remaining = self
+            .in_buffer
+            .get(start..end)
+            .ok_or_else(|| std::io::Error::other("normalization range exceeds the buffer"))?;
+        let res = replace_newlines(remaining, self.line_break.as_ref());
         // ... and copy it into `self.replaced`.
         self.replaced.extend_from_slice(&res);
+        Ok(())
     }
 }
 
@@ -103,8 +108,7 @@ impl<R: std::io::Read> std::io::Read for NormalizedReader<R> {
             self.fill_buffer()?;
         }
 
-        let to_write = self.replaced.remaining().min(buf.len());
-        self.replaced.copy_to_slice(&mut buf[..to_write]);
+        let to_write = (&mut self.replaced).reader().read(buf)?;
         Ok(to_write)
     }
 }
@@ -130,18 +134,18 @@ fn replace_newlines<'a>(input: &'a [u8], replacement: &[u8]) -> Cow<'a, [u8]> {
     let mut position = 0;
 
     for newline in newlines {
-        let start = if newline > 0 && input[newline - 1] == b'\r' {
+        let start = if newline > 0 && input.get(newline - 1) == Some(&b'\r') {
             newline - 1
         } else {
             newline
         };
 
-        out.extend_from_slice(&input[position..start]);
+        out.extend_from_slice(input.get(position..start).unwrap_or_default());
         out.extend_from_slice(replacement);
         position = newline + 1;
     }
 
-    out.extend_from_slice(&input[position..]);
+    out.extend_from_slice(input.get(position..).unwrap_or_default());
     Cow::Owned(out)
 }
 

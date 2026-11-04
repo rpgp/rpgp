@@ -17,7 +17,10 @@ pub(crate) fn fill_buffer<R: std::io::Read>(
     let mut offset = 0;
     let chunk_size = chunk_size.unwrap_or(buffer.len());
     loop {
-        let read = source.read(&mut buffer[offset..chunk_size])?;
+        let dst = buffer
+            .get_mut(offset..chunk_size)
+            .ok_or_else(|| io::Error::other("chunk size exceeds the buffer"))?;
+        let read = source.read(dst)?;
         offset += read;
 
         if read == 0 || offset == chunk_size {
@@ -36,7 +39,7 @@ pub(crate) fn fill_buffer_bytes<R: std::io::BufRead>(
     while buffer.remaining() < len {
         let source_buffer = source.fill_buf()?;
         let read = source_buffer.len().min(len - buffer.remaining());
-        buffer.put_slice(&source_buffer[..read]);
+        buffer.put_slice(source_buffer.get(..read).unwrap_or(source_buffer));
         read_total += read;
         source.consume(read);
 
@@ -88,7 +91,10 @@ impl<'a, A, B> TeeWriter<'a, A, B> {
 impl<A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'_, A, B> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let written = self.b.write(buf)?;
-        self.a.write(&buf[..written]);
+        let written_buf = buf
+            .get(..written)
+            .ok_or_else(|| io::Error::other("writer reported more bytes than it was given"))?;
+        self.a.write(written_buf);
 
         Ok(written)
     }
@@ -97,7 +103,11 @@ impl<A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'_, A, B> {
         while !buf.is_empty() {
             match self.write(buf) {
                 Ok(0) => {}
-                Ok(n) => buf = &buf[n..],
+                Ok(n) => {
+                    buf = buf.get(n..).ok_or_else(|| {
+                        io::Error::other("writer reported more bytes than it was given")
+                    })?
+                }
                 Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(e),
             }
@@ -208,9 +218,9 @@ impl NormalizingHasher {
             if self.last_was_cr {
                 // detect and handle a LF that follows a CR
                 // (it should not be normalized)
-                if buf[0] == b'\n' {
+                if let [b'\n', rest @ ..] = buf {
                     self.hasher.update(b"\n");
-                    buf = &buf[1..];
+                    buf = rest;
                 }
 
                 self.last_was_cr = false;
@@ -227,29 +237,26 @@ impl NormalizingHasher {
                     Some(pos) => {
                         // consume all bytes before line-break-related position
 
-                        self.hasher.update(&buf[..pos]);
-                        buf = &buf[pos..];
+                        self.hasher.update(buf.get(..pos).unwrap_or(buf));
+                        buf = buf.get(pos..).unwrap_or_default();
 
                         // handle this line-break related context
-                        let only_one = buf.len() == 1;
-                        match (buf[0], only_one) {
-                            (b'\n', _) => {
+                        match buf {
+                            [b'\n', rest @ ..] => {
                                 self.hasher.update(b"\r\n");
-                                buf = &buf[1..];
+                                buf = rest;
                             }
-                            (b'\r', false) => {
-                                // we are guaranteed to have at least two bytes
-                                if buf[1] == b'\n' {
-                                    // there was a '\n' in the stream, we consume it as well
-                                    self.hasher.update(b"\r\n");
-                                    buf = &buf[2..];
-                                } else {
-                                    // this was a lone '\r', we don't normalize it
-                                    self.hasher.update(b"\r");
-                                    buf = &buf[1..];
-                                }
+                            [b'\r', b'\n', rest @ ..] => {
+                                // there was a '\n' in the stream, we consume it as well
+                                self.hasher.update(b"\r\n");
+                                buf = rest;
                             }
-                            (b'\r', true) => {
+                            [b'\r', rest @ ..] if !rest.is_empty() => {
+                                // this was a lone '\r', we don't normalize it
+                                self.hasher.update(b"\r");
+                                buf = rest;
+                            }
+                            [b'\r'] => {
                                 // this one '\r' was the last thing in the buffer
                                 self.hasher.update(b"\r");
                                 buf = &[];

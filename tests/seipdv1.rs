@@ -1,3 +1,5 @@
+#![allow(clippy::indexing_slicing)]
+
 use std::io::Read;
 
 use pgp::{

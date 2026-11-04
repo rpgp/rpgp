@@ -147,6 +147,9 @@ malformed-artifact-compat = []
 pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
 draft-wussler-openpgp-forwarding = []
 
+[lints.clippy]
+indexing_slicing = "deny"
+
 [profile.bench]
 debug = 2
 

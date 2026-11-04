@@ -48,7 +48,9 @@ pub trait BufReadParsing: BufRead + Sized {
             }
 
             let available = (arr.len() - read).min(buf.len());
-            arr[read..read + available].copy_from_slice(&buf[..available]);
+            for (dst, src) in arr.iter_mut().skip(read).zip(buf) {
+                *dst = *src;
+            }
             read += available;
             self.consume(available);
         }
@@ -74,7 +76,9 @@ pub trait BufReadParsing: BufRead + Sized {
             }
 
             let available = (arr.len() - read).min(buf.len());
-            arr[read..read + available].copy_from_slice(&buf[..available]);
+            for (dst, src) in arr.iter_mut().skip(read).zip(buf) {
+                *dst = *src;
+            }
             read += available;
             self.consume(available);
         }
@@ -100,7 +104,7 @@ pub trait BufReadParsing: BufRead + Sized {
             }
 
             let available = (size - arr.len()).min(buf.len());
-            arr.extend_from_slice(&buf[..available]);
+            arr.extend_from_slice(buf.get(..available).unwrap_or(buf));
             self.consume(available);
         }
 
@@ -185,7 +189,10 @@ impl<T: Read> Read for Take<'_, T> {
         }
 
         let max = cmp::min(buf.len(), self.limit);
-        let n = self.inner.read(&mut buf[..max])?;
+        let dst = buf
+            .get_mut(..max)
+            .ok_or_else(|| std::io::Error::other("read limit exceeds the buffer"))?;
+        let n = self.inner.read(dst)?;
         assert!(n <= self.limit, "number of read bytes exceeds limit");
         self.limit -= n;
         Ok(n)
@@ -201,7 +208,7 @@ impl<T: BufRead> BufRead for Take<'_, T> {
 
         let buf = self.inner.fill_buf()?;
         let cap = cmp::min(buf.len(), self.limit);
-        Ok(&buf[..cap])
+        Ok(buf.get(..cap).unwrap_or(buf))
     }
 
     fn consume(&mut self, amt: usize) {
