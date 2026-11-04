@@ -187,11 +187,7 @@ impl NormalizingHasher {
         }
     }
 
-    pub(crate) fn done(mut self) -> Box<dyn DynDigest + Send> {
-        if self.text_mode && self.last_was_cr {
-            self.hasher.update(b"\n")
-        }
-
+    pub(crate) fn done(self) -> Box<dyn DynDigest + Send> {
         self.hasher
     }
 
