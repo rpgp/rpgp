@@ -1,5 +1,3 @@
-#![allow(clippy::indexing_slicing)]
-
 #[macro_use]
 extern crate log;
 #[macro_use]

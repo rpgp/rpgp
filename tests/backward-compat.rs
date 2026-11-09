@@ -1,5 +1,3 @@
-#![allow(clippy::indexing_slicing)]
-
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 

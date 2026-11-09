@@ -19,9 +19,9 @@
 //! [Message]: https://www.rfc-editor.org/rfc/rfc9580#name-openpgp-messages
 //! [ASCII Armor]: https://www.rfc-editor.org/rfc/rfc9580#name-forming-ascii-armor
 
-#![cfg_attr(not(test), deny(clippy::unwrap_used))]
+#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::indexing_slicing))]
 #![allow(clippy::missing_const_for_fn, clippy::type_complexity)]
-#![deny(unsafe_code)]
+#![forbid(unsafe_code)]
 
 #[cfg(test)]
 #[macro_use]
