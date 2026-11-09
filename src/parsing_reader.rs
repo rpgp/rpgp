@@ -103,9 +103,10 @@ pub trait BufReadParsing: BufRead + Sized {
                 break;
             }
 
-            let available = (size - arr.len()).min(buf.len());
-            arr.extend_from_slice(buf.get(..available).unwrap_or(buf));
-            self.consume(available);
+            let chunk = buf.get(..size - arr.len()).unwrap_or(buf);
+            arr.extend_from_slice(chunk);
+            let read = chunk.len();
+            self.consume(read);
         }
 
         if arr.len() != size {
@@ -207,8 +208,7 @@ impl<T: BufRead> BufRead for Take<'_, T> {
         }
 
         let buf = self.inner.fill_buf()?;
-        let cap = cmp::min(buf.len(), self.limit);
-        Ok(buf.get(..cap).unwrap_or(buf))
+        Ok(buf.get(..self.limit).unwrap_or(buf))
     }
 
     fn consume(&mut self, amt: usize) {

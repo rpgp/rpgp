@@ -38,8 +38,11 @@ pub(crate) fn fill_buffer_bytes<R: std::io::BufRead>(
     let mut read_total = 0;
     while buffer.remaining() < len {
         let source_buffer = source.fill_buf()?;
-        let read = source_buffer.len().min(len - buffer.remaining());
-        buffer.put_slice(source_buffer.get(..read).unwrap_or(source_buffer));
+        let chunk = source_buffer
+            .get(..len - buffer.remaining())
+            .unwrap_or(source_buffer);
+        buffer.put_slice(chunk);
+        let read = chunk.len();
         read_total += read;
         source.consume(read);
 
