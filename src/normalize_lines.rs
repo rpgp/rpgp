@@ -108,8 +108,7 @@ impl<R: std::io::Read> std::io::Read for NormalizedReader<R> {
             self.fill_buffer()?;
         }
 
-        let to_write = (&mut self.replaced).reader().read(buf)?;
-        Ok(to_write)
+        (&mut self.replaced).reader().read(buf)
     }
 }
 

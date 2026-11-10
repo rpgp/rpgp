@@ -675,10 +675,7 @@ where
                 *data_available -= to_write;
                 Ok(to_write)
             }
-            Self::Done { buffer, .. } => {
-                let to_write = buffer.reader().read(buf)?;
-                Ok(to_write)
-            }
+            Self::Done { buffer, .. } => buffer.reader().read(buf),
             Self::Error => unreachable!("error state"),
         }
     }
