@@ -333,7 +333,9 @@ impl SignatureConfig {
 
         let hash = &hasher.finalize()[..];
 
-        let signed_hash_value = [hash[0], hash[1]];
+        let Some(&signed_hash_value) = hash.first_chunk::<2>() else {
+            bail!("digest is shorter than two bytes");
+        };
         let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
@@ -378,7 +380,9 @@ impl SignatureConfig {
         hasher.update(&self.trailer(len)?);
 
         let hash = &hasher.finalize()[..];
-        let signed_hash_value = [hash[0], hash[1]];
+        let Some(&signed_hash_value) = hash.first_chunk::<2>() else {
+            bail!("digest is shorter than two bytes");
+        };
         let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
@@ -424,7 +428,9 @@ impl SignatureConfig {
         hasher.update(&self.trailer(len)?);
 
         let hash = &hasher.finalize()[..];
-        let signed_hash_value = [hash[0], hash[1]];
+        let Some(&signed_hash_value) = hash.first_chunk::<2>() else {
+            bail!("digest is shorter than two bytes");
+        };
         let signature = signer.sign(signer_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
@@ -463,7 +469,9 @@ impl SignatureConfig {
         hasher.update(&self.trailer(len)?);
 
         let hash = &hasher.finalize()[..];
-        let signed_hash_value = [hash[0], hash[1]];
+        let Some(&signed_hash_value) = hash.first_chunk::<2>() else {
+            bail!("digest is shorter than two bytes");
+        };
         let signature = signing_key.sign(key_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
@@ -621,8 +629,8 @@ impl SignatureConfig {
                 Ok(Vec::new())
             }
             SignatureVersion::V4 | SignatureVersion::V6 => {
-                let mut trailer = vec![self.version().into(), 0xFF, 0, 0, 0, 0];
-                BigEndian::write_u32(&mut trailer[2..], len.try_into()?);
+                let mut trailer = vec![self.version().into(), 0xFF];
+                trailer.extend_from_slice(&u32::try_from(len)?.to_be_bytes());
                 Ok(trailer)
             }
             SignatureVersion::V5 => {
@@ -785,7 +793,9 @@ impl SignatureHasher {
 
         let hash = &hasher.finalize()[..];
 
-        let signed_hash_value = [hash[0], hash[1]];
+        let Some(&signed_hash_value) = hash.first_chunk::<2>() else {
+            bail!("digest is shorter than two bytes");
+        };
         let signature = key.sign(key_pw, config.hash_alg, hash)?;
 
         Signature::from_config(config, signed_hash_value, signature)

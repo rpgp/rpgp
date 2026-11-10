@@ -114,57 +114,64 @@ impl AeadAlgorithm {
         associated_data: &[u8],
         buffer: &mut BytesMut,
     ) -> Result<(), Error> {
+        let key = key.get(..sym_algorithm.key_size()).ok_or_else(|| {
+            InvalidSessionKeySnafu {
+                alg: *sym_algorithm,
+                session_key_size: key.len(),
+            }
+            .build()
+        })?;
         let res = match (sym_algorithm, self) {
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Gcm) => {
-                let key = GcmKey::<Aes128Gcm>::from_slice(&key[..16]);
+                let key = GcmKey::<Aes128Gcm>::from_slice(key);
                 let cipher = Aes128Gcm::new(key);
                 let nonce = GcmNonce::from_slice(nonce);
                 cipher.decrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Gcm) => {
-                let key = GcmKey::<Aes192Gcm>::from_slice(&key[..24]);
+                let key = GcmKey::<Aes192Gcm>::from_slice(key);
                 let cipher = Aes192Gcm::new(key);
                 let nonce = GcmNonce::from_slice(nonce);
                 cipher.decrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Gcm) => {
-                let key = GcmKey::<Aes256Gcm>::from_slice(&key[..32]);
+                let key = GcmKey::<Aes256Gcm>::from_slice(key);
                 let cipher = Aes256Gcm::new(key);
                 let nonce = GcmNonce::from_slice(nonce);
                 cipher.decrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Eax) => {
-                let key = EaxKey::<Aes128>::from_slice(&key[..16]);
+                let key = EaxKey::<Aes128>::from_slice(key);
                 let cipher = Eax::<Aes128>::new(key);
                 let nonce = EaxNonce::from_slice(nonce);
                 cipher.decrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Eax) => {
-                let key = EaxKey::<Aes192>::from_slice(&key[..24]);
+                let key = EaxKey::<Aes192>::from_slice(key);
                 let cipher = Eax::<Aes192>::new(key);
                 let nonce = EaxNonce::from_slice(nonce);
                 cipher.decrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Eax) => {
-                let key = EaxKey::<Aes256>::from_slice(&key[..32]);
+                let key = EaxKey::<Aes256>::from_slice(key);
                 let cipher = Eax::<Aes256>::new(key);
                 let nonce = EaxNonce::from_slice(nonce);
                 cipher.decrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..16]);
+                let key = GenericArray::from_slice(key);
                 let nonce = Ocb3Nonce::from_slice(nonce);
                 let cipher = Aes128Ocb3::new(key);
                 cipher.decrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..24]);
+                let key = GenericArray::from_slice(key);
                 let nonce = Ocb3Nonce::from_slice(nonce);
                 let cipher = Aes192Ocb3::new(key);
                 cipher.decrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..32]);
+                let key = GenericArray::from_slice(key);
                 let nonce = Ocb3Nonce::from_slice(nonce);
                 let cipher = Aes256Ocb3::new(key);
                 cipher.decrypt_in_place(nonce, associated_data, buffer)
@@ -185,57 +192,64 @@ impl AeadAlgorithm {
         associated_data: &[u8],
         buffer: &mut BytesMut,
     ) -> Result<(), Error> {
+        let key = key.get(..sym_algorithm.key_size()).ok_or_else(|| {
+            InvalidSessionKeySnafu {
+                alg: *sym_algorithm,
+                session_key_size: key.len(),
+            }
+            .build()
+        })?;
         let res = match (sym_algorithm, self) {
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Gcm) => {
-                let key = GcmKey::<Aes128Gcm>::from_slice(&key[..16]);
+                let key = GcmKey::<Aes128Gcm>::from_slice(key);
                 let cipher = Aes128Gcm::new(key);
                 let nonce = GcmNonce::from_slice(nonce);
                 cipher.encrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Gcm) => {
-                let key = GcmKey::<Aes192Gcm>::from_slice(&key[..24]);
+                let key = GcmKey::<Aes192Gcm>::from_slice(key);
                 let cipher = Aes192Gcm::new(key);
                 let nonce = GcmNonce::from_slice(nonce);
                 cipher.encrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Gcm) => {
-                let key = GcmKey::<Aes256Gcm>::from_slice(&key[..32]);
+                let key = GcmKey::<Aes256Gcm>::from_slice(key);
                 let cipher = Aes256Gcm::new(key);
                 let nonce = GcmNonce::from_slice(nonce);
                 cipher.encrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Eax) => {
-                let key = EaxKey::<Aes128>::from_slice(&key[..16]);
+                let key = EaxKey::<Aes128>::from_slice(key);
                 let cipher = Eax::<Aes128>::new(key);
                 let nonce = EaxNonce::from_slice(nonce);
                 cipher.encrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Eax) => {
-                let key = EaxKey::<Aes192>::from_slice(&key[..24]);
+                let key = EaxKey::<Aes192>::from_slice(key);
                 let cipher = Eax::<Aes192>::new(key);
                 let nonce = EaxNonce::from_slice(nonce);
                 cipher.encrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Eax) => {
-                let key = EaxKey::<Aes256>::from_slice(&key[..32]);
+                let key = EaxKey::<Aes256>::from_slice(key);
                 let cipher = Eax::<Aes256>::new(key);
                 let nonce = EaxNonce::from_slice(nonce);
                 cipher.encrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..16]);
+                let key = GenericArray::from_slice(key);
                 let nonce = Ocb3Nonce::from_slice(nonce);
                 let cipher = Aes128Ocb3::new(key);
                 cipher.encrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..24]);
+                let key = GenericArray::from_slice(key);
                 let nonce = Ocb3Nonce::from_slice(nonce);
                 let cipher = Aes192Ocb3::new(key);
                 cipher.encrypt_in_place(nonce, associated_data, buffer)
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Ocb) => {
-                let key = GenericArray::from_slice(&key[..32]);
+                let key = GenericArray::from_slice(key);
                 let nonce = Ocb3Nonce::from_slice(nonce);
                 let cipher = Aes256Ocb3::new(key);
                 cipher.encrypt_in_place(nonce, associated_data, buffer)
@@ -257,7 +271,7 @@ pub(crate) fn aead_setup_rfc9580(
     chunk_size: ChunkSize,
     salt: &[u8],
     ikm: &[u8],
-) -> ([u8; 5], Zeroizing<Vec<u8>>, Vec<u8>) {
+) -> Result<([u8; 5], Zeroizing<Vec<u8>>, Vec<u8>), Error> {
     let info = [
         Tag::SymEncryptedProtectedData.encode(), // packet type
         0x02,                                    // version
@@ -270,15 +284,19 @@ pub(crate) fn aead_setup_rfc9580(
     let mut okm = Zeroizing::new([0u8; 42]);
     hk.expand(&info, okm.as_mut_slice()).expect("42");
 
-    let mut message_key = Zeroizing::new(vec![0; sym_alg.key_size()]);
-    message_key.copy_from_slice(&okm.as_slice()[..sym_alg.key_size()]);
+    let (key, rest) = okm
+        .split_at_checked(sym_alg.key_size())
+        .ok_or_else(|| UnsupporedAlgorithmSnafu { alg: aead }.build())?;
+    let message_key = Zeroizing::new(key.to_vec());
 
     let raw_iv_len = aead.nonce_size() - 8;
-    let iv = &okm[sym_alg.key_size()..sym_alg.key_size() + raw_iv_len];
-    let mut nonce = vec![0u8; aead.nonce_size()];
-    nonce[..raw_iv_len].copy_from_slice(iv);
+    let iv = rest
+        .get(..raw_iv_len)
+        .ok_or_else(|| UnsupporedAlgorithmSnafu { alg: aead }.build())?;
+    let mut nonce = iv.to_vec();
+    nonce.resize(aead.nonce_size(), 0);
 
-    (info, message_key, nonce)
+    Ok((info, message_key, nonce))
 }
 
 /// Allowed chunk sizes.

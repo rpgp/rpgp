@@ -300,7 +300,7 @@ fn read_checksum(input: &[u8]) -> std::io::Result<u64> {
     let mut buf = [0; 4];
     let mut i = checksum.len();
     for a in checksum.iter().rev() {
-        buf[i] = *a;
+        *buf.get_mut(i).ok_or(io::ErrorKind::InvalidData)? = *a;
         i -= 1;
     }
 
@@ -546,7 +546,10 @@ impl<R: BufRead> Dearmor<R> {
         if let Some(mut crc) = self.crc {
             if size > 0 {
                 // update the hash
-                crc.write(&into[0..size]);
+                let data = into
+                    .get(0..size)
+                    .ok_or_else(|| io::Error::other("read more than the buffer holds"))?;
+                crc.write(data);
             }
         }
 
@@ -614,7 +617,10 @@ impl<R: BufRead> Read for Dearmor<R> {
                     self.current_part = Part::Body(Base64Decoder::new(Base64Reader::new(b)));
                 }
                 Part::Body(mut b) => {
-                    let last_read = self.read_body(&mut into[read..], &mut b)?;
+                    let dst = into
+                        .get_mut(read..)
+                        .ok_or_else(|| io::Error::other("read more than the buffer holds"))?;
+                    let last_read = self.read_body(dst, &mut b)?;
                     if last_read == 0 && read < into.len() {
                         // we are done with the body
                         let (b, buf) = b.into_inner_with_buffer();

@@ -437,7 +437,10 @@ where
                 match protected {
                     MaybeProtected::Unprotected { ref key } => {
                         // legacy resyncing
-                        let encrypted_prefix = prefix[2..].to_vec();
+                        let encrypted_prefix = prefix
+                            .get(2..)
+                            .ok_or_else(|| io::Error::other("prefix is too short"))?
+                            .to_vec();
                         decryptor.decrypt(&mut prefix);
                         decryptor = BufDecryptor::<M>::new_from_slices(key, &encrypted_prefix)
                             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
@@ -528,7 +531,10 @@ where
             }
         };
 
-        decryptor.decrypt(&mut buffer[current_len..]);
+        let new_data = buffer
+            .get_mut(current_len..)
+            .ok_or_else(|| io::Error::other("buffer shrank while filling"))?;
+        decryptor.decrypt(new_data);
 
         match protected {
             MaybeProtected::ProtectedCheckFirst { ref mut hasher, .. }
@@ -541,8 +547,8 @@ where
                 let start = *data_available;
                 debug_assert!(buffer.len() >= MDC_LEN);
                 let end = buffer.len() - MDC_LEN;
-                if start < end {
-                    hasher.update(&buffer[start..end]);
+                if let Some(data) = buffer.get(start..end) {
+                    hasher.update(data);
 
                     if !is_last_read {
                         *data_available += end - start;
@@ -581,13 +587,16 @@ where
                         // MDC is: 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
                         let msg_mdc = buffer.split_off(buffer.len() - MDC_LEN);
 
-                        hasher.update(&msg_mdc[..2]);
+                        let Some((header, msg_hash)) = msg_mdc.split_first_chunk::<2>() else {
+                            return Err(io::Error::other(Error::MdcError));
+                        };
+                        hasher.update(header);
                         let hash: [u8; 20] = hasher.finalize().into();
 
                         // Constant-time comparison of MDC from message against expected values
-                        let mdc_ok = msg_mdc[0].ct_eq(&0xD3) // MDC tag
-                            & msg_mdc[1].ct_eq(&0x14) // MDC length
-                            & msg_mdc[2..].ct_eq(hash.as_slice());
+                        let mdc_ok = header[0].ct_eq(&0xD3) // MDC tag
+                            & header[1].ct_eq(&0x14) // MDC length
+                            & msg_hash.ct_eq(hash.as_slice());
                         if bool::from(!mdc_ok) {
                             return Err(io::Error::other(Error::MdcError));
                         }
@@ -620,7 +629,9 @@ where
                 buffer,
                 data_available,
                 ..
-            } => Ok(&buffer[..*data_available]),
+            } => buffer
+                .get(..*data_available)
+                .ok_or_else(|| io::Error::other("available data exceeds the buffer")),
             Self::Done { buffer, .. } => Ok(&buffer[..]),
             Self::Error => unreachable!("error state "),
         }
@@ -660,14 +671,12 @@ where
                 data_available,
                 ..
             } => {
-                let to_write = (*data_available).min(buf.len());
-                buffer.copy_to_slice(&mut buf[..to_write]);
+                let to_write = buffer.take(*data_available).reader().read(buf)?;
                 *data_available -= to_write;
                 Ok(to_write)
             }
             Self::Done { buffer, .. } => {
-                let to_write = buffer.remaining().min(buf.len());
-                buffer.copy_to_slice(&mut buf[..to_write]);
+                let to_write = buffer.reader().read(buf)?;
                 Ok(to_write)
             }
             Self::Error => unreachable!("error state"),
@@ -687,7 +696,10 @@ where
                     ..
                 } => {
                     let to_write = *data_available;
-                    buf.extend_from_slice(&buffer[..to_write]);
+                    let data = buffer
+                        .get(..to_write)
+                        .ok_or_else(|| io::Error::other("available data exceeds the buffer"))?;
+                    buf.extend_from_slice(data);
                     buffer.advance(to_write);
                     *data_available -= to_write;
                     read += to_write;

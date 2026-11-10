@@ -19,7 +19,7 @@ use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::{
     crypto::{hash::HashAlgorithm, Decryptor, Signer},
-    errors::{format_err, unsupported_err, Error, Result},
+    errors::{bail, format_err, unsupported_err, Error, Result},
     ser::Serialize,
     types::{Mpi, PkeskBytes, RsaPublicParams, SignatureBytes},
 };
@@ -74,10 +74,11 @@ impl SecretKey {
     }
 
     /// Returns `d`, `p`, `q`, `u` as MPIs
-    fn to_mpi(&self) -> (Mpi, Mpi, Mpi, Mpi) {
+    fn to_mpi(&self) -> Result<(Mpi, Mpi, Mpi, Mpi)> {
         let d = self.0.d();
-        let p = &self.0.primes()[0];
-        let q = &self.0.primes()[1];
+        let [p, q, ..] = self.0.primes() else {
+            bail!("RSA private key has fewer than two primes");
+        };
         let u = p
             .clone()
             .mod_inverse(q)
@@ -85,7 +86,7 @@ impl SecretKey {
             .to_biguint()
             .expect("invalid prime");
 
-        (Mpi::from(d), Mpi::from(p), Mpi::from(q), Mpi::from(u))
+        Ok((Mpi::from(d), Mpi::from(p), Mpi::from(q), Mpi::from(u)))
     }
 
     /// Returns the modulus size in bytes.
@@ -94,19 +95,22 @@ impl SecretKey {
     }
 
     /// Returns `d`, `p`, `q`, `u` in big endian
-    pub fn to_bytes(&self) -> (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>) {
+    pub fn to_bytes(&self) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)> {
+        let [p, q, ..] = self.0.primes() else {
+            bail!("RSA private key has fewer than two primes");
+        };
         let d = self.0.d().to_bytes_be();
-        let p = self.0.primes()[0].to_bytes_be();
-        let q = self.0.primes()[1].to_bytes_be();
-        let u = self.0.primes()[0]
+        let u = p
             .clone()
-            .mod_inverse(&self.0.primes()[1])
+            .mod_inverse(q)
             .expect("invalid prime")
             .to_biguint()
             .expect("invalid prime")
             .to_bytes_be();
+        let p = p.to_bytes_be();
+        let q = q.to_bytes_be();
 
-        (d, p, q, u)
+        Ok((d, p, q, u))
     }
 }
 
@@ -120,7 +124,7 @@ impl From<&SecretKey> for RsaPublicParams {
 
 impl Serialize for SecretKey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        let (d, p, q, u) = self.to_mpi();
+        let (d, p, q, u) = self.to_mpi()?;
         d.to_writer(writer)?;
         p.to_writer(writer)?;
         q.to_writer(writer)?;
@@ -131,7 +135,10 @@ impl Serialize for SecretKey {
 
     fn write_len(&self) -> usize {
         let mut sum = 0;
-        let (d, p, q, u) = self.to_mpi();
+        // to_writer returns the same error.
+        let Ok((d, p, q, u)) = self.to_mpi() else {
+            return 0;
+        };
         sum += d.write_len();
         sum += p.write_len();
         sum += q.write_len();
@@ -220,9 +227,8 @@ pub fn verify(
     let signature = if signature.len() < key.size() {
         // RSA short signatures are allowed by PGP, but not by the RSA crate.
         // So we pad out the signature if we encounter a short one.
-        let mut signature_padded = vec![0u8; key.size()];
-        let diff = key.size() - signature.len();
-        signature_padded[diff..].copy_from_slice(signature);
+        let mut signature_padded = vec![0u8; key.size() - signature.len()];
+        signature_padded.extend_from_slice(signature);
         RsaSignature::try_from(&signature_padded[..])?
     } else {
         RsaSignature::try_from(signature)?

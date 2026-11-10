@@ -1,6 +1,6 @@
 use std::io::BufRead;
 
-use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
+use byteorder::{BigEndian, WriteBytesExt};
 use digest::generic_array::GenericArray;
 use md5::Md5;
 use rand::{CryptoRng, Rng};
@@ -515,11 +515,13 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
             let (sym_alg, plain) = match typ {
                 EskType::V6 => (None, plain),
                 EskType::V3_4 => {
-                    ensure!(!plain.is_empty(), "plain may not be empty");
+                    let Some((&sym_alg, rest)) = plain.split_first() else {
+                        bail!("plain may not be empty");
+                    };
 
                     (
-                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
-                        &plain[1..],           // strip symmetric algorithm
+                        Some(sym_alg.into()), // byte 0 is the symmetric algorithm
+                        rest,                 // strip symmetric algorithm
                     )
                 }
             };
@@ -536,11 +538,13 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
             let (sym_alg, plain) = match typ {
                 EskType::V6 => (None, plain),
                 EskType::V3_4 => {
-                    ensure!(!plain.is_empty(), "plain may not be empty");
+                    let Some((&sym_alg, rest)) = plain.split_first() else {
+                        bail!("plain may not be empty");
+                    };
 
                     (
-                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
-                        &plain[1..],           // strip symmetric algorithm
+                        Some(sym_alg.into()), // byte 0 is the symmetric algorithm
+                        rest,                 // strip symmetric algorithm
                     )
                 }
             };
@@ -560,11 +564,13 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
             let (sym_alg, plain) = match typ {
                 EskType::V6 => (None, plain),
                 EskType::V3_4 => {
-                    ensure!(!plain.is_empty(), "plain may not be empty");
+                    let Some((&sym_alg, rest)) = plain.split_first() else {
+                        bail!("plain may not be empty");
+                    };
 
                     (
-                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
-                        &plain[1..],           // strip symmetric algorithm
+                        Some(sym_alg.into()), // byte 0 is the symmetric algorithm
+                        rest,                 // strip symmetric algorithm
                     )
                 }
             };
@@ -589,11 +595,13 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
             let (sym_alg, plain) = match typ {
                 EskType::V6 => (None, plain),
                 EskType::V3_4 => {
-                    ensure!(!plain.is_empty(), "plain may not be empty");
+                    let Some((&sym_alg, rest)) = plain.split_first() else {
+                        bail!("plain may not be empty");
+                    };
 
                     (
-                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
-                        &plain[1..],           // strip symmetric algorithm
+                        Some(sym_alg.into()), // byte 0 is the symmetric algorithm
+                        rest,                 // strip symmetric algorithm
                     )
                 }
             };
@@ -716,10 +724,10 @@ impl PubKeyInner {
                 hasher.update([0x99]);
 
                 // A one-octet version number (4).
-                let mut packet = vec![4, 0, 0, 0, 0];
+                let mut packet = vec![4];
 
                 // A four-octet number denoting the time that the key was created.
-                BigEndian::write_u32(&mut packet[1..5], self.created_at.as_secs());
+                packet.extend_from_slice(&self.created_at.as_secs().to_be_bytes());
 
                 // A one-octet number denoting the public-key algorithm of this key.
                 packet.push(self.algorithm.into());
@@ -805,13 +813,13 @@ impl KeyDetails for PubKeyInner {
                 PublicParams::RSA(params) => {
                     let n: Mpi = params.key.n().into();
                     let mut raw = [0u8; 8];
-                    if n.len() >= 8 {
-                        let offset = n.len() - 8;
-                        raw.copy_from_slice(&n.as_ref()[offset..]);
+                    if let Some(low) = n.as_ref().last_chunk::<8>() {
+                        raw = *low;
                     } else {
                         // unreasonably short modulus, left-pad with zeros
-                        let offset = 8 - n.len();
-                        raw[offset..].copy_from_slice(n.as_ref());
+                        for (dst, src) in raw.iter_mut().rev().zip(n.as_ref().iter().rev()) {
+                            *dst = *src;
+                        }
                     }
                     raw.into()
                 }
@@ -820,15 +828,14 @@ impl KeyDetails for PubKeyInner {
             KeyVersion::V4 => {
                 // Lower 64 bits
                 let f = self.fingerprint();
-                let offset = f.len() - 8;
-                let raw: [u8; 8] = f.as_bytes()[offset..].try_into().expect("fixed size");
+                let raw: [u8; 8] = f.as_bytes().last_chunk().copied().unwrap_or_default();
                 raw.into()
             }
             KeyVersion::V5 => unimplemented!("V5 keys"),
             KeyVersion::V6 => {
                 // High 64 bits
                 let f = self.fingerprint();
-                let raw: [u8; 8] = f.as_bytes()[0..8].try_into().expect("fixed size");
+                let raw: [u8; 8] = f.as_bytes().first_chunk().copied().unwrap_or_default();
                 raw.into()
             }
             KeyVersion::Other(v) => unimplemented!("Unsupported key version {}", v),
@@ -858,26 +865,31 @@ impl VerifyingKey for PubKeyInner {
             PublicParams::RSA(ref params) => {
                 let sig: &[Mpi] = sig.try_into()?;
 
-                ensure_eq!(sig.len(), 1, "invalid signature");
-                crypto::rsa::verify(&params.key, hash, hashed, sig[0].as_ref())
+                let [sig] = sig else {
+                    bail!("invalid signature: expected 1 value, got {}", sig.len());
+                };
+                crypto::rsa::verify(&params.key, hash, hashed, sig.as_ref())
             }
             PublicParams::EdDSALegacy(ref params) => {
                 match params {
                     EddsaLegacyPublicParams::Ed25519 { ref key } => {
                         let sig: &[Mpi] = sig.try_into()?;
 
-                        ensure_eq!(sig.len(), 2);
+                        let [r, s] = sig else {
+                            bail!("invalid signature: expected 2 values, got {}", sig.len());
+                        };
 
-                        let r = sig[0].as_ref();
-                        let s = sig[1].as_ref();
+                        let r = r.as_ref();
+                        let s = s.as_ref();
 
                         ensure!(r.len() < 33, "invalid R (len)");
                         ensure!(s.len() < 33, "invalid S (len)");
 
-                        let mut sig_bytes = vec![0u8; 64];
                         // add padding if the values were encoded short
-                        sig_bytes[(32 - r.len())..32].copy_from_slice(r);
-                        sig_bytes[32 + (32 - s.len())..].copy_from_slice(s);
+                        let mut sig_bytes = vec![0u8; 32 - r.len()];
+                        sig_bytes.extend_from_slice(r);
+                        sig_bytes.resize(64 - s.len(), 0);
+                        sig_bytes.extend_from_slice(s);
 
                         crypto::ed25519::verify(key, hash, hashed, &sig_bytes)
                     }
@@ -965,9 +977,11 @@ impl VerifyingKey for PubKeyInner {
             }
             PublicParams::DSA(ref params) => {
                 let sig: &[Mpi] = sig.try_into()?;
-                ensure_eq!(sig.len(), 2, "invalid signature");
+                let [r, s] = sig else {
+                    bail!("invalid signature: expected 2 values, got {}", sig.len());
+                };
 
-                crypto::dsa::verify(params, hashed, sig[0].clone().into(), sig[1].clone().into())
+                crypto::dsa::verify(params, hashed, r.clone().into(), s.clone().into())
             }
             PublicParams::Unknown { .. } => {
                 unimplemented_err!("PublicParams::Unknown can not be used for verify operations");
