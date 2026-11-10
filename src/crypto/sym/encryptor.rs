@@ -337,17 +337,10 @@ where
         match self {
             Self::Prefix { prefix, .. } => {
                 // Prefix
-                let to_write = prefix.reader().read(buf)?;
-                Ok(to_write)
+                prefix.reader().read(buf)
             }
-            Self::Data { buffer, .. } => {
-                let to_write = buffer.reader().read(buf)?;
-                Ok(to_write)
-            }
-            Self::Mdc { mdc } => {
-                let to_write = mdc.reader().read(buf)?;
-                Ok(to_write)
-            }
+            Self::Data { buffer, .. } => buffer.reader().read(buf),
+            Self::Mdc { mdc } => mdc.reader().read(buf),
             Self::Done => Ok(0),
             Self::Unknown => unreachable!("error state"),
         }

@@ -157,8 +157,6 @@ impl<R: io::Read> io::Read for StreamEncryptor<R> {
             }
         }
 
-        let to_write = (&mut self.buffer).reader().read(buf)?;
-
-        Ok(to_write)
+        (&mut self.buffer).reader().read(buf)
     }
 }

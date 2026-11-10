@@ -707,8 +707,7 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
             self.current_packet = packet_ser;
         }
 
-        let to_write = (&mut self.current_packet).reader().read(buf)?;
-        Ok(to_write)
+        (&mut self.current_packet).reader().read(buf)
     }
 }
 

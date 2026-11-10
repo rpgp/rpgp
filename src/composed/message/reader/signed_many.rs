@@ -545,10 +545,7 @@ impl Read for SignatureManyReader<'_> {
         self.fill_inner()?;
         match self {
             Self::Init { .. } => unreachable!("invalid state"),
-            Self::Body { buffer, .. } => {
-                let to_write = buffer.reader().read(buf)?;
-                Ok(to_write)
-            }
+            Self::Body { buffer, .. } => buffer.reader().read(buf),
             Self::Done { .. } => Ok(0),
             Self::Error => Err(io::Error::other("SignatureOnePassManyReader errored")),
         }
