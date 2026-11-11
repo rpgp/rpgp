@@ -13,7 +13,8 @@ use crate::{
     composed::{KeyDetails, SignedSecretKey},
     crypto::{
         aead::AeadAlgorithm, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448, eddsa_legacy,
-        hash::HashAlgorithm, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm,
+        hash::HashAlgorithm, ml_dsa65_nistp384, ml_dsa87_nistp521, ml_kem1024_nistp521,
+        ml_kem768_nistp384, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm,
         x25519, x448,
     },
     errors::Result,
@@ -419,6 +420,14 @@ pub enum KeyType {
     /// Signing with SLH DSA Shake 256s
     #[cfg(feature = "pqc")]
     SlhDsaShake256s,
+    #[cfg(feature = "pqc-nist-bp")]
+    MlKem768NistP384,
+    #[cfg(feature = "pqc-nist-bp")]
+    MlKem1024NistP521,
+    #[cfg(feature = "pqc-nist-bp")]
+    MlDsa65NistP384,
+    #[cfg(feature = "pqc-nist-bp")]
+    MlDsa87NistP521,
 }
 
 /// DSA key size
@@ -470,6 +479,14 @@ impl KeyType {
             KeyType::SlhDsaShake128f => PublicKeyAlgorithm::SlhDsaShake128f,
             #[cfg(feature = "pqc")]
             KeyType::SlhDsaShake256s => PublicKeyAlgorithm::SlhDsaShake256s,
+            #[cfg(feature = "pqc-nist-bp")]
+            KeyType::MlKem768NistP384 => PublicKeyAlgorithm::MlKem768NistP384,
+            #[cfg(feature = "pqc-nist-bp")]
+            KeyType::MlKem1024NistP521 => PublicKeyAlgorithm::MlKem1024NistP521,
+            #[cfg(feature = "pqc-nist-bp")]
+            KeyType::MlDsa65NistP384 => PublicKeyAlgorithm::MlDsa65NistP384,
+            #[cfg(feature = "pqc-nist-bp")]
+            KeyType::MlDsa87NistP521 => PublicKeyAlgorithm::MlDsa87NistP521,
         }
     }
 
@@ -493,6 +510,10 @@ impl KeyType {
             | KeyType::SlhDsaShake128s
             | KeyType::SlhDsaShake128f
             | KeyType::SlhDsaShake256s => true,
+            #[cfg(feature = "pqc-nist-bp")]
+            KeyType::MlKem768NistP384 | KeyType::MlKem1024NistP521 => false,
+            #[cfg(feature = "pqc-nist-bp")]
+            KeyType::MlDsa65NistP384 | KeyType::MlDsa87NistP521 => true,
         }
     }
 
@@ -516,6 +537,10 @@ impl KeyType {
             | KeyType::SlhDsaShake128s
             | KeyType::SlhDsaShake128f
             | KeyType::SlhDsaShake256s => false,
+            #[cfg(feature = "pqc-nist-bp")]
+            KeyType::MlKem768NistP384 | KeyType::MlKem1024NistP521 => true,
+            #[cfg(feature = "pqc-nist-bp")]
+            KeyType::MlDsa65NistP384 | KeyType::MlDsa87NistP521 => false,
         }
     }
 
@@ -628,6 +653,34 @@ impl KeyType {
                 let secret = slh_dsa_shake256s::SecretKey::generate(rng);
                 let public_params = PublicParams::SlhDsaShake256s((&secret).into());
                 let secret_params = PlainSecretParams::SlhDsaShake256s(secret);
+                (public_params, secret_params)
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            KeyType::MlKem768NistP384 => {
+                let secret = ml_kem768_nistp384::SecretKey::generate(rng);
+                let public_params = PublicParams::MlKem768NistP384((&secret).into());
+                let secret_params = PlainSecretParams::MlKem768NistP384(secret);
+                (public_params, secret_params)
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            KeyType::MlKem1024NistP521 => {
+                let secret = ml_kem1024_nistp521::SecretKey::generate(rng);
+                let public_params = PublicParams::MlKem1024NistP521((&secret).into());
+                let secret_params = PlainSecretParams::MlKem1024NistP521(secret);
+                (public_params, secret_params)
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            KeyType::MlDsa65NistP384 => {
+                let secret = ml_dsa65_nistp384::SecretKey::generate(rng);
+                let public_params = PublicParams::MlDsa65NistP384((&secret).into());
+                let secret_params = PlainSecretParams::MlDsa65NistP384(secret);
+                (public_params, secret_params)
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            KeyType::MlDsa87NistP521 => {
+                let secret = ml_dsa87_nistp521::SecretKey::generate(rng);
+                let public_params = PublicParams::MlDsa87NistP521((&secret).into());
+                let secret_params = PlainSecretParams::MlDsa87NistP521(secret);
                 (public_params, secret_params)
             }
         };
