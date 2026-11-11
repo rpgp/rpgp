@@ -1444,7 +1444,7 @@ impl Serialize for KeyFlags {
 ///
 /// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-key-flags>
 #[bitfield(u16, order = lsb)]
-#[derive(PartialEq, Eq, Copy, Clone)]
+#[derive(PartialEq, Eq)]
 pub struct KnownKeyFlags {
     #[bits(1)]
     certify: bool,
@@ -1607,7 +1607,7 @@ impl Serialize for Features {
 ///
 /// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-features>
 #[bitfield(u8)]
-#[derive(PartialEq, Eq, Copy, Clone)]
+#[derive(PartialEq, Eq)]
 pub struct KnownFeatures {
     /// Support for "Version 1 Symmetrically Encrypted and Integrity Protected Data packet"
     #[bits(1)]
