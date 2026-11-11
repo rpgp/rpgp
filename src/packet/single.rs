@@ -123,6 +123,17 @@ impl Packet {
             }
             Err(err) => {
                 warn!("invalid packet: {:#?} {:?}", err, packet_header.tag());
+
+                // Mark public subkey packets, so that the composed key parser can skip them.
+                // "Soft" errors are left as they are, they get filtered out before that.
+                let err = match err {
+                    Error::Unsupported { .. } | Error::EllipticCurve { .. } => err,
+                    _ if packet_header.tag() == Tag::PublicSubkey => Error::InvalidPublicSubkey {
+                        source: Box::new(err),
+                    },
+                    _ => err,
+                };
+
                 Err(Error::InvalidPacketContent {
                     source: Box::new(err),
                 })

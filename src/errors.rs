@@ -94,6 +94,12 @@ pub enum Error {
     },
     #[snafu(display("Invalid Packet Content {source:?}"))]
     InvalidPacketContent { source: Box<Error> },
+    /// A public subkey packet that could not be parsed.
+    ///
+    /// Only used as the `source` of [`Error::InvalidPacketContent`]. It lets the composed key
+    /// parser skip the subkey (and its signatures), instead of rejecting the whole key.
+    #[snafu(display("Invalid public subkey packet {source:?}"))]
+    InvalidPublicSubkey { source: Box<Error> },
     #[snafu(transparent)]
     SignatureError { source: SignatureError },
     #[snafu(display("Modification Detection Code error"))]
