@@ -1,12 +1,10 @@
 use digest::{const_oid::AssociatedOid, Digest};
 use md5::Md5;
-use num_bigint::ModInverse;
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 use ripemd::Ripemd160;
 use rsa::{
     pkcs1v15::{Pkcs1v15Encrypt, Signature as RsaSignature, SigningKey, VerifyingKey},
     traits::{PrivateKeyParts, PublicKeyParts},
-    RsaPrivateKey, RsaPublicKey,
 };
 use sha1_checked::Sha1; // not used for hashing, just as a source of the OID
 use sha2::{Sha224, Sha256, Sha384, Sha512};
@@ -39,20 +37,20 @@ const MAX_KEY_SIZE_GENERATE: usize = 4096;
 pub struct SecretKey(
     #[debug("..")]
     #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
-    RsaPrivateKey,
+    rsa::PrivateKey,
 );
 
 impl SecretKey {
     /// Generate an RSA `SecretKey`.
     ///
     /// Errors on unsupported `bit_size`s.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R, bit_size: usize) -> Result<Self> {
+    pub fn generate<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         if bit_size > MAX_KEY_SIZE_GENERATE {
             log::warn!("rejecting SecretKey::generate for RSA key size: {bit_size}");
             return Err(Error::InvalidKeyLength);
         }
 
-        let key = RsaPrivateKey::new(&mut rng, bit_size)?;
+        let key = rsa::PrivateKey::new(rng, bit_size)?;
 
         Ok(SecretKey(key))
     }
@@ -64,8 +62,9 @@ impl SecretKey {
         q: Mpi,
         _u: Mpi,
     ) -> Result<Self> {
-        let secret_key = RsaPrivateKey::from_components(
-            pub_params.key.n().clone(),
+        let n = pub_params.key.n().clone().get();
+        let secret_key = rsa::PrivateKey::from_components(
+            n,
             pub_params.key.e().clone(),
             d.into(),
             vec![p.into(), q.into()],
@@ -79,12 +78,8 @@ impl SecretKey {
         let [p, q, ..] = self.0.primes() else {
             bail!("RSA private key has fewer than two primes");
         };
-        let u = p
-            .clone()
-            .mod_inverse(q)
-            .expect("invalid prime")
-            .to_biguint()
-            .expect("invalid prime");
+        let q = q.as_nz_ref();
+        let u = p.clone().invert_mod(q).expect("invalid prime");
 
         Ok((Mpi::from(d), Mpi::from(p), Mpi::from(q), Mpi::from(u)))
     }
@@ -99,18 +94,16 @@ impl SecretKey {
         let [p, q, ..] = self.0.primes() else {
             bail!("RSA private key has fewer than two primes");
         };
-        let d = self.0.d().to_bytes_be();
-        let u = p
-            .clone()
-            .mod_inverse(q)
-            .expect("invalid prime")
-            .to_biguint()
-            .expect("invalid prime")
-            .to_bytes_be();
-        let p = p.to_bytes_be();
-        let q = q.to_bytes_be();
 
-        Ok((d, p, q, u))
+        let d = self.0.d().to_be_bytes();
+        let q = q.as_nz_ref();
+        let u = p.clone().invert_mod(q).expect("invalid prime");
+
+        let p = p.to_be_bytes();
+        let q = q.to_be_bytes();
+        let u = u.to_be_bytes();
+
+        Ok((d.to_vec(), p.to_vec(), q.to_vec(), u.to_vec()))
     }
 }
 
@@ -180,26 +173,26 @@ impl Signer for SecretKey {
     }
 }
 
-impl From<RsaPrivateKey> for SecretKey {
-    fn from(key: RsaPrivateKey) -> Self {
+impl From<rsa::PrivateKey> for SecretKey {
+    fn from(key: rsa::PrivateKey) -> Self {
         Self(key)
     }
 }
 
 /// RSA encryption using PKCS1v15 padding.
-pub fn encrypt<R: CryptoRng + Rng>(
-    mut rng: R,
-    key: &RsaPublicKey,
+pub fn encrypt<R: CryptoRng + ?Sized>(
+    rng: &mut R,
+    key: &rsa::PublicKey,
     plaintext: &[u8],
 ) -> Result<PkeskBytes> {
-    let data = key.encrypt(&mut rng, Pkcs1v15Encrypt, plaintext)?;
+    let data = key.encrypt(rng, Pkcs1v15Encrypt, plaintext)?;
 
     Ok(PkeskBytes::Rsa {
         mpi: Mpi::from_slice(&data[..]),
     })
 }
 
-fn verify_int<D>(key: &RsaPublicKey, hashed: &[u8], signature: &RsaSignature) -> Result<()>
+fn verify_int<D>(key: &rsa::PublicKey, hashed: &[u8], signature: &RsaSignature) -> Result<()>
 where
     D: Digest + AssociatedOid,
 {
@@ -208,7 +201,7 @@ where
         .map_err(Into::into)
 }
 
-fn sign_int<D>(key: RsaPrivateKey, digest: &[u8]) -> Result<RsaSignature>
+fn sign_int<D>(key: rsa::PrivateKey, digest: &[u8]) -> Result<RsaSignature>
 where
     D: Digest + AssociatedOid,
 {
@@ -219,7 +212,7 @@ where
 
 /// Verify a RSA, PKCS1v15 padded signature.
 pub fn verify(
-    key: &rsa::RsaPublicKey,
+    key: &rsa::PublicKey,
     hash: HashAlgorithm,
     hashed: &[u8],
     signature: &[u8],
@@ -255,12 +248,10 @@ mod tests {
     use proptest::prelude::*;
     use rand::SeedableRng;
 
-    use super::*;
-
     prop_compose! {
-        pub fn key_gen()(seed: u64) -> RsaPrivateKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            RsaPrivateKey::new(&mut rng, 512).unwrap()
+        pub fn key_gen()(seed: u64) -> rsa::PrivateKey {
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
+            rsa::PrivateKey::new_unchecked(&mut rng, 512).unwrap()
         }
     }
 }
