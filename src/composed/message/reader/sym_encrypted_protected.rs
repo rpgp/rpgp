@@ -326,7 +326,7 @@ impl<R: DebugBufRead> Read for SymEncryptedProtectedDataReader<R> {
             Source::BodyDecryptor(decryptor) => decryptor.read(buf),
             Source::BodyRaw(source) => source.read(buf),
             Source::Done(_) => Ok(0),
-            Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
+            Source::Error => Err(io::Error::other("SymEncryptedProtectedDataReader errored")),
         }
     }
 }
