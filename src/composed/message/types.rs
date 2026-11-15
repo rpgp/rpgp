@@ -108,7 +108,7 @@ impl MessageReader<'_> {
                 let parser = crate::packet::PacketParser::new(&mut inner_reader);
                 check_next_packet(parser)?;
 
-                let message_reader = inner_reader.get_mut().get_mut()?;
+                let message_reader = inner_reader.get_mut()?.get_mut()?;
                 message_reader.check_trailing_data()?;
             }
             MessageReader::Reader(r) => {
@@ -308,9 +308,9 @@ impl<'a> Message<'a> {
                 is_nested,
             } => match edata {
                 Edata::SymEncryptedData { reader } => {
-                    let packet_header = reader.packet_header();
+                    let packet_header = reader.packet_header()?;
                     Ok((
-                        reader.into_inner().into_inner()?,
+                        reader.into_inner()?.into_inner()?,
                         MessageParts::Encrypted {
                             packet_header,
                             esk,
@@ -669,7 +669,7 @@ impl Read for Edata<'_> {
 }
 
 impl<'a> Edata<'a> {
-    pub fn packet_header(&self) -> PacketHeader {
+    pub fn packet_header(&self) -> io::Result<PacketHeader> {
         match self {
             Self::SymEncryptedData { reader } => reader.packet_header(),
             Self::SymEncryptedProtectedData { reader } => reader.packet_header(),
@@ -677,8 +677,8 @@ impl<'a> Edata<'a> {
         }
     }
 
-    pub fn tag(&self) -> Tag {
-        self.packet_header().tag()
+    pub fn tag(&self) -> io::Result<Tag> {
+        Ok(self.packet_header()?.tag())
     }
 
     pub fn get_mut(&mut self) -> io::Result<&mut PacketBodyReader<MessageReader<'a>>> {
@@ -711,7 +711,7 @@ impl<'a> Edata<'a> {
         key: &PlainSessionKey,
         options: DecryptionOptions,
     ) -> Result<()> {
-        let protected = self.tag() == Tag::SymEncryptedProtectedData;
+        let protected = self.tag()? == Tag::SymEncryptedProtectedData;
         debug!("decrypt_permissive {options:?}: protected = {protected:?}");
 
         match self {
@@ -1016,7 +1016,7 @@ impl<'a> Message<'a> {
         }
     }
 
-    pub fn packet_header(&self) -> PacketHeader {
+    pub fn packet_header(&self) -> io::Result<PacketHeader> {
         match self {
             Self::Literal { reader, .. } => reader.packet_header(),
             Self::Compressed { reader, .. } => reader.packet_header(),
@@ -1073,7 +1073,7 @@ impl<'a> Message<'a> {
         Ok(out)
     }
 
-    pub fn into_inner(self) -> PacketBodyReader<MessageReader<'a>> {
+    pub fn into_inner(self) -> io::Result<PacketBodyReader<MessageReader<'a>>> {
         match self {
             Self::Literal { reader, .. } => reader.into_inner(),
             Self::Compressed { reader, .. } => reader.into_inner(),
@@ -1086,7 +1086,7 @@ impl<'a> Message<'a> {
         }
     }
 
-    pub fn get_mut(&mut self) -> &mut PacketBodyReader<MessageReader<'a>> {
+    pub fn get_mut(&mut self) -> io::Result<&mut PacketBodyReader<MessageReader<'a>>> {
         match self {
             Self::Literal { reader, .. } => reader.get_mut(),
             Self::Compressed { reader, .. } => reader.get_mut(),

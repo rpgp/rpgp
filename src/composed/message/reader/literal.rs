@@ -50,48 +50,48 @@ impl<R: BufRead> LiteralDataReader<R> {
         }
     }
 
-    pub fn is_done(&self) -> bool {
+    pub fn is_done(&self) -> io::Result<bool> {
         match self {
-            Self::Done { buffer, .. } => !buffer.has_remaining(),
-            Self::Body { .. } => false,
-            Self::Error => panic!("LiteralDataReader errored"),
+            Self::Done { buffer, .. } => Ok(!buffer.has_remaining()),
+            Self::Body { .. } => Ok(false),
+            Self::Error => Err(io::Error::other("LiteralDataReader errored")),
         }
     }
 
-    pub fn into_inner(self) -> PacketBodyReader<R> {
+    pub fn into_inner(self) -> io::Result<PacketBodyReader<R>> {
         match self {
-            Self::Body { source, .. } => source,
-            Self::Done { source, .. } => source,
-            Self::Error => panic!("LiteralDataReader errored"),
+            Self::Body { source, .. } => Ok(source),
+            Self::Done { source, .. } => Ok(source),
+            Self::Error => Err(io::Error::other("LiteralDataReader errored")),
         }
     }
 
-    pub fn get_mut(&mut self) -> &mut PacketBodyReader<R> {
+    pub fn get_mut(&mut self) -> io::Result<&mut PacketBodyReader<R>> {
         match self {
-            Self::Body { source, .. } => source,
-            Self::Done { source, .. } => source,
-            Self::Error => panic!("LiteralDataReader errored"),
+            Self::Body { source, .. } => Ok(source),
+            Self::Done { source, .. } => Ok(source),
+            Self::Error => Err(io::Error::other("LiteralDataReader errored")),
         }
     }
 
-    pub fn packet_header(&self) -> PacketHeader {
+    pub fn packet_header(&self) -> io::Result<PacketHeader> {
         match self {
-            Self::Body { ref source, .. } => source.packet_header(),
-            Self::Done { ref source, .. } => source.packet_header(),
-            Self::Error => panic!("LiteralDataReader errored"),
+            Self::Body { ref source, .. } => Ok(source.packet_header()),
+            Self::Done { ref source, .. } => Ok(source.packet_header()),
+            Self::Error => Err(io::Error::other("LiteralDataReader errored")),
         }
     }
 
-    pub fn data_header(&self) -> &LiteralDataHeader {
+    pub fn data_header(&self) -> io::Result<&LiteralDataHeader> {
         match self {
-            Self::Body { ref header, .. } => header,
-            Self::Done { ref header, .. } => header,
-            Self::Error => panic!("LiteralDataReader errored"),
+            Self::Body { ref header, .. } => Ok(header),
+            Self::Done { ref header, .. } => Ok(header),
+            Self::Error => Err(io::Error::other("LiteralDataReader errored")),
         }
     }
 
     fn fill_inner(&mut self) -> io::Result<()> {
-        if self.is_done() {
+        if self.is_done()? {
             return Ok(());
         }
 

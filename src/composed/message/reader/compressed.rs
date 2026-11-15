@@ -50,36 +50,30 @@ impl<R: DebugBufRead> CompressedDataReader<R> {
         matches!(self, Self::Done { .. })
     }
 
-    pub fn into_inner(self) -> PacketBodyReader<R> {
+    pub fn into_inner(self) -> io::Result<PacketBodyReader<R>> {
         match self {
-            Self::Body { source, .. } => source.into_inner(),
-            Self::Done { source, .. } => source,
-            Self::Error => {
-                panic!("CompressedDataReader errored")
-            }
+            Self::Body { source, .. } => Ok(source.into_inner()),
+            Self::Done { source, .. } => Ok(source),
+            Self::Error => Err(io::Error::other("CompressedDataReader errored")),
         }
     }
 
-    pub fn get_mut(&mut self) -> &mut PacketBodyReader<R> {
+    pub fn get_mut(&mut self) -> io::Result<&mut PacketBodyReader<R>> {
         match self {
-            Self::Body { source, .. } => source.get_mut(),
-            Self::Done { source, .. } => source,
-            Self::Error => {
-                panic!("CompressedDataReader errored")
-            }
+            Self::Body { source, .. } => Ok(source.get_mut()),
+            Self::Done { source, .. } => Ok(source),
+            Self::Error => Err(io::Error::other("CompressedDataReader errored")),
         }
     }
 
-    pub fn packet_header(&self) -> PacketHeader {
+    pub fn packet_header(&self) -> io::Result<PacketHeader> {
         match self {
             Self::Body { ref source, .. } => match source {
-                MaybeDecompress::Raw(r) => r.packet_header(),
-                MaybeDecompress::Decompress(r) => r.get_ref().packet_header(),
+                MaybeDecompress::Raw(r) => Ok(r.packet_header()),
+                MaybeDecompress::Decompress(r) => Ok(r.get_ref().packet_header()),
             },
-            Self::Done { ref source, .. } => source.packet_header(),
-            Self::Error => {
-                panic!("CompressedDataReader errored")
-            }
+            Self::Done { ref source, .. } => Ok(source.packet_header()),
+            Self::Error => Err(io::Error::other("CompressedDataReader errored")),
         }
     }
 
