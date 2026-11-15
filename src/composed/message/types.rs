@@ -39,7 +39,7 @@ pub enum MessageReader<'a> {
 impl MessageReader<'_> {
     pub fn get_mut(&mut self) -> io::Result<&mut Self> {
         match self {
-            Self::Compressed(r) => r.get_mut().get_mut(),
+            Self::Compressed(r) => r.get_mut()?.get_mut(),
             Self::Edata(r) => r.get_mut()?.get_mut()?.get_mut(),
             Self::Reader(_r) => Ok(self),
         }
@@ -92,7 +92,7 @@ impl MessageReader<'_> {
 
         match self {
             MessageReader::Compressed(r) => {
-                let compressed_body_reader = r.get_mut();
+                let compressed_body_reader = r.get_mut()?;
 
                 // discard excess data in the compressed packet
                 let excess = compressed_body_reader.drain()?;
@@ -258,11 +258,11 @@ impl<'a> Message<'a> {
     pub(crate) fn into_parts(self) -> io::Result<(MessageReader<'a>, MessageParts)> {
         match self {
             Message::Literal { reader, is_nested } => {
-                debug_assert!(reader.is_done());
-                let packet_header = reader.packet_header();
-                let header = reader.data_header().clone();
+                debug_assert!(reader.is_done()?);
+                let packet_header = reader.packet_header()?;
+                let header = reader.data_header()?.clone();
                 Ok((
-                    reader.into_inner().into_inner()?,
+                    reader.into_inner()?.into_inner()?,
                     MessageParts::Literal {
                         packet_header,
                         header,
@@ -272,9 +272,9 @@ impl<'a> Message<'a> {
             }
             Message::Compressed { reader, is_nested } => {
                 assert!(reader.is_done());
-                let packet_header = reader.packet_header();
+                let packet_header = reader.packet_header()?;
                 Ok((
-                    reader.into_inner().into_inner()?,
+                    reader.into_inner()?.into_inner()?,
                     MessageParts::Compressed {
                         packet_header,
                         is_nested,
@@ -781,7 +781,7 @@ impl<'a> Message<'a> {
 
         match self {
             Message::Signed { reader, .. } => {
-                for i in 0..reader.num_signatures() {
+                for i in 0..reader.num_signatures()? {
                     for (key, res) in keys.iter().zip(out.iter_mut()) {
                         match self.verify_nested_explicit(i, *key) {
                             Ok(sig) => {
@@ -830,10 +830,10 @@ impl<'a> Message<'a> {
     ) -> Result<&Signature> {
         match self {
             Message::Signed { reader, .. } => {
-                let Some(calculated_hash) = reader.hash(index) else {
+                let Some(calculated_hash) = reader.hash(index)? else {
                     bail!("cannot verify message before reading it to the end");
                 };
-                let Some(signature) = reader.signature(index) else {
+                let Some(signature) = reader.signature(index)? else {
                     bail!("cannot verify message before reading the final signature packet");
                 };
                 let InnerSignature::Known {
@@ -985,7 +985,7 @@ impl<'a> Message<'a> {
         let Message::Signed { reader, .. } = self else {
             return false;
         };
-        reader.num_one_pass_signatures() > 0
+        reader.num_one_pass_signatures().unwrap_or(0) > 0
     }
 
     pub fn is_encrypted(&self) -> bool {
@@ -1007,12 +1007,12 @@ impl<'a> Message<'a> {
     }
 
     /// If this is a literal message, returns the literal data header
-    pub fn literal_data_header(&self) -> Option<&LiteralDataHeader> {
+    pub fn literal_data_header(&self) -> io::Result<Option<&LiteralDataHeader>> {
         match self {
-            Self::Literal { reader, .. } => Some(reader.data_header()),
-            Self::Compressed { .. } => None,
-            Self::Signed { reader, .. } => reader.get_ref().literal_data_header(),
-            Self::Encrypted { .. } => None,
+            Self::Literal { reader, .. } => Ok(Some(reader.data_header()?)),
+            Self::Compressed { .. } => Ok(None),
+            Self::Signed { reader, .. } => reader.get_ref()?.literal_data_header(),
+            Self::Encrypted { .. } => Ok(None),
         }
     }
 
@@ -1020,7 +1020,7 @@ impl<'a> Message<'a> {
         match self {
             Self::Literal { reader, .. } => reader.packet_header(),
             Self::Compressed { reader, .. } => reader.packet_header(),
-            Self::Signed { reader, .. } => reader.get_ref().packet_header(),
+            Self::Signed { reader, .. } => reader.get_ref()?.packet_header(),
             Self::Encrypted { edata, .. } => edata.packet_header(),
         }
     }
@@ -1090,7 +1090,7 @@ impl<'a> Message<'a> {
         match self {
             Self::Literal { reader, .. } => reader.get_mut(),
             Self::Compressed { reader, .. } => reader.get_mut(),
-            Self::Signed { reader, .. } => reader.get_mut().get_mut(),
+            Self::Signed { reader, .. } => reader.get_mut()?.get_mut(),
             Self::Encrypted { edata, .. } => match edata {
                 Edata::SymEncryptedData { reader } => reader.get_mut(),
                 Edata::SymEncryptedProtectedData { reader } => reader.get_mut(),
@@ -1121,7 +1121,7 @@ impl<'a> Message<'a> {
         debug!("checking trailing data");
 
         // drain the inner reader to ensure no trailing data is contained
-        let inner = self.get_mut().get_mut()?;
+        let inner = self.get_mut()?.get_mut()?;
         inner.check_trailing_data()
     }
 
