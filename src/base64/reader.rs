@@ -31,19 +31,22 @@ impl<R: BufRead> Read for Base64Reader<R> {
         let mut n = 0;
         loop {
             // skip new lines
-            while buf[buf_i] == b'\r' || buf[buf_i] == b'\n' {
+            while buf.get(buf_i) == Some(&b'\r') || buf.get(buf_i) == Some(&b'\n') {
                 buf_i += 1;
                 if buf_i == buf.len() {
                     break;
                 }
             }
 
-            if buf_i < buf.len() {
-                if !is_base64_token(buf[buf_i]) {
+            if let Some(&byte) = buf.get(buf_i) {
+                if !is_base64_token(byte) {
                     break;
                 }
 
-                into[n] = buf[buf_i];
+                let Some(slot) = into.get_mut(n) else {
+                    break;
+                };
+                *slot = byte;
                 n += 1;
                 buf_i += 1;
                 if n == into.len() {

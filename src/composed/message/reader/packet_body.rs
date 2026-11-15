@@ -57,11 +57,7 @@ impl<R: BufRead> Read for PacketBodyReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
         match self.state {
-            State::Body { ref mut buffer, .. } => {
-                let to_write = buffer.remaining().min(buf.len());
-                buffer.copy_to_slice(&mut buf[..to_write]);
-                Ok(to_write)
-            }
+            State::Body { ref mut buffer, .. } => buffer.reader().read(buf),
             State::Done { .. } => Ok(0),
             State::Error => Err(io::Error::other("PacketBodyReader errored")),
         }

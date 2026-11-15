@@ -94,7 +94,10 @@ where
     mode.encrypt(prefix);
 
     // resync
-    mode = BufEncryptor::<MODE>::new_from_slices(key, &prefix[2..])?;
+    let resync_iv = prefix
+        .get(2..)
+        .ok_or(crate::errors::Error::CfbInvalidKeyIvLength)?;
+    mode = BufEncryptor::<MODE>::new_from_slices(key, resync_iv)?;
     mode.encrypt(data);
 
     Ok(())
@@ -446,16 +449,19 @@ impl SymmetricKeyAlgorithm {
         let prefix_len = bs + 2;
         let plaintext_len = plaintext.len();
 
-        let mut ciphertext = vec![0u8; prefix_len + plaintext_len];
+        let mut ciphertext = Vec::with_capacity(prefix_len + plaintext_len);
         // prefix
-        rng.fill_bytes(&mut ciphertext[..bs]);
+        ciphertext.resize(bs, 0);
+        rng.fill_bytes(&mut ciphertext);
 
         // add quick check
-        ciphertext[bs] = ciphertext[bs - 2];
-        ciphertext[bs + 1] = ciphertext[bs - 1];
+        let Some(&quick_check) = ciphertext.last_chunk::<2>() else {
+            bail!("block size {} is too small", bs);
+        };
+        ciphertext.extend_from_slice(&quick_check);
 
         // plaintext
-        ciphertext[prefix_len..].copy_from_slice(plaintext);
+        ciphertext.extend_from_slice(plaintext);
 
         self.encrypt_with_iv_resync(key, &iv_vec, &mut ciphertext)?;
 
@@ -481,23 +487,25 @@ impl SymmetricKeyAlgorithm {
         let prefix_len = bs + 2;
         let plaintext_len = plaintext.len();
 
-        let mut ciphertext = vec![0u8; prefix_len + plaintext_len + mdc_len];
+        let mut ciphertext = Vec::with_capacity(prefix_len + plaintext_len + mdc_len);
 
         // prefix
-        rng.fill_bytes(&mut ciphertext[..bs]);
+        ciphertext.resize(bs, 0);
+        rng.fill_bytes(&mut ciphertext);
 
         // add quick check
-        ciphertext[bs] = ciphertext[bs - 2];
-        ciphertext[bs + 1] = ciphertext[bs - 1];
+        let Some(&quick_check) = ciphertext.last_chunk::<2>() else {
+            bail!("block size {} is too small", bs);
+        };
+        ciphertext.extend_from_slice(&quick_check);
 
         // plaintext
-        ciphertext[prefix_len..(prefix_len + plaintext_len)].copy_from_slice(plaintext);
+        ciphertext.extend_from_slice(plaintext);
         // mdc header
-        ciphertext[prefix_len + plaintext_len] = 0xD3;
-        ciphertext[prefix_len + plaintext_len + 1] = 0x14;
+        ciphertext.extend_from_slice(&[0xD3, 0x14]);
         // mdc body
-        let checksum = &Sha1::digest(&ciphertext[..(prefix_len + plaintext_len + 2)])[..20];
-        ciphertext[(prefix_len + plaintext_len + 2)..].copy_from_slice(checksum);
+        let checksum = Sha1::digest(&ciphertext);
+        ciphertext.extend_from_slice(&checksum);
 
         // IV is all zeroes
         let iv_vec = vec![0u8; self.block_size()];

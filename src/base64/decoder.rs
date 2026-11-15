@@ -67,23 +67,32 @@ impl<R: Read> Read for Base64Decoder<R> {
 
         let nr = self.inner.buf_len() / 4 * 4;
         let nw = self.inner.buf_len() / 4 * 3;
+        let input = self
+            .inner
+            .buffer()
+            .get(..nr)
+            .ok_or_else(|| io::Error::other("input length exceeds the buffer"))?;
 
         let (consumed, written) = if nw > into.len() {
-            let (consumed, nw) =
-                try_decode_engine_slice(&self.inner.buffer()[..nr], &mut self.out_buffer[..]);
+            let (consumed, nw) = try_decode_engine_slice(input, &mut self.out_buffer[..]);
 
             let n = std::cmp::min(nw, into.len());
-            let t = &self.out_buffer[0..nw];
+            let t = self
+                .out_buffer
+                .get(0..nw)
+                .ok_or_else(|| io::Error::other("decoded data exceeds the buffer"))?;
             let (t1, t2) = t.split_at(n);
 
             // copy what we have into `into`
-            into[0..n].copy_from_slice(t1);
+            into.get_mut(0..n)
+                .ok_or_else(|| io::Error::other("decoded data exceeds the buffer"))?
+                .copy_from_slice(t1);
             // store the rest
             self.out.copy_from_slice(t2);
 
             (consumed, n)
         } else {
-            try_decode_engine_slice(&self.inner.buffer()[..nr], into)
+            try_decode_engine_slice(input, into)
         };
 
         self.inner.consume(consumed);
@@ -101,7 +110,7 @@ fn try_decode_engine_slice<T: ?Sized + AsRef<[u8]>>(
     let input_bytes = input.as_ref();
     let mut n = input_bytes.len();
     while n > 0 {
-        match ENGINE.decode_slice(&input_bytes[..n], output) {
+        match ENGINE.decode_slice(input_bytes.get(..n).unwrap_or(input_bytes), output) {
             Ok(size) => {
                 return (n, size);
             }

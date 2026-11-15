@@ -408,8 +408,8 @@ impl Signature {
     /// Version 6 signatures and version 6 keys are strongly linked:
     /// - only a v6 key may produce a v6 signature
     /// - a v6 key may only produce v6 signatures
-    fn check_signature_key_version_alignment(
-        key: &impl KeyDetails,
+    pub(crate) fn check_signature_key_version_alignment<K: KeyDetails + ?Sized>(
+        key: &K,
         config: &SignatureConfig,
     ) -> Result<()> {
         // Every signature made by a version 6 key MUST be a version 6 signature.
@@ -456,7 +456,7 @@ impl Signature {
         Ok(())
     }
 
-    /// Verify this signature.
+    /// Verify this data signature.
     pub fn verify<R>(&self, key: &impl VerifyingKey, data: R) -> Result<()>
     where
         R: Read,
@@ -469,6 +469,11 @@ impl Signature {
         else {
             unsupported_err!("signature version {:?}", self.version());
         };
+
+        ensure!(
+            [SignatureType::Binary, SignatureType::Text].contains(&config.typ),
+            format!("verify: unacceptable signature type {:?}", config.typ)
+        );
 
         Self::check_signature_key_version_alignment(&key, config)?;
         Self::check_signature_hash_strength(config)?;
@@ -520,7 +525,7 @@ impl Signature {
         // high 16 bits in the signature packet, even though RFC 9580 doesn't strictly require this)
         ensure_eq!(
             signed_hash_value,
-            &hash[0..2],
+            hash.get(0..2).unwrap_or_default(),
             "signature: invalid signed hash value"
         );
 
@@ -643,7 +648,7 @@ impl Signature {
         let hash = &hasher.finalize()[..];
         ensure_eq!(
             signed_hash_value,
-            &hash[0..2],
+            hash.get(0..2).unwrap_or_default(),
             "certification: invalid signed hash value"
         );
 
@@ -699,7 +704,7 @@ impl Signature {
         let hash = &hasher.finalize()[..];
         ensure_eq!(
             signed_hash_value,
-            &hash[0..2],
+            hash.get(0..2).unwrap_or_default(),
             "subkey binding: invalid signed hash value"
         );
 
@@ -752,7 +757,7 @@ impl Signature {
         let hash = &hasher.finalize()[..];
         ensure_eq!(
             signed_hash_value,
-            &hash[0..2],
+            hash.get(0..2).unwrap_or_default(),
             "key binding: invalid signed hash value"
         );
 
@@ -818,7 +823,7 @@ impl Signature {
         let hash = &hasher.finalize()[..];
         ensure_eq!(
             signed_hash_value,
-            &hash[0..2],
+            hash.get(0..2).unwrap_or_default(),
             "key: invalid signed hash value"
         );
 
@@ -1507,14 +1512,14 @@ impl Default for Features {
 
 impl From<&[u8]> for Features {
     fn from(value: &[u8]) -> Self {
-        match value.len() {
-            0 => Self {
+        match value.split_first() {
+            None => Self {
                 first: None,
                 rest: vec![],
             },
-            _ => Self {
-                first: Some(KnownFeatures(value[0])),
-                rest: value[1..].to_vec(),
+            Some((&first, rest)) => Self {
+                first: Some(KnownFeatures(first)),
+                rest: rest.to_vec(),
             },
         }
     }

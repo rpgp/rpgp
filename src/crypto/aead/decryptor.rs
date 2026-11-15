@@ -88,7 +88,7 @@ impl<R: BufRead> StreamDecryptor<R> {
             .try_into()
             .expect("chunk size is smaller");
 
-        let (info, message_key, nonce) = aead_setup_rfc9580(sym_alg, aead, chunk_size, salt, ikm);
+        let (info, message_key, nonce) = aead_setup_rfc9580(sym_alg, aead, chunk_size, salt, ikm)?;
 
         // There are n chunks, n auth tags + 1 final auth tag
         let Some(aead_tag_size) = aead.tag_size() else {
@@ -197,8 +197,10 @@ impl<R: BufRead> StreamDecryptor<R> {
         self.chunk_index += 1;
         match self.mode_data {
             ModeData::Rfc9580 { ref mut nonce, .. } => {
-                let l = nonce.len() - 8;
-                nonce[l..].copy_from_slice(&self.chunk_index.to_be_bytes());
+                let counter = nonce
+                    .last_chunk_mut::<8>()
+                    .ok_or_else(|| io::Error::other("nonce is too short"))?;
+                *counter = self.chunk_index.to_be_bytes();
             }
             ModeData::Gnupg {
                 ref iv,
@@ -209,8 +211,11 @@ impl<R: BufRead> StreamDecryptor<R> {
                 // by XORing its low eight octets with the chunk index (as a big endian value).
                 nonce.copy_from_slice(iv);
                 let chunk_index = self.chunk_index.to_be_bytes();
-                for (i, value) in chunk_index.iter().enumerate() {
-                    nonce[iv.len() - 8 + i] ^= value;
+                let low = nonce
+                    .last_chunk_mut::<8>()
+                    .ok_or_else(|| io::Error::other("nonce is too short"))?;
+                for (byte, value) in low.iter_mut().zip(chunk_index) {
+                    *byte ^= value;
                 }
 
                 // update chunk size in the associated data
@@ -296,9 +301,11 @@ impl<R: BufRead> StreamDecryptor<R> {
         Ok(())
     }
 
-    fn out_buffer(&self) -> &[u8] {
+    fn out_buffer(&self) -> io::Result<&[u8]> {
         let start = self.in_buffer_end + self.out_buffer_start;
-        &self.buffer[start..]
+        self.buffer
+            .get(start..)
+            .ok_or_else(|| io::Error::other("output start is past the buffer end"))
     }
 
     fn out_buffer_remaining(&self) -> usize {
@@ -310,7 +317,7 @@ impl<R: BufRead> StreamDecryptor<R> {
 impl<R: BufRead> BufRead for StreamDecryptor<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
-        Ok(self.out_buffer())
+        self.out_buffer()
     }
 
     fn consume(&mut self, amt: usize) {
@@ -321,8 +328,7 @@ impl<R: BufRead> BufRead for StreamDecryptor<R> {
 impl<R: BufRead> Read for StreamDecryptor<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
-        let to_write = self.out_buffer_remaining().min(buf.len());
-        buf[..to_write].copy_from_slice(&self.out_buffer()[..to_write]);
+        let to_write = self.out_buffer()?.read(buf)?;
         self.out_buffer_start += to_write;
         Ok(to_write)
     }

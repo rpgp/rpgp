@@ -2,6 +2,27 @@
 
 All notable changes to rpgp will be documented in this file.
 
+## [0.21.1](https://github.com/rpgp/rpgp/compare/v0.21.0..0.21.1) - 2026-11-11
+
+### 🐛 Bug Fixes
+
+- The proptest prelude::* brought in Rng from rand 0.10, that shadowed the rand 0.8 stuff ([#882](https://github.com/rpgp/rpgp/issues/882)) - ([358373c](https://github.com/rpgp/rpgp/commit/358373cb51e86f8daab12bcf06abfccd6c45db8c))
+- Check signature type for data signatures - ([cc11d76](https://github.com/rpgp/rpgp/commit/cc11d76f24e47af39ec1c45e44a52e5945f4930e))
+- Text mode hashing normalization ([#873](https://github.com/rpgp/rpgp/issues/873)) - ([7f9b04a](https://github.com/rpgp/rpgp/commit/7f9b04ae7c223b0ddb83bafa65fb52473c924a82))
+
+### 🚜 Refactor
+
+- Avoid slice indexing in general ([#872](https://github.com/rpgp/rpgp/issues/872)) - ([33445c4](https://github.com/rpgp/rpgp/commit/33445c4f143b12a17c562ebbe21ebd65bb6269a7))
+
+### 📚 Documentation
+
+- Add comment about manual zeroization - ([136e5c8](https://github.com/rpgp/rpgp/commit/136e5c883096425e64a7ca604568ae7fef7d92f0))
+
+### ⚙️ Miscellaneous Tasks
+
+- Ignore RUSTSEC-2026-0387 - ([ab551db](https://github.com/rpgp/rpgp/commit/ab551db41f034bf34ad889bfa4b120e89881a38b))
+- Additional "to_write" cleanup - ([363b985](https://github.com/rpgp/rpgp/commit/363b9854aa0a17a1d8ade6be4dd92e4d8e3d0bda))
+
 ## [0.21.0](https://github.com/rpgp/rpgp/compare/v0.20.0..0.21.0) - 2026-10-03
 
 ### ⛰️  Features

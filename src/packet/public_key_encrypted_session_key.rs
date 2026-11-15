@@ -360,7 +360,12 @@ impl PublicKeyEncryptedSessionKey {
         );
 
         // Strip 0x40 prefix for proxy transformation
-        let public_point_data = &public_point.as_ref()[1..33];
+        let Some(public_point_data) = public_point.as_ref().get(1..33) else {
+            bail!(
+                "Unexpected public point length {} in PKESK",
+                public_point.len()
+            );
+        };
 
         let mut forwarded_point = [0u8; 33];
         forwarded_point[0] = 0x40;

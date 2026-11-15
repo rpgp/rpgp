@@ -291,13 +291,13 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
 pub(crate) fn is_binary<R: BufRead>(input: &mut R) -> Result<bool> {
     // Peek at the first byte in the reader
     let buf = input.fill_buf()?;
-    if buf.is_empty() {
+    let Some(&first) = buf.first() else {
         bail!("empty input");
-    }
+    };
 
     // If the first bit of the first byte is set, we assume this is binary OpenPGP data, otherwise
     // we assume it is ASCII-armored.
-    let binary = buf[0] & 0x80 != 0;
+    let binary = first & 0x80 != 0;
 
     Ok(binary)
 }

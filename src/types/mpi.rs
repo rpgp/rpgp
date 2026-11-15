@@ -74,17 +74,16 @@ impl Mpi {
 /// Returns the bit length of a given slice.
 #[inline]
 fn bit_size(val: &[u8]) -> usize {
-    if val.is_empty() {
-        0
-    } else {
-        (val.len() * 8) - val[0].leading_zeros() as usize
+    match val.first() {
+        Some(first) => (val.len() * 8) - first.leading_zeros() as usize,
+        None => 0,
     }
 }
 
 #[inline]
 fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
     match leading_zeros_offset(bytes) {
-        Some(offset) => &bytes[offset..],
+        Some(offset) => bytes.get(offset..).unwrap_or_default(),
         None => &[],
     }
 }

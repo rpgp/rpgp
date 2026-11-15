@@ -126,11 +126,7 @@ impl<R: DebugBufRead> Read for CompressedDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
         match self {
-            Self::Body { ref mut buffer, .. } => {
-                let to_write = buffer.remaining().min(buf.len());
-                buffer.copy_to_slice(&mut buf[..to_write]);
-                Ok(to_write)
-            }
+            Self::Body { ref mut buffer, .. } => buffer.reader().read(buf),
             Self::Done { .. } => Ok(0),
             Self::Error => Err(io::Error::other("CompressedDataReader errored")),
         }

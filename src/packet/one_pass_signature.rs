@@ -213,9 +213,9 @@ impl OnePassSignature {
             }
             _ => {
                 let mut data = i.rest()?.freeze();
-                let last = if !data.is_empty() {
-                    let last = data.split_off(data.len() - 1);
-                    last[0]
+                let last = if let Some(&last) = data.last() {
+                    data.truncate(data.len() - 1);
+                    last
                 } else {
                     bail!("missing last field");
                 };

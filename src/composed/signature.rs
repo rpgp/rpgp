@@ -231,7 +231,7 @@ fn next<I: Iterator<Item = Result<Packet>>>(
 
 #[cfg(test)]
 mod tests {
-    use rand::SeedableRng;
+    use rand::{seq::SliceRandom, RngCore, SeedableRng};
     use rand_chacha::ChaCha20Rng;
 
     use crate::{
@@ -392,5 +392,38 @@ mod tests {
         // differently normalized plaintext should verify as ok for SignatureType::Text
         sig.verify(alice.primary_key.public_key(), PLAIN_LF.as_bytes())
             .expect("verify with unnormalized line ending is ok in text mode");
+    }
+
+    #[test]
+    #[ignore]
+    fn detached_signature_roundtrip_text_mode() {
+        // Set of three characters to build test data: LF, CR and the character "a"
+        const ELEMENTS: &[char] = &['\n', '\r', 'a'];
+
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (alice, _) =
+            SignedSecretKey::from_armor_file("./tests/autocrypt/alice@autocrypt.example.sec.asc")
+                .unwrap();
+
+        for _ in 0..1_000 {
+            // Make text-mode test data
+            let data: String = (0..(rng.next_u32() % 32))
+                .map(|_| ELEMENTS.choose(&mut rng).unwrap())
+                .collect();
+
+            let sig = DetachedSignature::sign_text_data(
+                &mut rng,
+                &alice.primary_key,
+                &Password::empty(),
+                HashAlgorithm::Sha256,
+                data.as_bytes(),
+            )
+            .unwrap();
+
+            let public = alice.primary_key.public_key();
+            sig.verify(public, data.as_bytes())
+                .expect("roundtrip error");
+        }
     }
 }
