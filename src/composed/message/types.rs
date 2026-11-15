@@ -40,7 +40,7 @@ impl MessageReader<'_> {
     pub fn get_mut(&mut self) -> io::Result<&mut Self> {
         match self {
             Self::Compressed(r) => r.get_mut().get_mut(),
-            Self::Edata(r) => r.get_mut().get_mut()?.get_mut(),
+            Self::Edata(r) => r.get_mut()?.get_mut()?.get_mut(),
             Self::Reader(_r) => Ok(self),
         }
     }
@@ -321,10 +321,10 @@ impl<'a> Message<'a> {
                 }
                 Edata::SymEncryptedProtectedData { reader } => {
                     assert!(reader.is_done());
-                    let packet_header = reader.packet_header();
+                    let packet_header = reader.packet_header()?;
                     let config = Some(reader.config().clone());
                     Ok((
-                        reader.into_inner().into_inner()?,
+                        reader.into_inner()?.into_inner()?,
                         MessageParts::Encrypted {
                             packet_header,
                             esk,
@@ -335,10 +335,10 @@ impl<'a> Message<'a> {
                 }
                 Edata::GnupgAeadData { reader } => {
                     assert!(reader.is_done());
-                    let packet_header = reader.packet_header();
+                    let packet_header = reader.packet_header()?;
                     let config = Some(reader.config().clone());
                     Ok((
-                        reader.into_inner().into_inner()?,
+                        reader.into_inner()?.into_inner()?,
                         MessageParts::Encrypted {
                             packet_header,
                             esk,
@@ -681,7 +681,7 @@ impl<'a> Edata<'a> {
         self.packet_header().tag()
     }
 
-    pub fn get_mut(&mut self) -> &mut PacketBodyReader<MessageReader<'a>> {
+    pub fn get_mut(&mut self) -> io::Result<&mut PacketBodyReader<MessageReader<'a>>> {
         match self {
             Self::SymEncryptedData { reader } => reader.get_mut(),
             Self::SymEncryptedProtectedData { reader } => reader.get_mut(),

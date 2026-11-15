@@ -161,16 +161,16 @@ impl<R: BufRead> StreamDecryptor<R> {
         })
     }
 
-    pub fn into_inner(self) -> R {
-        self.source
+    pub fn into_inner(self) -> io::Result<R> {
+        Ok(self.source)
     }
 
-    pub fn get_ref(&self) -> &R {
-        &self.source
+    pub fn get_ref(&self) -> io::Result<&R> {
+        Ok(&self.source)
     }
 
-    pub fn get_mut(&mut self) -> &mut R {
-        &mut self.source
+    pub fn get_mut(&mut self) -> io::Result<&mut R> {
+        Ok(&mut self.source)
     }
 
     fn decrypt(&mut self) -> io::Result<()> {
