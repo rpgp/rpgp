@@ -103,7 +103,7 @@ impl S2kParams {
                 let sym_alg = SymmetricKeyAlgorithm::AES256;
                 let aead_mode = AeadAlgorithm::Ocb;
 
-                let mut nonce = vec![0u8; aead_mode.nonce_size()];
+                let mut nonce = vec![0u8; aead_mode.nonce_size().expect("Defined for Ocb")];
                 rng.fill(&mut nonce[..]);
 
                 let mut salt = [0u8; 16];

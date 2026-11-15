@@ -151,7 +151,11 @@ fn parse_secret_fields<B: BufRead>(
                 }
             }
 
-            let nonce = i.take_bytes(aead_mode.nonce_size())?.freeze();
+            let Some(nonce_size) = aead_mode.nonce_size() else {
+                bail!("Unsupported AEAD mode {:?}", aead_mode);
+            };
+
+            let nonce = i.take_bytes(nonce_size)?.freeze();
 
             S2kParams::Aead {
                 sym_alg,
