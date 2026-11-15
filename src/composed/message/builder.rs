@@ -1585,7 +1585,14 @@ mod tests {
 
             assert!(decrypted.is_literal());
 
-            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(
+                decrypted
+                    .literal_data_header()
+                    .unwrap()
+                    .unwrap()
+                    .file_name(),
+                ""
+            );
             assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
@@ -1626,7 +1633,14 @@ mod tests {
 
             assert!(decrypted.is_literal());
 
-            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(
+                decrypted
+                    .literal_data_header()
+                    .unwrap()
+                    .unwrap()
+                    .file_name(),
+                ""
+            );
             assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
@@ -1668,7 +1682,14 @@ mod tests {
 
                 assert!(decrypted.is_literal());
 
-                assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+                assert_eq!(
+                    decrypted
+                        .literal_data_header()
+                        .unwrap()
+                        .unwrap()
+                        .file_name(),
+                    ""
+                );
                 assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
             }
         }
@@ -1709,7 +1730,14 @@ mod tests {
 
             assert!(decrypted.is_literal());
 
-            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(
+                decrypted
+                    .literal_data_header()
+                    .unwrap()
+                    .unwrap()
+                    .file_name(),
+                ""
+            );
             assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
@@ -1739,7 +1767,14 @@ mod tests {
 
             assert!(decrypted.is_literal());
 
-            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(
+                decrypted
+                    .literal_data_header()
+                    .unwrap()
+                    .unwrap()
+                    .file_name(),
+                ""
+            );
             assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
@@ -1781,7 +1816,14 @@ mod tests {
 
             assert!(decrypted.is_literal());
 
-            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(
+                decrypted
+                    .literal_data_header()
+                    .unwrap()
+                    .unwrap()
+                    .file_name(),
+                ""
+            );
             assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
@@ -1838,7 +1880,14 @@ mod tests {
                 message.decrypt_the_ring(ring, false).expect("decryption");
             assert!(decrypted.is_literal());
 
-            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(
+                decrypted
+                    .literal_data_header()
+                    .unwrap()
+                    .unwrap()
+                    .file_name(),
+                ""
+            );
             assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
 
             dbg!(&result);
@@ -1874,7 +1923,14 @@ mod tests {
 
             assert!(decrypted.is_literal());
 
-            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(
+                decrypted
+                    .literal_data_header()
+                    .unwrap()
+                    .unwrap()
+                    .file_name(),
+                ""
+            );
 
             check_strings(
                 decrypted.as_data_string().unwrap(),
@@ -1918,7 +1974,14 @@ mod tests {
 
             assert!(decrypted.is_literal());
 
-            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(
+                decrypted
+                    .literal_data_header()
+                    .unwrap()
+                    .unwrap()
+                    .file_name(),
+                ""
+            );
 
             check_strings(
                 decrypted.as_data_string().unwrap(),
@@ -1972,7 +2035,14 @@ mod tests {
 
             assert!(decrypted.is_literal());
 
-            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(
+                decrypted
+                    .literal_data_header()
+                    .unwrap()
+                    .unwrap()
+                    .file_name(),
+                ""
+            );
 
             check_strings(
                 decrypted.as_data_string().unwrap(),
@@ -2022,7 +2092,10 @@ mod tests {
             assert!(message.is_one_pass_signed());
             message.verify(skey.public_key()).expect("signed");
 
-            assert_eq!(message.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(
+                message.literal_data_header().unwrap().unwrap().file_name(),
+                ""
+            );
         }
     }
 
@@ -2085,7 +2158,10 @@ mod tests {
             assert!(message.is_one_pass_signed());
             message.verify(skey.public_key()).expect("signed");
 
-            assert_eq!(message.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(
+                message.literal_data_header().unwrap().unwrap().file_name(),
+                ""
+            );
         }
     }
 
@@ -2129,7 +2205,14 @@ mod tests {
 
             assert!(decrypted.is_literal());
 
-            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(
+                decrypted
+                    .literal_data_header()
+                    .unwrap()
+                    .unwrap()
+                    .file_name(),
+                ""
+            );
             assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
@@ -2194,7 +2277,14 @@ mod tests {
             );
             decompressed.verify(skey.public_key()).expect("signed");
 
-            assert_eq!(decompressed.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(
+                decompressed
+                    .literal_data_header()
+                    .unwrap()
+                    .unwrap()
+                    .file_name(),
+                ""
+            );
         }
     }
 
@@ -2292,7 +2382,14 @@ mod tests {
                 assert!(matches!(res[0], VerificationResult::Valid(_)));
                 assert!(matches!(res[1], VerificationResult::Valid(_)));
 
-                assert_eq!(decompressed.literal_data_header().unwrap().file_name(), "");
+                assert_eq!(
+                    decompressed
+                        .literal_data_header()
+                        .unwrap()
+                        .unwrap()
+                        .file_name(),
+                    ""
+                );
             }
         }
         Ok(())
@@ -2379,7 +2476,14 @@ mod tests {
                 };
                 assert_eq!(sig2.hash_alg().unwrap(), HashAlgorithm::Sha512);
 
-                assert_eq!(decompressed.literal_data_header().unwrap().file_name(), "");
+                assert_eq!(
+                    decompressed
+                        .literal_data_header()
+                        .unwrap()
+                        .unwrap()
+                        .file_name(),
+                    ""
+                );
             }
         }
         Ok(())
@@ -2509,7 +2613,7 @@ mod tests {
             panic!("should be a signed message")
         };
 
-        let sig = reader.signature(0).unwrap();
+        let sig = reader.signature(0).unwrap().unwrap();
 
         let hashed = &sig.config().unwrap().hashed_subpackets;
         let unhashed = &sig.config().unwrap().unhashed_subpackets;
