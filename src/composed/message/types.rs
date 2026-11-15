@@ -37,11 +37,11 @@ pub enum MessageReader<'a> {
 }
 
 impl MessageReader<'_> {
-    pub fn get_mut(&mut self) -> &mut Self {
+    pub fn get_mut(&mut self) -> io::Result<&mut Self> {
         match self {
             Self::Compressed(r) => r.get_mut().get_mut(),
-            Self::Edata(r) => r.get_mut().get_mut().get_mut(),
-            Self::Reader(_r) => self,
+            Self::Edata(r) => r.get_mut().get_mut()?.get_mut(),
+            Self::Reader(_r) => Ok(self),
         }
     }
 
@@ -100,7 +100,7 @@ impl MessageReader<'_> {
                     debug!("discarded excess data in compressed packet: {excess}");
                 }
 
-                let message_reader = compressed_body_reader.get_mut();
+                let message_reader = compressed_body_reader.get_mut()?;
                 message_reader.check_trailing_data()?;
             }
             MessageReader::Edata(e) => {
@@ -108,7 +108,7 @@ impl MessageReader<'_> {
                 let parser = crate::packet::PacketParser::new(&mut inner_reader);
                 check_next_packet(parser)?;
 
-                let message_reader = inner_reader.get_mut().get_mut();
+                let message_reader = inner_reader.get_mut().get_mut()?;
                 message_reader.check_trailing_data()?;
             }
             MessageReader::Reader(r) => {
@@ -255,31 +255,31 @@ pub(crate) enum MessageParts {
 }
 
 impl<'a> Message<'a> {
-    pub(crate) fn into_parts(self) -> (MessageReader<'a>, MessageParts) {
+    pub(crate) fn into_parts(self) -> io::Result<(MessageReader<'a>, MessageParts)> {
         match self {
             Message::Literal { reader, is_nested } => {
                 debug_assert!(reader.is_done());
                 let packet_header = reader.packet_header();
                 let header = reader.data_header().clone();
-                (
-                    reader.into_inner().into_inner(),
+                Ok((
+                    reader.into_inner().into_inner()?,
                     MessageParts::Literal {
                         packet_header,
                         header,
                         is_nested,
                     },
-                )
+                ))
             }
             Message::Compressed { reader, is_nested } => {
                 assert!(reader.is_done());
                 let packet_header = reader.packet_header();
-                (
-                    reader.into_inner().into_inner(),
+                Ok((
+                    reader.into_inner().into_inner()?,
                     MessageParts::Compressed {
                         packet_header,
                         is_nested,
                     },
-                )
+                ))
             }
             Message::Signed { reader, is_nested } => {
                 let SignatureManyReader::Done {
@@ -291,8 +291,8 @@ impl<'a> Message<'a> {
                     panic!("invalid state");
                 };
 
-                let (reader, parts) = source.into_parts();
-                (
+                let (reader, parts) = source.into_parts()?;
+                Ok((
                     reader,
                     MessageParts::SignedOnePass {
                         hashes,
@@ -300,7 +300,7 @@ impl<'a> Message<'a> {
                         parts: Box::new(parts),
                         is_nested,
                     },
-                )
+                ))
             }
             Message::Encrypted {
                 esk,
@@ -309,43 +309,43 @@ impl<'a> Message<'a> {
             } => match edata {
                 Edata::SymEncryptedData { reader } => {
                     let packet_header = reader.packet_header();
-                    (
-                        reader.into_inner().into_inner(),
+                    Ok((
+                        reader.into_inner().into_inner()?,
                         MessageParts::Encrypted {
                             packet_header,
                             esk,
                             config: None,
                             is_nested,
                         },
-                    )
+                    ))
                 }
                 Edata::SymEncryptedProtectedData { reader } => {
                     assert!(reader.is_done());
                     let packet_header = reader.packet_header();
                     let config = Some(reader.config().clone());
-                    (
-                        reader.into_inner().into_inner(),
+                    Ok((
+                        reader.into_inner().into_inner()?,
                         MessageParts::Encrypted {
                             packet_header,
                             esk,
                             config,
                             is_nested,
                         },
-                    )
+                    ))
                 }
                 Edata::GnupgAeadData { reader } => {
                     assert!(reader.is_done());
                     let packet_header = reader.packet_header();
                     let config = Some(reader.config().clone());
-                    (
-                        reader.into_inner().into_inner(),
+                    Ok((
+                        reader.into_inner().into_inner()?,
                         MessageParts::Encrypted {
                             packet_header,
                             esk,
                             config,
                             is_nested,
                         },
-                    )
+                    ))
                 }
             },
         }
@@ -1121,7 +1121,7 @@ impl<'a> Message<'a> {
         debug!("checking trailing data");
 
         // drain the inner reader to ensure no trailing data is contained
-        let inner = self.get_mut().get_mut();
+        let inner = self.get_mut().get_mut()?;
         inner.check_trailing_data()
     }
 
