@@ -303,7 +303,7 @@ impl<'a> SignatureManyReader<'a> {
                         let hashers: Vec<_> =
                             hashers.into_iter().map(|h| h.map(|h| h.done())).collect();
 
-                        let (reader, parts) = source.into_parts();
+                        let (reader, parts) = source.into_parts()?;
 
                         let mut packet_parser = crate::packet::PacketParser::new(reader);
 
