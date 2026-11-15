@@ -276,7 +276,9 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                     |source| match source {
                         Source::Init(source) => Source::BodyRaw(source),
                         Source::BodyRaw(source) => Source::Done(source),
-                        Source::BodyDecryptor(source) => Source::Done(source.into_inner()?),
+                        Source::BodyDecryptor(source) => {
+                            Source::Done(source.into_inner().expect("FIXME"))
+                        }
                         Source::Done(source) => Source::Done(source),
                         Source::Error => panic!("SymEncryptedProtectedDataReader errored"), // TODO
                     },
