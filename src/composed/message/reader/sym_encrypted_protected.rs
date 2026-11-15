@@ -264,7 +264,9 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                     (buf.is_empty(), true)
                 }
                 Source::Done(_) => (false, true),
-                Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
+                Source::Error => {
+                    return Err(io::Error::other("SymEncryptedProtectedDataReader errored"))
+                }
             };
 
             if needs_replacing {
@@ -276,7 +278,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                         Source::BodyRaw(source) => Source::Done(source),
                         Source::BodyDecryptor(source) => Source::Done(source.into_inner()?),
                         Source::Done(source) => Source::Done(source),
-                        Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
+                        Source::Error => panic!("SymEncryptedProtectedDataReader errored"), // TODO
                     },
                 )
             }
@@ -295,7 +297,7 @@ impl<R: DebugBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
             Source::BodyDecryptor(decryptor) => decryptor.fill_buf(),
             Source::BodyRaw(source) => source.fill_buf(),
             Source::Done(_) => Ok(&[][..]),
-            Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
+            Source::Error => Err(io::Error::other("SymEncryptedProtectedDataReader errored")),
         }
     }
 
@@ -309,7 +311,7 @@ impl<R: DebugBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
                     panic!("consume after done: {amt}")
                 }
             }
-            Source::Error => panic!("SymEncryptedProtectedDataReader errored"),
+            Source::Error => panic!("SymEncryptedProtectedDataReader errored"), // TODO
         }
     }
 }
