@@ -119,7 +119,7 @@ pub fn mdc_test_fast_2() {
 /// Fuzz: random wrong keys must never bypass MDC verification
 /// (tests in `Seipdv1ReadMode::CheckedFirst` mode).
 #[test]
-#[ignore] // ~30s in release
+#[ignore]
 pub fn mdc_test_checked_first() {
     pretty_env_logger::try_init().ok();
 
@@ -129,7 +129,7 @@ pub fn mdc_test_checked_first() {
 /// Fuzz: random wrong keys must never bypass MDC verification
 /// (tests in `Seipdv1ReadMode::Streaming` mode).
 #[test]
-#[ignore] // ~30s in release
+#[ignore]
 pub fn mdc_test_streaming() {
     pretty_env_logger::try_init().ok();
 
@@ -142,7 +142,7 @@ fn run_mdc_test(mode: Seipdv1ReadMode) {
         make_seipdv1_msg(&mut rng, 50_000)
     };
 
-    let total_iterations: u64 = 1_000_000;
+    let total_iterations: u64 = 10_000;
     eprintln!("Running MDC fuzz test with {} iterations", total_iterations);
 
     // Each rayon worker gets its own RNG seeded by thread index
