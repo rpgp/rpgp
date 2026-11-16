@@ -60,12 +60,12 @@ impl Timestamp {
     }
 
     /// Returns the number of seconds (ignoring leaps) since the [`UNIX_EPOCH`].
-    pub fn as_secs(self) -> u32 {
+    pub const fn as_secs(self) -> u32 {
         self.0
     }
 
     /// Creates a new [`Timestamp`] from seconds since the [`UNIX_EPOCH`].
-    pub fn from_secs(secs: u32) -> Self {
+    pub const fn from_secs(secs: u32) -> Self {
         Self(secs)
     }
 }
