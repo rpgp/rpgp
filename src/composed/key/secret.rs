@@ -1,5 +1,4 @@
 use aes_gcm::aead::rand_core::CryptoRng;
-use rand::Rng;
 
 use crate::{
     composed::{KeyDetails, SignedPublicSubKey, SignedSecretKey, SignedSecretSubKey},
@@ -33,21 +32,21 @@ impl RawSecretKey {
         }
     }
 
-    pub(super) fn sign<R>(self, mut rng: R, key_pw: &Password) -> Result<SignedSecretKey>
+    pub(super) fn sign<R>(self, rng: &mut R, key_pw: &Password) -> Result<SignedSecretKey>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + ?Sized,
     {
         let primary_key = self.primary_key;
-        let details =
-            self.details
-                .sign(&mut rng, &primary_key, primary_key.public_key(), key_pw)?;
+        let details = self
+            .details
+            .sign(rng, &primary_key, primary_key.public_key(), key_pw)?;
         let public_subkeys = self
             .public_subkeys
             .into_iter()
             .map(|(sub_key, keyflags, embedded)| {
                 // Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
                 let signature = sub_key.sign(
-                    &mut rng,
+                    rng,
                     &primary_key,
                     primary_key.public_key(),
                     key_pw,
@@ -66,7 +65,7 @@ impl RawSecretKey {
             .map(|(sub_key, keyflags, embedded)| {
                 // Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
                 let signature = sub_key.sign(
-                    &mut rng,
+                    rng,
                     &primary_key,
                     primary_key.public_key(),
                     key_pw,

@@ -1,5 +1,5 @@
+use chacha20::ChaCha20Rng;
 use rand::SeedableRng;
-use rand_chacha::ChaChaRng;
 
 // Tests that check for backward compatibility with older versions of rpgp
 
@@ -64,7 +64,7 @@ fn encrypt_rpgp_cur(msg: &'static [u8], keyfile: &str) -> String {
         crypto::sym::SymmetricKeyAlgorithm,
     };
 
-    let mut rng = ChaChaRng::from_seed([0u8; 32]);
+    let mut rng = ChaCha20Rng::from_seed([0u8; 32]);
 
     let (ssk, _headers) =
         pgp::composed::SignedSecretKey::from_armor_single(std::fs::File::open(keyfile).unwrap())

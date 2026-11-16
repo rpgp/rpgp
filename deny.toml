@@ -5,7 +5,6 @@ deny = []
 [licenses]
 allow = [
     "Apache-2.0",
-    "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
     "bzip2-1.0.6",
@@ -19,11 +18,4 @@ name = "ring"
 expression = "MIT AND ISC AND OpenSSL"
 license-files = [
     { path = "LICENSE", hash = 0xbd0eed23 },
-]
-
-[advisories]
-ignore = [
-    "RUSTSEC-2023-0071", # Waiting for upstream fix
-    "RUSTSEC-2025-0144", # Waiting for new Rust Crypto releases
-    "RUSTSEC-2026-0387", # Waiting for new Rust Crypto releases
 ]

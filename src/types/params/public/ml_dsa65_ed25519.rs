@@ -48,9 +48,10 @@ impl Serialize for MlDsa65Ed25519PublicParams {
 
 #[cfg(test)]
 mod tests {
-    use ml_dsa::KeyGen;
+    use elliptic_curve::Generate;
     use proptest::prelude::*;
     use rand::SeedableRng;
+    use signature::Keypair;
 
     use super::*;
 
@@ -60,10 +61,10 @@ mod tests {
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
             fn from_seed(seed: u64) -> MlDsa65Ed25519PublicParams {
-                let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+                let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
 
                 let x = ed25519_dalek::SigningKey::generate(&mut rng);
-                let ml = MlDsa65::key_gen(&mut rng);
+                let ml = ml_dsa::SigningKey::<MlDsa65>::generate_from_rng(&mut rng);
 
                 MlDsa65Ed25519PublicParams {
                     ed25519: x.verifying_key(),

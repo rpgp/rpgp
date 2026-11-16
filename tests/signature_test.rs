@@ -1,3 +1,4 @@
+use chacha20::ChaCha8Rng;
 use pgp::{
     composed::{Deserializable, DetachedSignature, Message, SignedSecretKey},
     packet::{
@@ -7,7 +8,6 @@ use pgp::{
     types::{KeyDetails, PacketHeaderVersion, Password, Tag, Timestamp},
 };
 use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 
 #[test]
 fn sig_odd() {
