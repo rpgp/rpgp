@@ -9,6 +9,9 @@ use crate::{
     ser::Serialize,
 };
 
+#[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+mod aead;
+
 mod dsa;
 pub(crate) mod ecdh;
 mod ecdsa;
@@ -35,6 +38,9 @@ mod slh_dsa_shake128s;
 #[cfg(feature = "pqc")]
 mod slh_dsa_shake256s;
 
+#[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+pub use aead::AeadPublicParams;
+
 pub use self::{
     dsa::DsaPublicParams, ecdh::EcdhPublicParams, ecdsa::EcdsaPublicParams,
     ed25519::Ed25519PublicParams, ed448::Ed448PublicParams, eddsa_legacy::EddsaLegacyPublicParams,
@@ -53,6 +59,9 @@ use super::PlainSecretParams;
 /// Raw public key material for any algorithm.
 #[derive(PartialEq, Eq, Clone, derive_more::Debug)]
 pub enum PublicParams {
+    #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+    AEAD(aead::AeadPublicParams),
+
     RSA(RsaPublicParams),
     DSA(DsaPublicParams),
     ECDSA(EcdsaPublicParams),
@@ -88,6 +97,9 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
 
     fn try_from(secret: &PlainSecretParams) -> Result<Self, Self::Error> {
         match secret {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PlainSecretParams::AEAD(_) => crate::errors::bail!("can't get PublicParams"),
+
             PlainSecretParams::RSA(ref p) => Ok(Self::RSA(p.into())),
             PlainSecretParams::DSA(ref p) => Ok(Self::DSA(p.into())),
             PlainSecretParams::ECDSA(ref p) => p.try_into().map(Self::ECDSA),
@@ -127,6 +139,12 @@ impl PublicParams {
         i: B,
     ) -> Result<PublicParams> {
         match typ {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicKeyAlgorithm::AEAD => {
+                let params = aead::AeadPublicParams::try_from_reader(i)?;
+                Ok(PublicParams::AEAD(params))
+            }
+
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSAEncrypt
             | PublicKeyAlgorithm::RSASign => {
@@ -228,6 +246,17 @@ impl PublicParams {
     /// key as a signer
     pub fn hash_alg(&self) -> HashAlgorithm {
         match self {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicParams::AEAD(params) => match params.sym_alg {
+                // Pick a hash algorithm that is matched with the symmetric algorithm
+                crate::crypto::sym::SymmetricKeyAlgorithm::AES256
+                | crate::crypto::sym::SymmetricKeyAlgorithm::Camellia256
+                | crate::crypto::sym::SymmetricKeyAlgorithm::Twofish => HashAlgorithm::Sha512,
+                crate::crypto::sym::SymmetricKeyAlgorithm::AES192
+                | crate::crypto::sym::SymmetricKeyAlgorithm::Camellia192 => HashAlgorithm::Sha384,
+                _ => HashAlgorithm::Sha256,
+            },
+
             PublicParams::RSA(_)
             | PublicParams::DSA(_)
             | PublicParams::EdDSALegacy(_)
@@ -283,6 +312,11 @@ fn unknown<B: BufRead>(mut i: B, len: Option<usize>) -> Result<PublicParams> {
 impl Serialize for PublicParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicParams::AEAD(params) => {
+                params.to_writer(writer)?;
+            }
+
             PublicParams::RSA(params) => {
                 params.to_writer(writer)?;
             }
@@ -352,6 +386,11 @@ impl Serialize for PublicParams {
     fn write_len(&self) -> usize {
         let mut sum = 0;
         match self {
+            #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+            PublicParams::AEAD(params) => {
+                sum += params.write_len();
+            }
+
             PublicParams::RSA(params) => {
                 sum += params.write_len();
             }
@@ -466,6 +505,11 @@ mod tests {
 
         fn arbitrary_with(args: Self::Parameters) -> Self::Strategy {
             match args {
+                #[cfg(feature = "draft-ietf-openpgp-persistent-symmetric-keys-03")]
+                PublicKeyAlgorithm::AEAD => any::<aead::AeadPublicParams>()
+                    .prop_map(PublicParams::AEAD)
+                    .boxed(),
+
                 PublicKeyAlgorithm::RSA
                 | PublicKeyAlgorithm::RSAEncrypt
                 | PublicKeyAlgorithm::RSASign => {
