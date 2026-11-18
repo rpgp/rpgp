@@ -81,6 +81,11 @@ impl SignedKeyDetails {
         Ok(())
     }
 
+    /// Verifies all key revocation signatures.
+    ///
+    /// Practically the `key` should be the one being revoked.
+    /// Dedicated Revocation Key is deprecated according to
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#revocation-key>
     fn verify_revocation_signatures<V>(&self, key: &V) -> Result<()>
     where
         V: VerifyingKey + Serialize,
