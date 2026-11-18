@@ -35,6 +35,15 @@ mod slh_dsa_shake128s;
 #[cfg(feature = "pqc")]
 mod slh_dsa_shake256s;
 
+#[cfg(feature = "pqc-nist-bp")]
+mod ml_dsa65_nistp384;
+#[cfg(feature = "pqc-nist-bp")]
+mod ml_dsa87_nistp521;
+#[cfg(feature = "pqc-nist-bp")]
+mod ml_kem1024_nistp521;
+#[cfg(feature = "pqc-nist-bp")]
+mod ml_kem768_nistp384;
+
 pub use self::{
     dsa::DsaPublicParams, ecdh::EcdhPublicParams, ecdsa::EcdsaPublicParams,
     ed25519::Ed25519PublicParams, ed448::Ed448PublicParams, eddsa_legacy::EddsaLegacyPublicParams,
@@ -47,6 +56,12 @@ pub use self::{
     ml_kem1024_x448::MlKem1024X448PublicParams, ml_kem768_x25519::MlKem768X25519PublicParams,
     slh_dsa_shake128f::SlhDsaShake128fPublicParams, slh_dsa_shake128s::SlhDsaShake128sPublicParams,
     slh_dsa_shake256s::SlhDsaShake256sPublicParams,
+};
+#[cfg(feature = "pqc-nist-bp")]
+pub use self::{
+    ml_dsa65_nistp384::MlDsa65NistP384PublicParams, ml_dsa87_nistp521::MlDsa87NistP521PublicParams,
+    ml_kem1024_nistp521::MlKem1024NistP521PublicParams,
+    ml_kem768_nistp384::MlKem768NistP384PublicParams,
 };
 use super::PlainSecretParams;
 
@@ -77,6 +92,14 @@ pub enum PublicParams {
     SlhDsaShake128f(SlhDsaShake128fPublicParams),
     #[cfg(feature = "pqc")]
     SlhDsaShake256s(SlhDsaShake256sPublicParams),
+    #[cfg(feature = "pqc-nist-bp")]
+    MlKem768NistP384(MlKem768NistP384PublicParams),
+    #[cfg(feature = "pqc-nist-bp")]
+    MlKem1024NistP521(MlKem1024NistP521PublicParams),
+    #[cfg(feature = "pqc-nist-bp")]
+    MlDsa65NistP384(MlDsa65NistP384PublicParams),
+    #[cfg(feature = "pqc-nist-bp")]
+    MlDsa87NistP521(MlDsa87NistP521PublicParams),
     Unknown {
         #[debug("{}", hex::encode(data))]
         data: Bytes,
@@ -110,6 +133,14 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
             PlainSecretParams::SlhDsaShake128f(ref p) => Ok(Self::SlhDsaShake128f(p.into())),
             #[cfg(feature = "pqc")]
             PlainSecretParams::SlhDsaShake256s(ref p) => Ok(Self::SlhDsaShake256s(p.into())),
+            #[cfg(feature = "pqc-nist-bp")]
+            PlainSecretParams::MlKem768NistP384(ref p) => Ok(Self::MlKem768NistP384(p.into())),
+            #[cfg(feature = "pqc-nist-bp")]
+            PlainSecretParams::MlKem1024NistP521(ref p) => Ok(Self::MlKem1024NistP521(p.into())),
+            #[cfg(feature = "pqc-nist-bp")]
+            PlainSecretParams::MlDsa65NistP384(ref p) => Ok(Self::MlDsa65NistP384(p.into())),
+            #[cfg(feature = "pqc-nist-bp")]
+            PlainSecretParams::MlDsa87NistP521(ref p) => Ok(Self::MlDsa87NistP521(p.into())),
             PlainSecretParams::X448(ref p) => Ok(Self::X448(p.into())),
             PlainSecretParams::Ed448(ref p) => Ok(Self::Ed448(p.into())),
             PlainSecretParams::Unknown { pub_params, .. } => Ok(Self::Unknown {
@@ -208,13 +239,33 @@ impl PublicParams {
                 let params = SlhDsaShake256sPublicParams::try_from_reader(i)?;
                 Ok(PublicParams::SlhDsaShake256s(params))
             }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicKeyAlgorithm::MlKem768NistP384 => {
+                let params = MlKem768NistP384PublicParams::try_from_reader(i)?;
+                Ok(PublicParams::MlKem768NistP384(params))
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicKeyAlgorithm::MlKem1024NistP521 => {
+                let params = MlKem1024NistP521PublicParams::try_from_reader(i)?;
+                Ok(PublicParams::MlKem1024NistP521(params))
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicKeyAlgorithm::MlDsa65NistP384 => {
+                let params = MlDsa65NistP384PublicParams::try_from_reader(i)?;
+                Ok(PublicParams::MlDsa65NistP384(params))
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicKeyAlgorithm::MlDsa87NistP521 => {
+                let params = MlDsa87NistP521PublicParams::try_from_reader(i)?;
+                Ok(PublicParams::MlDsa87NistP521(params))
+            }
             PublicKeyAlgorithm::DiffieHellman
-            | PublicKeyAlgorithm::Private100
-            | PublicKeyAlgorithm::Private101
+            // | PublicKeyAlgorithm::Private100
+            // | PublicKeyAlgorithm::Private101
             | PublicKeyAlgorithm::Private102
             | PublicKeyAlgorithm::Private103
-            | PublicKeyAlgorithm::Private104
-            | PublicKeyAlgorithm::Private105
+            // | PublicKeyAlgorithm::Private104
+            // | PublicKeyAlgorithm::Private105
             | PublicKeyAlgorithm::Private106
             | PublicKeyAlgorithm::Private107
             | PublicKeyAlgorithm::Private108
@@ -254,6 +305,11 @@ impl PublicParams {
             #[cfg(feature = "pqc")]
             PublicParams::SlhDsaShake256s(_) => HashAlgorithm::Sha3_512,
 
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlDsa65NistP384(_) => HashAlgorithm::Sha3_256,
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlDsa87NistP521(_) => HashAlgorithm::Sha3_512,
+
             // Not actually signing capable
             PublicParams::Elgamal(_)
             | PublicParams::ECDH(_)
@@ -263,6 +319,10 @@ impl PublicParams {
 
             #[cfg(feature = "pqc")]
             PublicParams::MlKem768X25519(_) | PublicParams::MlKem1024X448(_) => {
+                HashAlgorithm::Sha256
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlKem768NistP384(_) | PublicParams::MlKem1024NistP521(_) => {
                 HashAlgorithm::Sha256
             }
         }
@@ -341,6 +401,24 @@ impl Serialize for PublicParams {
             PublicParams::SlhDsaShake256s(params) => {
                 params.to_writer(writer)?;
             }
+
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlDsa65NistP384(params) => {
+                params.to_writer(writer)?;
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlDsa87NistP521(params) => {
+                params.to_writer(writer)?;
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlKem768NistP384(params) => {
+                params.to_writer(writer)?;
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlKem1024NistP521(params) => {
+                params.to_writer(writer)?;
+            }
+
             PublicParams::Unknown { ref data } => {
                 writer.write_all(data)?;
             }
@@ -408,6 +486,22 @@ impl Serialize for PublicParams {
             }
             #[cfg(feature = "pqc")]
             PublicParams::SlhDsaShake256s(params) => {
+                sum += params.write_len();
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlDsa65NistP384(params) => {
+                sum += params.write_len();
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlDsa87NistP521(params) => {
+                sum += params.write_len();
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlKem768NistP384(params) => {
+                sum += params.write_len();
+            }
+            #[cfg(feature = "pqc-nist-bp")]
+            PublicParams::MlKem1024NistP521(params) => {
                 sum += params.write_len();
             }
             PublicParams::Unknown { ref data } => {

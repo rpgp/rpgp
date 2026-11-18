@@ -41,6 +41,24 @@ pub mod slh_dsa_shake128s;
 #[cfg(feature = "pqc")]
 pub mod slh_dsa_shake256s;
 
+// PQC draft-ietf-openpgp-nist-bp-comp
+
+// 100 	ML-KEM-768+ECDH-NIST-P-384
+#[cfg(feature = "pqc-nist-bp")]
+pub mod ml_kem768_nistp384;
+
+// 101 	ML-KEM-1024+ECDH-NIST-P-521
+#[cfg(feature = "pqc-nist-bp")]
+pub mod ml_kem1024_nistp521;
+
+// 104 ML-DSA-65+ECDSA-NIST-P-384
+#[cfg(feature = "pqc-nist-bp")]
+pub mod ml_dsa65_nistp384;
+
+// 105 ML-DSA-87+ECDSA-NIST-P-521
+#[cfg(feature = "pqc-nist-bp")]
+pub mod ml_dsa87_nistp521;
+
 // Misc
 
 pub mod checksum;
