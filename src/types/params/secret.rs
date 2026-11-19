@@ -193,7 +193,7 @@ fn parse_secret_fields<B: BufRead>(
             let s2k = StringToKey::try_from_reader(&mut i)?;
             let iv = i.take_bytes(sym_alg.block_size())?.freeze();
 
-            S2kParams::Cfb { sym_alg, s2k, iv }
+            S2kParams::MalleableCfb { sym_alg, s2k, iv }
         }
     };
 
