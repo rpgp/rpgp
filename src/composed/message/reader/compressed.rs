@@ -31,7 +31,7 @@ impl<R: DebugBufRead> CompressedDataReader<R> {
 
         let source = if decompress {
             let dec = Decompressor::from_reader(source)?;
-            MaybeDecompress::Decompress(dec)
+            MaybeDecompress::Decompress(Box::new(dec))
         } else {
             MaybeDecompress::Raw(source)
         };
@@ -171,13 +171,13 @@ impl<R: DebugBufRead> CompressedDataReader<R> {
 #[derive(Debug)]
 pub enum MaybeDecompress<R: DebugBufRead> {
     Raw(R),
-    Decompress(Decompressor<R>),
+    Decompress(Box<Decompressor<R>>),
 }
 
 impl<R: DebugBufRead> MaybeDecompress<R> {
     fn decompress(self) -> io::Result<Self> {
         match self {
-            Self::Raw(r) => Ok(Self::Decompress(Decompressor::from_reader(r)?)),
+            Self::Raw(r) => Ok(Self::Decompress(Box::new(Decompressor::from_reader(r)?))),
             Self::Decompress(_) => {
                 // already decompressing
                 Ok(self)
