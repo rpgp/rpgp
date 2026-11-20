@@ -76,22 +76,22 @@ pub enum AeadAlgorithm {
 
 impl AeadAlgorithm {
     /// Nonce size used for this AEAD algorithm.
-    pub fn nonce_size(&self) -> usize {
+    pub fn nonce_size(&self) -> Option<usize> {
         match self {
-            Self::Eax => 16,
-            Self::Ocb => 15,
-            Self::Gcm => 12,
-            _ => 0,
+            Self::Eax => Some(16),
+            Self::Ocb => Some(15),
+            Self::Gcm => Some(12),
+            _ => None,
         }
     }
 
     /// Size of the IV.
-    pub fn iv_size(&self) -> usize {
+    pub fn iv_size(&self) -> Option<usize> {
         match self {
-            Self::Eax => 16,
-            Self::Ocb => 15,
-            Self::Gcm => 12,
-            _ => 0,
+            Self::Eax => Some(16),
+            Self::Ocb => Some(15),
+            Self::Gcm => Some(12),
+            _ => None,
         }
     }
 
@@ -289,12 +289,19 @@ pub(crate) fn aead_setup_rfc9580(
         .ok_or_else(|| UnsupporedAlgorithmSnafu { alg: aead }.build())?;
     let message_key = Zeroizing::new(key.to_vec());
 
-    let raw_iv_len = aead.nonce_size() - 8;
+    let Some(nonce_size) = aead.nonce_size() else {
+        return Err(UnsupporedAlgorithmSnafu { alg: aead }.build());
+    };
+
+    let raw_iv_len = nonce_size
+        .checked_sub(8)
+        .ok_or(UnsupporedAlgorithmSnafu { alg: aead }.build())?;
+
     let iv = rest
         .get(..raw_iv_len)
         .ok_or_else(|| UnsupporedAlgorithmSnafu { alg: aead }.build())?;
     let mut nonce = iv.to_vec();
-    nonce.resize(aead.nonce_size(), 0);
+    nonce.resize(nonce_size, 0);
 
     Ok((info, message_key, nonce))
 }

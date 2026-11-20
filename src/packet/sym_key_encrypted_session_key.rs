@@ -13,7 +13,7 @@ use crate::{
     composed::{PlainSessionKey, RawSessionKey},
     crypto::{aead::AeadAlgorithm, sym::SymmetricKeyAlgorithm},
     errors::{
-        ensure, ensure_eq, format_err, unimplemented_err, unsupported_err, InvalidInputSnafu,
+        bail, ensure, ensure_eq, format_err, unimplemented_err, unsupported_err, InvalidInputSnafu,
         Result,
     },
     packet::{PacketHeader, PacketTrait},
@@ -364,7 +364,10 @@ impl SymKeyEncryptedSessionKey {
         let mut okm = [0u8; 42];
         hk.expand(&info, &mut okm).expect("42");
 
-        let mut iv = vec![0; aead.iv_size()];
+        let Some(iv_size) = aead.iv_size() else {
+            bail!("Unsupported AEAD mode {:?}", aead);
+        };
+        let mut iv = vec![0; iv_size];
         rng.fill_bytes(&mut iv);
 
         // AEAD encrypt
@@ -436,7 +439,10 @@ fn parse_v5<B: BufRead>(
     let s2k = StringToKey::try_from_reader(&mut i)?;
 
     // A starting initialization vector of size specified by the mode.
-    let iv = i.take_bytes(aead.iv_size())?;
+    let Some(iv_size) = aead.iv_size() else {
+        bail!("Unsupported AEAD mode {:?}", aead);
+    };
+    let iv = i.take_bytes(iv_size)?;
 
     // An authentication tag for the encryption mode.
     let aead_tag_size = aead.tag_size().unwrap_or_default();
@@ -481,7 +487,11 @@ fn parse_v6<B: BufRead>(
     let s2k_len = i.read_u8()?;
     let s2k_data = i.read_take(s2k_len.into());
     let s2k = StringToKey::try_from_reader(s2k_data)?;
-    let iv = i.take_bytes(aead.iv_size())?;
+
+    let Some(iv_size) = aead.iv_size() else {
+        bail!("Unsupported AEAD mode {:?}", aead);
+    };
+    let iv = i.take_bytes(iv_size)?;
     let aead_tag_size = aead.tag_size().unwrap_or_default();
     let esk = i.rest()?;
     if esk.len() < aead_tag_size {

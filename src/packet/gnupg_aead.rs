@@ -8,7 +8,7 @@ use crate::{
         aead::{AeadAlgorithm, ChunkSize},
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{ensure_eq, InvalidInputSnafu, Result},
+    errors::{bail, ensure_eq, InvalidInputSnafu, Result},
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -59,7 +59,10 @@ impl Config {
             .map_err(|_| InvalidInputSnafu.build())?;
 
         // A starting initialization vector of size specified by the encryption mode.
-        let iv = data.take_bytes(aead.iv_size())?.into();
+        let Some(iv_size) = aead.iv_size() else {
+            bail!("Unsupported AEAD mode {:?}", aead);
+        };
+        let iv = data.take_bytes(iv_size)?.into();
 
         Ok(Self {
             sym_alg,
