@@ -101,7 +101,7 @@ impl<'a> MessageParser<'a> {
                             self.messages.push(SignaturePacket::Signature { signature });
                             // Keep original is_nested - the outer Signed message inherits it.
                             self.current = MessageParserState::Start {
-                                packets: crate::packet::PacketParser::new(packet.into_inner()),
+                                packets: crate::packet::PacketParser::new(packet.into_inner()?),
                                 is_nested,
                                 is_first,
                             };
@@ -118,7 +118,7 @@ impl<'a> MessageParser<'a> {
                             self.messages.push(SignaturePacket::Ops { signature });
                             // Keep original is_nested - the outer Signed message inherits it.
                             self.current = MessageParserState::Start {
-                                packets: crate::packet::PacketParser::new(packet.into_inner()),
+                                packets: crate::packet::PacketParser::new(packet.into_inner()?),
                                 is_nested,
                                 is_first,
                             };
@@ -148,7 +148,7 @@ impl<'a> MessageParser<'a> {
                             packet.drain()?;
                             // Keep original is_nested since Padding is a skipped packet
                             self.current = MessageParserState::Start {
-                                packets: crate::packet::PacketParser::new(packet.into_inner()),
+                                packets: crate::packet::PacketParser::new(packet.into_inner()?),
                                 is_nested,
                                 is_first,
                             };
@@ -157,7 +157,7 @@ impl<'a> MessageParser<'a> {
                             // drain reader
                             packet.drain()?;
                             self.current = MessageParserState::Start {
-                                packets: crate::packet::PacketParser::new(packet.into_inner()),
+                                packets: crate::packet::PacketParser::new(packet.into_inner()?),
                                 is_nested,
                                 is_first,
                             };
@@ -168,7 +168,7 @@ impl<'a> MessageParser<'a> {
                             // drain reader
                             packet.drain()?;
                             self.current = MessageParserState::Start {
-                                packets: crate::packet::PacketParser::new(packet.into_inner()),
+                                packets: crate::packet::PacketParser::new(packet.into_inner()?),
                                 is_nested,
                                 is_first,
                             };
@@ -217,7 +217,7 @@ impl<'a> MessageParser<'a> {
             }));
         }
 
-        let mut packets = crate::packet::PacketParser::new(packet.into_inner());
+        let mut packets = crate::packet::PacketParser::new(packet.into_inner()?);
         // Read ESKs unit we find the Encrypted Data
         loop {
             let Some(packet) = packets.next_owned() else {
@@ -230,7 +230,7 @@ impl<'a> MessageParser<'a> {
                 Tag::SymKeyEncryptedSessionKey | Tag::PublicKeyEncryptedSessionKey => {
                     let esk = Esk::try_from_reader(&mut packet)?;
                     esks.push(esk);
-                    packets = crate::packet::PacketParser::new(packet.into_inner());
+                    packets = crate::packet::PacketParser::new(packet.into_inner()?);
                 }
                 Tag::SymEncryptedData | Tag::SymEncryptedProtectedData | Tag::GnupgAeadData => {
                     let edata = Edata::try_from_reader(packet)?;
@@ -270,12 +270,12 @@ impl<'a> MessageParser<'a> {
                 Tag::Padding => {
                     // drain reader
                     packet.drain()?;
-                    packets = crate::packet::PacketParser::new(packet.into_inner());
+                    packets = crate::packet::PacketParser::new(packet.into_inner()?);
                 }
                 Tag::Marker => {
                     // drain reader
                     packet.drain()?;
-                    packets = crate::packet::PacketParser::new(packet.into_inner());
+                    packets = crate::packet::PacketParser::new(packet.into_inner()?);
                 }
                 _ => {
                     bail!("unexpected tag in an encrypted message: {:?}", tag);

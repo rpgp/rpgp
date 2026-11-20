@@ -183,7 +183,7 @@ where
         }
     }
 
-    pub fn into_inner(self) -> R {
+    pub fn into_inner(self) -> io::Result<R> {
         match self {
             Self::Idea(i) => i.into_inner(),
             Self::TripleDes(i) => i.into_inner(),
@@ -199,7 +199,7 @@ where
         }
     }
 
-    pub fn get_ref(&self) -> &R {
+    pub fn get_ref(&self) -> io::Result<&R> {
         match self {
             Self::Idea(i) => i.get_ref(),
             Self::TripleDes(i) => i.get_ref(),
@@ -215,7 +215,7 @@ where
         }
     }
 
-    pub fn get_mut(&mut self) -> &mut R {
+    pub fn get_mut(&mut self) -> io::Result<&mut R> {
         match self {
             Self::Idea(i) => i.get_mut(),
             Self::TripleDes(i) => i.get_mut(),
@@ -365,30 +365,30 @@ where
         })
     }
 
-    fn into_inner(self) -> R {
+    fn into_inner(self) -> io::Result<R> {
         match self {
-            Self::Prefix { source, .. } => source,
-            Self::Data { source, .. } => source,
-            Self::Done { source, .. } => source,
-            Self::Error => panic!("error state"),
+            Self::Prefix { source, .. } => Ok(source),
+            Self::Data { source, .. } => Ok(source),
+            Self::Done { source, .. } => Ok(source),
+            Self::Error => Err(io::Error::other("StreamDecryptorInner errored")),
         }
     }
 
-    fn get_ref(&self) -> &R {
+    fn get_ref(&self) -> io::Result<&R> {
         match self {
-            Self::Prefix { source, .. } => source,
-            Self::Data { source, .. } => source,
-            Self::Done { source, .. } => source,
-            Self::Error => panic!("error state"),
+            Self::Prefix { source, .. } => Ok(source),
+            Self::Data { source, .. } => Ok(source),
+            Self::Done { source, .. } => Ok(source),
+            Self::Error => Err(io::Error::other("StreamDecryptorInner errored")),
         }
     }
 
-    fn get_mut(&mut self) -> &mut R {
+    fn get_mut(&mut self) -> io::Result<&mut R> {
         match self {
-            Self::Prefix { source, .. } => source,
-            Self::Data { source, .. } => source,
-            Self::Done { source, .. } => source,
-            Self::Error => panic!("error state"),
+            Self::Prefix { source, .. } => Ok(source),
+            Self::Data { source, .. } => Ok(source),
+            Self::Done { source, .. } => Ok(source),
+            Self::Error => Err(io::Error::other("StreamDecryptorInner errored")),
         }
     }
 

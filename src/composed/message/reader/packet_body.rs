@@ -48,7 +48,7 @@ impl<R: BufRead> BufRead for PacketBodyReader<R> {
                 buffer.advance(amt);
             }
             State::Done { .. } => {}
-            State::Error => panic!("PacketBodyReader errored"),
+            State::Error => panic!("PacketBodyReader errored"), // TODO
         }
     }
 }
@@ -134,19 +134,19 @@ impl<R: BufRead> PacketBodyReader<R> {
         matches!(self.state, State::Done { .. })
     }
 
-    pub fn into_inner(self) -> R {
+    pub fn into_inner(self) -> io::Result<R> {
         match self.state {
-            State::Body { source, .. } => source.into_inner(),
-            State::Done { source } => source,
-            State::Error => panic!("PacketBodyReader errored"),
+            State::Body { source, .. } => Ok(source.into_inner()),
+            State::Done { source } => Ok(source),
+            State::Error => Err(io::Error::other("PacketBodyReader errored")),
         }
     }
 
-    pub fn get_mut(&mut self) -> &mut R {
+    pub fn get_mut(&mut self) -> io::Result<&mut R> {
         match &mut self.state {
-            State::Body { source, .. } => source.get_mut(),
-            State::Done { source } => source,
-            State::Error => panic!("PacketBodyReader errored"),
+            State::Body { source, .. } => Ok(source.get_mut()),
+            State::Done { source } => Ok(source),
+            State::Error => Err(io::Error::other("PacketBodyReader errored")),
         }
     }
 

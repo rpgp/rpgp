@@ -149,94 +149,94 @@ impl<'a> SignatureManyReader<'a> {
         })
     }
 
-    pub fn num_signatures(&self) -> usize {
+    pub fn num_signatures(&self) -> io::Result<usize> {
         match self {
-            Self::Init { packets, .. } => packets.len(),
-            Self::Body { packets, .. } => packets.len(),
-            Self::Done { hashes, .. } => hashes.len(),
-            Self::Error => panic!("SignatureOnePassManyReader errored"),
+            Self::Init { packets, .. } => Ok(packets.len()),
+            Self::Body { packets, .. } => Ok(packets.len()),
+            Self::Done { hashes, .. } => Ok(hashes.len()),
+            Self::Error => Err(io::Error::other("SignatureOnePassManyReader errored")),
         }
     }
 
-    pub fn num_one_pass_signatures(&self) -> usize {
+    pub fn num_one_pass_signatures(&self) -> io::Result<usize> {
         match self {
-            Self::Init { packets, .. } | Self::Body { packets, .. } => packets
+            Self::Init { packets, .. } | Self::Body { packets, .. } => Ok(packets
                 .iter()
                 .filter(|p| matches!(p, SignaturePacket::Ops { .. }))
-                .count(),
-            Self::Done { signatures, .. } => signatures
+                .count()),
+            Self::Done { signatures, .. } => Ok(signatures
                 .iter()
                 .filter(|p| matches!(p, FullSignaturePacket::Ops { .. }))
-                .count(),
-            Self::Error => panic!("SignatureOnePassManyReader errored"),
+                .count()),
+            Self::Error => Err(io::Error::other("SignatureOnePassManyReader errored")),
         }
     }
 
-    pub fn num_regular_signatures(&self) -> usize {
+    pub fn num_regular_signatures(&self) -> io::Result<usize> {
         match self {
-            Self::Init { packets, .. } | Self::Body { packets, .. } => packets
+            Self::Init { packets, .. } | Self::Body { packets, .. } => Ok(packets
                 .iter()
                 .filter(|p| matches!(p, SignaturePacket::Signature { .. }))
-                .count(),
-            Self::Done { signatures, .. } => signatures
+                .count()),
+            Self::Done { signatures, .. } => Ok(signatures
                 .iter()
                 .filter(|p| matches!(p, FullSignaturePacket::Signature { .. }))
-                .count(),
-            Self::Error => panic!("SignatureOnePassManyReader errored"),
+                .count()),
+            Self::Error => Err(io::Error::other("SignatureOnePassManyReader errored")),
         }
     }
 
-    pub fn hash(&self, index: usize) -> Option<&[u8]> {
+    pub fn hash(&self, index: usize) -> io::Result<Option<&[u8]>> {
         match self {
-            Self::Init { .. } => None,
-            Self::Body { .. } => None,
-            Self::Done { hashes, .. } => hashes.get(index).and_then(|h| h.as_deref()),
-            Self::Error => panic!("SignatureOnePassManyReader errored"),
+            Self::Init { .. } => Ok(None),
+            Self::Body { .. } => Ok(None),
+            Self::Done { hashes, .. } => Ok(hashes.get(index).and_then(|h| h.as_deref())),
+            Self::Error => Err(io::Error::other("SignatureOnePassManyReader errored")),
         }
     }
 
-    pub fn signature(&self, index: usize) -> Option<&Signature> {
+    pub fn signature(&self, index: usize) -> io::Result<Option<&Signature>> {
         match self {
-            Self::Init { .. } => None,
-            Self::Body { .. } => None,
-            Self::Done { signatures, .. } => signatures.get(index).map(|s| s.signature()),
-            Self::Error => panic!("SignatureOnePassManyReader errored"),
+            Self::Init { .. } => Ok(None),
+            Self::Body { .. } => Ok(None),
+            Self::Done { signatures, .. } => Ok(signatures.get(index).map(|s| s.signature())),
+            Self::Error => Err(io::Error::other("SignatureOnePassManyReader errored")),
         }
     }
 
-    pub fn signatures(&self) -> Option<&[FullSignaturePacket]> {
+    pub fn signatures(&self) -> io::Result<Option<&[FullSignaturePacket]>> {
         match self {
-            Self::Init { .. } => None,
-            Self::Body { .. } => None,
-            Self::Done { signatures, .. } => Some(signatures),
-            Self::Error => panic!("SignatureOnePassManyReader errored"),
+            Self::Init { .. } => Ok(None),
+            Self::Body { .. } => Ok(None),
+            Self::Done { signatures, .. } => Ok(Some(signatures)),
+            Self::Error => Err(io::Error::other("SignatureOnePassManyReader errored")),
         }
     }
 
-    pub fn get_ref(&self) -> &Message<'a> {
+    pub fn get_ref(&self) -> io::Result<&Message<'a>> {
         match self {
-            Self::Init { source, .. } => source,
-            Self::Body { source, .. } => source,
-            Self::Done { source, .. } => source,
-            Self::Error => panic!("SignatureOnePassManyReader errored"),
+            Self::Init { source, .. } => Ok(source),
+            Self::Body { source, .. } => Ok(source),
+            Self::Done { source, .. } => Ok(source),
+            Self::Error => Err(io::Error::other("SignatureOnePassManyReader errored")),
         }
     }
 
-    pub fn get_mut(&mut self) -> &mut Message<'a> {
+    pub fn get_mut(&mut self) -> io::Result<&mut Message<'a>> {
         match self {
-            Self::Init { source, .. } => source,
-            Self::Body { source, .. } => source,
-            Self::Done { source, .. } => source,
-            Self::Error => panic!("SignatureOnePassManyReader errored"),
+            Self::Init { source, .. } => Ok(source),
+            Self::Body { source, .. } => Ok(source),
+            Self::Done { source, .. } => Ok(source),
+            Self::Error => Err(io::Error::other("SignatureOnePassManyReader errored")),
         }
     }
 
-    pub fn into_inner(self) -> PacketBodyReader<MessageReader<'a>> {
+    pub fn into_inner(self) -> io::Result<PacketBodyReader<MessageReader<'a>>> {
         match self {
             Self::Init { source, .. } => source.into_inner(),
             Self::Body { source, .. } => source.into_inner(),
             Self::Done { source, .. } => source.into_inner(),
-            Self::Error => panic!("SignatureOnePassManyReader errored"),
+            Self::Error => Err(io::Error::other("SignatureOnePassManyReader errored")),
         }
     }
 
@@ -303,7 +303,7 @@ impl<'a> SignatureManyReader<'a> {
                         let hashers: Vec<_> =
                             hashers.into_iter().map(|h| h.map(|h| h.done())).collect();
 
-                        let (reader, parts) = source.into_parts();
+                        let (reader, parts) = source.into_parts()?;
 
                         let mut packet_parser = crate::packet::PacketParser::new(reader);
 
@@ -535,7 +535,7 @@ impl BufRead for SignatureManyReader<'_> {
                 buffer.advance(amt);
             }
             Self::Done { .. } => {}
-            Self::Error => panic!("SignatureOnePassManyReader errored"),
+            Self::Error => panic!("SignatureOnePassManyReader errored"), // TODO
         }
     }
 }
