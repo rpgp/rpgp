@@ -1,10 +1,11 @@
 use std::io::{self, BufRead};
 
+use byteorder::WriteBytesExt;
 use zeroize::ZeroizeOnDrop;
 
 use crate::{
     crypto::{aead::AeadAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
-    errors::{bail, InvalidInputSnafu, Result},
+    errors::{bail, Result},
     parsing_reader::BufReadParsing,
     types::*,
 };
@@ -20,12 +21,101 @@ pub enum SecretParams {
     Encrypted(EncryptedSecretParams),
 }
 
+pub(crate) const EXTERNAL_SECRET: u8 = 252;
+
+#[derive(Debug, Clone, PartialEq, Eq, ZeroizeOnDrop)]
+pub enum LocatorHint {
+    Unavailable,
+    BestEffort { name: Option<String> },
+    Experimental,
+    Unknown,
+}
+
+impl LocatorHint {
+    pub fn from_slice(data: &[u8]) -> Result<Self> {
+        match data.split_first() {
+            None => Ok(Self::Unavailable),
+            Some((id, data)) => match id {
+                0 => match data.split_first() {
+                    None => Ok(Self::BestEffort { name: None }),
+                    Some((name_len, name)) => {
+                        if *name_len & 0b1100_0000 != 0b1100_0000 {
+                            bail!("Unexpected locator hint device name length");
+                        }
+
+                        let name_len = *name_len & 0b0011_1111;
+
+                        if name.len() != name_len as usize {
+                            bail!("Locator hint device name length doesn't match available data");
+                        }
+
+                        let Ok(name) = String::from_utf8(name.into()) else {
+                            bail!("Device name is not UTF8")
+                        };
+
+                        Ok(Self::BestEffort { name: Some(name) })
+                    }
+                },
+                _ => unimplemented!(),
+            },
+        }
+    }
+
+    pub(crate) fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        match self {
+            LocatorHint::Unavailable => {}
+            LocatorHint::BestEffort { name } => {
+                writer.write_u8(0)?;
+
+                if let Some(name) = name {
+                    let len = name.len() as u8; // TODO: Error if >63?
+                    writer.write_u8(len | 0b1100_0000)?;
+
+                    writer.write_all(name.as_bytes())?;
+                }
+            }
+            _ => unimplemented!(),
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn write_len(&self) -> usize {
+        match self {
+            LocatorHint::Unavailable => 0,
+            LocatorHint::BestEffort { name } => {
+                if let Some(name) = name {
+                    // hint + name header + name
+                    1 + 1 + name.len()
+                } else {
+                    1
+                }
+            }
+            _ => unimplemented!(),
+        }
+    }
+}
+
 impl SecretParams {
     /// `true`, if the secret key material is password-locked
+    ///
+    /// TODO: change this API? it's confusing in the "external" case
     pub fn is_encrypted(&self) -> bool {
         match self {
             SecretParams::Plain(_) => false,
             SecretParams::Encrypted(_) => true,
+        }
+    }
+
+    /// `true` if the secret key material is "external"
+    ///
+    /// See <https://datatracker.ietf.org/doc/draft-ietf-openpgp-external-secrets/>
+    pub fn is_external(&self) -> bool {
+        match self {
+            SecretParams::Plain(_) => false,
+            SecretParams::Encrypted(params) => {
+                matches!(params.string_to_key_params(), S2kParams::External(_))
+            }
         }
     }
 
@@ -110,9 +200,7 @@ fn parse_secret_fields<B: BufRead>(
         // where the previous octet is not zero), a 1-octet scalar octet count of the
         // cumulative length of all the following conditionally included S2K parameter fields.
         let len = i.read_u8()?;
-        if len == 0 {
-            return Err(InvalidInputSnafu.build());
-        }
+
         Some(len)
     } else {
         None
@@ -121,6 +209,17 @@ fn parse_secret_fields<B: BufRead>(
     let enc_params = match s2k_usage {
         // 0 is no encryption
         S2kUsage::Unprotected => S2kParams::Unprotected,
+        // external secret
+        S2kUsage::External => {
+            let hint = if let Some(len) = _s2k_len {
+                i.take_bytes(len as usize)?.freeze()
+            } else {
+                i.rest()?.freeze()
+            };
+
+            S2kParams::External(LocatorHint::from_slice(hint.as_ref())?)
+        }
+
         // symmetric key algorithm
         S2kUsage::LegacyCfb(sym_alg) => {
             let iv = i.take_bytes(sym_alg.block_size())?.freeze();
@@ -201,6 +300,12 @@ fn parse_secret_fields<B: BufRead>(
         S2kUsage::Unprotected => {
             let params = PlainSecretParams::try_from_reader(i, key_ver, alg, public_params)?;
             Ok(SecretParams::Plain(params))
+        }
+        S2kUsage::External => {
+            debug_assert!(i.rest()?.freeze().is_empty());
+
+            let params = EncryptedSecretParams::new(Vec::new().into(), enc_params);
+            Ok(SecretParams::Encrypted(params))
         }
         _ => {
             let params = EncryptedSecretParams::new(i.rest()?.freeze(), enc_params);
