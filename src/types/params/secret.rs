@@ -107,6 +107,18 @@ impl SecretParams {
         }
     }
 
+    /// `true` if the secret key material is "external"
+    ///
+    /// See <https://datatracker.ietf.org/doc/draft-ietf-openpgp-external-secrets/>
+    pub fn is_external(&self) -> bool {
+        match self {
+            SecretParams::Plain(_) => false,
+            SecretParams::Encrypted(params) => {
+                matches!(params.string_to_key_params(), S2kParams::External(_))
+            }
+        }
+    }
+
     pub fn from_slice(
         data: &[u8],
         key_ver: KeyVersion,
