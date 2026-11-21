@@ -847,7 +847,7 @@ impl Signature {
     /// representation, but is semantically equivalent to `None`.)
     pub fn key_expiration_time(&self) -> Option<Duration> {
         self.config().and_then(|h| {
-            h.hashed_subpackets().find_map(|p| match &p.data {
+            h.hashed_subpackets().rev().find_map(|p| match &p.data {
                 SubpacketData::KeyExpirationTime(d) => Some(*d),
                 _ => None,
             })
@@ -856,7 +856,7 @@ impl Signature {
 
     pub fn signature_expiration_time(&self) -> Option<Duration> {
         self.config().and_then(|h| {
-            h.hashed_subpackets().find_map(|p| match &p.data {
+            h.hashed_subpackets().rev().find_map(|p| match &p.data {
                 SubpacketData::SignatureExpirationTime(d) => Some(*d),
                 _ => None,
             })
