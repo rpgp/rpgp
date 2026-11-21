@@ -15,7 +15,9 @@ use crate::{
     packet::{Features, KeyFlags, Notation, RevocationCode, Signature},
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::{CompressionAlgorithm, Duration, Fingerprint, KeyId, RevocationKey, Timestamp},
+    types::{
+        CompressionAlgorithm, ExpirationDuration, Fingerprint, KeyId, RevocationKey, Timestamp,
+    },
 };
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -287,9 +289,9 @@ pub enum SubpacketData {
     /// The time the signature was made.
     SignatureCreationTime(Timestamp),
     /// The time the signature will expire, in seconds from creation time.
-    SignatureExpirationTime(Duration),
+    SignatureExpirationTime(ExpirationDuration),
     /// When the key is going to expire, in seconds from creation time.
-    KeyExpirationTime(Duration),
+    KeyExpirationTime(ExpirationDuration),
     /// The OpenPGP Key ID of the key issuing the signature.
     IssuerKeyId(KeyId),
     /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.

@@ -1,11 +1,12 @@
 use std::{
     cmp,
     io::{BufRead, Read, Result},
+    num::NonZeroU32,
 };
 
 use bytes::{Bytes, BytesMut};
 
-use crate::types::{Duration, Timestamp};
+use crate::types::{ExpirationDuration, Timestamp};
 
 pub trait BufReadParsing: BufRead + Sized {
     fn read_u8(&mut self) -> Result<u8> {
@@ -163,8 +164,11 @@ pub trait BufReadParsing: BufRead + Sized {
         self.read_be_u32().map(Timestamp::from_secs)
     }
 
-    fn read_duration(&mut self) -> Result<Duration> {
-        self.read_be_u32().map(Duration::from_secs)
+    fn read_expiration_duration(&mut self) -> Result<ExpirationDuration> {
+        match NonZeroU32::new(self.read_be_u32()?) {
+            None => Ok(ExpirationDuration::NoExpiration),
+            Some(duration) => Ok(ExpirationDuration::Expiring { duration }),
+        }
     }
 }
 
