@@ -168,6 +168,7 @@ impl PublicKeyEncryptedSessionKey {
         session_key: &RawSessionKey,
         alg: SymmetricKeyAlgorithm,
         enc: &E,
+        anonymous: bool,
     ) -> Result<Self> {
         // the symmetric key algorithm, the session key, and a checksum (for some algorithms)
         let data =
@@ -175,7 +176,11 @@ impl PublicKeyEncryptedSessionKey {
 
         let values = enc.encrypt(rng, &data, EskType::V3_4)?;
 
-        let id = enc.legacy_key_id();
+        let id = if anonymous {
+            KeyId::WILDCARD
+        } else {
+            enc.legacy_key_id()
+        };
         let len = write_len_v3(&id, &values);
         let packet_header =
             PacketHeader::new_fixed(Tag::PublicKeyEncryptedSessionKey, len.try_into()?);
@@ -193,6 +198,7 @@ impl PublicKeyEncryptedSessionKey {
         rng: R,
         session_key: &RawSessionKey,
         enc: &E,
+        anonymous: bool,
     ) -> Result<Self> {
         // "An implementation MUST NOT generate ElGamal v6 PKESK packets."
         // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-5.1.4-6)
@@ -204,7 +210,11 @@ impl PublicKeyEncryptedSessionKey {
         let data = Self::prepare_session_key_for_encryption(None, session_key, enc.public_params());
 
         let values = enc.encrypt(rng, &data, EskType::V6)?;
-        let fingerprint = Some(enc.fingerprint());
+        let fingerprint = if anonymous {
+            None
+        } else {
+            Some(enc.fingerprint())
+        };
 
         let len = write_len_v6(&values, &fingerprint);
         let packet_header =
