@@ -29,7 +29,7 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        CompressionAlgorithm, EncryptionKey, Fingerprint, KeyId, KeyVersion, PacketHeaderVersion,
+        CompressionAlgorithm, EncryptionKey, Fingerprint, KeyVersion, PacketHeaderVersion,
         PacketLength, Password, SigningKey, StringToKey, Tag, Timestamp,
     },
     util::{fill_buffer, TeeWriter},
@@ -445,11 +445,13 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
         E: EncryptionKey,
     {
         // Encrypt (asym) the session key using the provided public key.
+        let anonymous = false;
         let pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
             &mut rng,
             &self.encryption.session_key,
             self.encryption.sym_alg,
             enc,
+            anonymous,
         )?;
         self.encryption.pub_esks.push(pkes);
         Ok(self)
@@ -464,16 +466,14 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
         E: EncryptionKey,
     {
         // Encrypt (asym) the session key using the provided public key.
-        let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
+        let anonymous = true;
+        let pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
             &mut rng,
             &self.encryption.session_key,
             self.encryption.sym_alg,
             enc,
+            anonymous,
         )?;
-        // Blank out the recipient id
-        if let PublicKeyEncryptedSessionKey::V3 { id, .. } = &mut pkes {
-            *id = KeyId::WILDCARD;
-        }
 
         self.encryption.pub_esks.push(pkes);
         Ok(self)
@@ -610,10 +610,12 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
         E: EncryptionKey,
     {
         // Encrypt (asym) the session key using the provided public key.
+        let anonymous = false;
         let pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
             &mut rng,
             &self.encryption.session_key,
             enc,
+            anonymous,
         )?;
         self.encryption.pub_esks.push(pkes);
         Ok(self)
@@ -628,15 +630,13 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
         E: EncryptionKey,
     {
         // Encrypt (asym) the session key using the provided public key.
-        let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
+        let anonymous = true;
+        let pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
             &mut rng,
             &self.encryption.session_key,
             enc,
+            anonymous,
         )?;
-        // Blank out the recipient id
-        if let PublicKeyEncryptedSessionKey::V6 { fingerprint, .. } = &mut pkes {
-            *fingerprint = None;
-        }
 
         self.encryption.pub_esks.push(pkes);
         Ok(self)
@@ -1537,7 +1537,7 @@ mod tests {
         },
         crypto::sym::SymmetricKeyAlgorithm,
         packet::SubpacketType,
-        types::{DecryptionKey, EskType, KeyDetails, Timestamp},
+        types::{DecryptionKey, EskType, KeyDetails, KeyId, Timestamp},
         util::test::{check_strings, random_string, ChaosReader},
     };
 
@@ -2442,6 +2442,17 @@ mod tests {
         builder
             .encrypt_to_key_anonymous(&mut rng, &skey.secret_subkeys[0].public_key())
             .unwrap();
+
+        // Regression test for an incorrect packet length calculation.
+        // Previously due to a bug packet length was calculated
+        // before removing the fingerprint.
+        // Anonymous v6 PKESK is shorter than non-anonymous v6 PKESK:
+        // <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.1.2-3.2>
+        let pkesk = &builder.encryption.pub_esks[0];
+        assert_eq!(
+            pkesk.packet_header().packet_length().maybe_len(),
+            Some(u32::try_from(pkesk.write_len())?),
+        );
 
         let encrypted = builder.to_vec(&mut rng).unwrap();
 
