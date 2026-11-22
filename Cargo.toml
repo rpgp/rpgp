@@ -4,7 +4,6 @@ version = "0.21.1"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 description = "OpenPGP implementation in Rust"
 license = "MIT OR Apache-2.0"
-homepage = "https://github.com/rpgp/rpgp"
 repository = "https://github.com/rpgp/rpgp"
 readme = "README.md"
 resolver = "2"
