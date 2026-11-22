@@ -1,6 +1,7 @@
 use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
+use bytes::Bytes;
 use zeroize::ZeroizeOnDrop;
 
 use crate::{
@@ -21,43 +22,88 @@ pub enum SecretParams {
     Encrypted(EncryptedSecretParams),
 }
 
-pub(crate) const EXTERNAL_SECRET: u8 = 252;
+pub(crate) const EXTERNAL_SECRET: u8 = 14;
 
-#[derive(Debug, Clone, PartialEq, Eq, ZeroizeOnDrop)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LocatorHint {
     Unavailable,
-    BestEffort { name: Option<String> },
-    Experimental,
-    Unknown,
+
+    // id 0
+    BestEffort {
+        name: Option<String>,
+    },
+
+    // id 96-111
+    Experimental {
+        id: u8,
+        body: Option<Bytes>,
+        name: Option<String>,
+    },
+
+    Unknown {
+        id: u8,
+        body: Option<Bytes>,
+        name: Option<String>,
+    },
 }
 
 impl LocatorHint {
+    fn hint_parts(mut hint: &[u8]) -> Result<(Option<Bytes>, Option<String>)> {
+        let mut body: Option<Bytes> = None;
+        let mut name: Option<String> = None;
+
+        while !hint.is_empty() {
+            match hint.split_first() {
+                None => unreachable!(),
+                Some((part_header, rest)) => {
+                    match *part_header {
+                        // high bit is 0: locator hint body
+                        0b0000_0000..0b1000_0000 => {
+                            let len = part_header & 0b0111_1111;
+                            let (data, rest) = rest.split_at(len as usize);
+
+                            body = Some(Bytes::from(data.to_vec()));
+                            hint = rest;
+                        }
+                        // two highest bits are "10": device name
+                        0b1000_0000..0b1100_0000 => {
+                            let name_len = *part_header & 0b0011_1111;
+
+                            let (data, rest) = rest.split_at(name_len as usize);
+
+                            let Ok(s) = String::from_utf8(data.into()) else {
+                                bail!("Device name is not UTF8");
+                            };
+
+                            name = Some(s);
+                            hint = rest;
+                        }
+
+                        // two highest bits are "11": unknown/unsupported
+                        0b1100_0000.. => {
+                            bail!("Locator hint part with '11'-prefix is unsupported");
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok((body, name))
+    }
+
     pub fn from_slice(data: &[u8]) -> Result<Self> {
         match data.split_first() {
             None => Ok(Self::Unavailable),
-            Some((id, data)) => match id {
-                0 => match data.split_first() {
-                    None => Ok(Self::BestEffort { name: None }),
-                    Some((name_len, name)) => {
-                        if *name_len & 0b1100_0000 != 0b1100_0000 {
-                            bail!("Unexpected locator hint device name length");
-                        }
+            Some((&id, hint)) => {
+                let (body, name) = Self::hint_parts(hint)?;
+                match id {
+                    // TODO: error if body is present?
+                    0 => Ok(Self::BestEffort { name }),
 
-                        let name_len = *name_len & 0b0011_1111;
-
-                        if name.len() != name_len as usize {
-                            bail!("Locator hint device name length doesn't match available data");
-                        }
-
-                        let Ok(name) = String::from_utf8(name.into()) else {
-                            bail!("Device name is not UTF8")
-                        };
-
-                        Ok(Self::BestEffort { name: Some(name) })
-                    }
-                },
-                _ => unimplemented!(),
-            },
+                    96..=111 => Ok(Self::Experimental { id, body, name }),
+                    _ => Ok(Self::Unknown { id, body, name }),
+                }
+            }
         }
     }
 
@@ -68,13 +114,30 @@ impl LocatorHint {
                 writer.write_u8(0)?;
 
                 if let Some(name) = name {
-                    let len = name.len() as u8; // TODO: Error if >63?
-                    writer.write_u8(len | 0b1100_0000)?;
+                    let header = (name.len() as u8 & 0b0011_1111) | 0b1000_0000;
+                    writer.write_u8(header)?;
 
                     writer.write_all(name.as_bytes())?;
                 }
             }
-            _ => unimplemented!(),
+            LocatorHint::Experimental { id, body, name }
+            | LocatorHint::Unknown { id, body, name } => {
+                writer.write_u8(*id)?;
+
+                if let Some(body) = body {
+                    let header = body.len() as u8 & 0b0111_1111;
+
+                    writer.write_u8(header)?;
+                    writer.write_all(body)?;
+                }
+
+                if let Some(name) = name {
+                    let header = (name.len() as u8 & 0b0011_1111) | 0b1000_0000;
+
+                    writer.write_u8(header)?;
+                    writer.write_all(name.as_bytes())?;
+                }
+            }
         }
 
         Ok(())
@@ -84,14 +147,39 @@ impl LocatorHint {
         match self {
             LocatorHint::Unavailable => 0,
             LocatorHint::BestEffort { name } => {
+                let mut len = 1; // id
+
                 if let Some(name) = name {
-                    // hint + name header + name
-                    1 + 1 + name.len()
-                } else {
-                    1
+                    // name header + name
+                    len += 1 + name.len();
                 }
+
+                len
             }
-            _ => unimplemented!(),
+            LocatorHint::Experimental {
+                id: _id,
+                body,
+                name,
+            }
+            | LocatorHint::Unknown {
+                id: _id,
+                body,
+                name,
+            } => {
+                let mut len = 1;
+
+                if let Some(body) = body {
+                    // body header + body data
+                    len += 1 + body.len();
+                }
+
+                if let Some(name) = name {
+                    // name header + name
+                    len += 1 + name.len();
+                }
+
+                len
+            }
         }
     }
 }
@@ -218,6 +306,11 @@ fn parse_secret_fields<B: BufRead>(
             };
 
             S2kParams::External(LocatorHint::from_slice(hint.as_ref())?)
+        }
+
+        S2kUsage::Unknown(id) => {
+            let data = i.rest()?.freeze();
+            S2kParams::Unknown { id, data }
         }
 
         // symmetric key algorithm

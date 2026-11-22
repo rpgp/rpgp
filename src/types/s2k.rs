@@ -29,8 +29,12 @@ pub enum S2kUsage {
     Unprotected,
     /// 1..13
     LegacyCfb(SymmetricKeyAlgorithm),
-    /// 252 (TBC)
+    /// 14 (TBC)
     External,
+
+    /// 15-252
+    Unknown(u8),
+
     /// 253
     Aead,
     /// 254
@@ -50,6 +54,10 @@ pub enum S2kUsage {
 pub enum S2kParams {
     Unprotected,
     External(LocatorHint),
+    Unknown {
+        id: u8,
+        data: Bytes,
+    },
     LegacyCfb {
         sym_alg: SymmetricKeyAlgorithm,
         #[debug("{}", hex::encode(iv))]
@@ -81,6 +89,7 @@ impl From<&S2kParams> for u8 {
         match value {
             S2kParams::Unprotected => 0,
             S2kParams::LegacyCfb { sym_alg, .. } => (*sym_alg).into(),
+            S2kParams::Unknown { id, .. } => *id,
             S2kParams::External { .. } => EXTERNAL_SECRET,
             S2kParams::Aead { .. } => 253,
             S2kParams::Cfb { .. } => 254,
@@ -147,11 +156,12 @@ impl From<u8> for S2kUsage {
     fn from(value: u8) -> Self {
         match value {
             0 => Self::Unprotected,
-            v @ 1..=251 => Self::LegacyCfb(SymmetricKeyAlgorithm::from(v)),
+            v @ 1..=13 => Self::LegacyCfb(SymmetricKeyAlgorithm::from(v)),
             EXTERNAL_SECRET => Self::External,
             253 => Self::Aead,
             254 => Self::Cfb,
             255 => Self::MalleableCfb,
+            v => Self::Unknown(v),
         }
     }
 }
