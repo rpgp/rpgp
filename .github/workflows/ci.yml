@@ -18,6 +18,9 @@ jobs:
   build_and_test_nix:
     name: Build and test (Nix)
     runs-on: ${{ matrix.os }}
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest]
@@ -44,6 +47,8 @@ jobs:
       uses: taiki-e/install-action@v2
       with:
         tool: nextest@0.9.80
+
+    - uses: mozilla-actions/sccache-action@v0.0.11
 
     - name: tests
       run: cargo nextest run --lib --bins --tests --all
@@ -195,14 +200,14 @@ jobs:
     name: Checking fmt
     runs-on: ubuntu-latest
     env:
+      SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
-      SCCACHE_GHA_ENABLED: "on"
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - uses: mozilla-actions/sccache-action@v0.0.7
+      - uses: mozilla-actions/sccache-action@v0.0.11
       - uses: taiki-e/install-action@cargo-make
       - run: cargo make format-check
 
