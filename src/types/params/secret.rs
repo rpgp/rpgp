@@ -6,7 +6,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::{
     crypto::{aead::AeadAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
-    errors::{bail, Result},
+    errors::{bail, ensure, Result},
     parsing_reader::BufReadParsing,
     types::*,
 };
@@ -48,47 +48,35 @@ pub enum LocatorHint {
 }
 
 impl LocatorHint {
-    fn hint_parts(mut hint: &[u8]) -> Result<(Option<Bytes>, Option<String>)> {
-        let mut body: Option<Bytes> = None;
-        let mut name: Option<String> = None;
+    fn hint_parts(hint: &[u8]) -> Result<(Option<Bytes>, Option<String>)> {
+        let Some((&body_len, rest)) = hint.split_first() else {
+            bail!("Missing hint body length");
+        };
 
-        while !hint.is_empty() {
-            match hint.split_first() {
-                None => unreachable!(),
-                Some((part_header, rest)) => {
-                    match *part_header {
-                        // high bit is 0: locator hint body
-                        0b0000_0000..0b1000_0000 => {
-                            let len = part_header & 0b0111_1111;
-                            let (data, rest) = rest.split_at(len as usize);
+        let Some((body, rest)) = rest.split_at_checked(body_len as usize) else {
+            bail!("Incomplete locator hint body field");
+        };
 
-                            body = Some(Bytes::from(data.to_vec()));
-                            hint = rest;
-                        }
-                        // two highest bits are "10": device name
-                        0b1000_0000..0b1100_0000 => {
-                            let name_len = *part_header & 0b0011_1111;
+        let body = if !body.is_empty() {
+            Some(body.to_vec().into())
+        } else {
+            None
+        };
 
-                            let (data, rest) = rest.split_at(name_len as usize);
+        match rest.split_first() {
+            None => Ok((body, None)),
+            Some((&name_len, rest)) => {
+                if let Some((data, _rest)) = rest.split_at_checked(name_len as usize) {
+                    let Ok(name) = String::from_utf8(data.into()) else {
+                        bail!("Device name is not UTF8");
+                    };
 
-                            let Ok(s) = String::from_utf8(data.into()) else {
-                                bail!("Device name is not UTF8");
-                            };
-
-                            name = Some(s);
-                            hint = rest;
-                        }
-
-                        // two highest bits are "11": unknown/unsupported
-                        0b1100_0000.. => {
-                            bail!("Locator hint part with '11'-prefix is unsupported");
-                        }
-                    }
+                    Ok((body, Some(name)))
+                } else {
+                    bail!("Incomplete locator hint device name field");
                 }
             }
         }
-
-        Ok((body, name))
     }
 
     pub fn from_slice(data: &[u8]) -> Result<Self> {
@@ -111,30 +99,35 @@ impl LocatorHint {
         match self {
             LocatorHint::Unavailable => {}
             LocatorHint::BestEffort { name } => {
+                // Hint ID
+                writer.write_u8(0)?;
+
+                // Hint body len
                 writer.write_u8(0)?;
 
                 if let Some(name) = name {
-                    let header = (name.len() as u8 & 0b0011_1111) | 0b1000_0000;
-                    writer.write_u8(header)?;
-
+                    writer.write_u8(name.len() as u8)?;
                     writer.write_all(name.as_bytes())?;
                 }
             }
             LocatorHint::Experimental { id, body, name }
             | LocatorHint::Unknown { id, body, name } => {
+                // Hint ID
                 writer.write_u8(*id)?;
 
                 if let Some(body) = body {
-                    let header = body.len() as u8 & 0b0111_1111;
+                    ensure!(body.len() <= 127, "Locator hint body too long");
 
-                    writer.write_u8(header)?;
+                    writer.write_u8(body.len() as u8)?;
                     writer.write_all(body)?;
+                } else {
+                    writer.write_u8(0)?;
                 }
 
                 if let Some(name) = name {
-                    let header = (name.len() as u8 & 0b0011_1111) | 0b1000_0000;
+                    ensure!(name.len() <= 63, "Locator hint device name too long");
 
-                    writer.write_u8(header)?;
+                    writer.write_u8(name.len() as u8)?;
                     writer.write_all(name.as_bytes())?;
                 }
             }
@@ -147,7 +140,7 @@ impl LocatorHint {
         match self {
             LocatorHint::Unavailable => 0,
             LocatorHint::BestEffort { name } => {
-                let mut len = 1; // id
+                let mut len = 2; // id + body len
 
                 if let Some(name) = name {
                     // name header + name
@@ -166,11 +159,10 @@ impl LocatorHint {
                 body,
                 name,
             } => {
-                let mut len = 1;
+                let mut len = 2; // id + body len
 
                 if let Some(body) = body {
-                    // body header + body data
-                    len += 1 + body.len();
+                    len += body.len();
                 }
 
                 if let Some(name) = name {
