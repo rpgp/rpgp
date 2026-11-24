@@ -1,10 +1,9 @@
 use std::{hash::Hasher, io::Write};
 
 use base64::engine::{general_purpose, Engine as _};
-use crc24::Crc24Hasher;
 use generic_array::typenum::U64;
 
-use super::Headers;
+use super::{Crc24Hasher, Headers};
 use crate::{
     armor::BlockType,
     errors::Result,
