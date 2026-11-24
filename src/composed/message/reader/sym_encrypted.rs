@@ -71,7 +71,7 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
             } => {
                 bail!("already decrypting")
             }
-            Self::Error => panic!("SymEncryptedDataReader errored"), // TODO
+            Self::Error => bail!("SymEncryptedDataReader errored"),
         }
     }
 }
