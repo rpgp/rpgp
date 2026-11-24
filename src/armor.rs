@@ -8,5 +8,4 @@ mod reader;
 mod writer;
 
 pub(crate) use self::checksum::Crc24Hasher;
-
 pub use self::{reader::*, writer::*};
