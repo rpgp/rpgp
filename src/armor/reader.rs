@@ -543,7 +543,7 @@ impl<R: BufRead> Dearmor<R> {
         base_decoder: &mut Base64Decoder<Base64Reader<R>>,
     ) -> io::Result<usize> {
         let size = base_decoder.read(into)?;
-        if let Some(mut crc) = self.crc {
+        if let Some(crc) = self.crc.as_mut() {
             if size > 0 {
                 // update the hash
                 let data = into
@@ -1047,6 +1047,34 @@ RrvW21RoMfltDA==
     }
 
     #[test]
+    fn test_dearmor_good_crc24() {
+        const MSG_GOOD_CRC24: &str = "-----BEGIN PGP MESSAGE-----
+
+xA0DAAgWRbTg0QA4pREByxJiAAAAAABoZWxsbyB3b3JsZArCdQQAFggAHRYhBI+6
+y7JaHukErbi530W04NEAOKURBQJogLxNAAoJEEW04NEAOKURQFoBAP858lgyrKmy
+6QHKz3Zs52+3eGSDMgvWEgsealcZnIl9AQDEgKglQQlUoss5opqRRgWPbMBkeQ4E
+RrvW21RoMfltDA==
+=6GW7
+-----END PGP MESSAGE-----";
+
+        // A "with_crc24" Dearmor should accept the correct CRC24
+        let mut dec = Dearmor::with_options(
+            BufReader::new(MSG_GOOD_CRC24.as_bytes()),
+            DearmorOptions::default().enable_crc24_check(),
+        );
+
+        let mut res = Vec::new();
+        let _read = dec.read_to_end(&mut res).unwrap();
+
+        assert_eq!(dec.typ, Some(BlockType::Message));
+        assert_eq!(res.len(), 154);
+        assert_eq!(
+            dec.crc24_status(),
+            ArmorCrc24Status::CheckedOk { crc: 0xe865bb }
+        );
+    }
+
+    #[test]
     fn test_dearmor_bad_crc24() {
         const MSG_BAD_CRC24: &str = "-----BEGIN PGP MESSAGE-----
 
@@ -1091,7 +1119,7 @@ RrvW21RoMfltDA==
             dec.crc24_status(),
             ArmorCrc24Status::CheckedInvalid {
                 footer_crc: 0x69a69a,
-                calculated_crc: 0xb704ce,
+                calculated_crc: 0xe865bb,
             }
         );
     }
