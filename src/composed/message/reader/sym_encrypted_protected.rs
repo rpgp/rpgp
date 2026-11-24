@@ -277,10 +277,16 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                         Source::Init(source) => Source::BodyRaw(source),
                         Source::BodyRaw(source) => Source::Done(source),
                         Source::BodyDecryptor(source) => {
-                            Source::Done(source.into_inner().expect("TODO")) // TODO
+                            if let Ok(inner) = source.into_inner() {
+                                Source::Done(inner)
+                            } else {
+                                Source::Error
+                            }
                         }
                         Source::Done(source) => Source::Done(source),
-                        Source::Error => panic!("SymEncryptedProtectedDataReader errored"), // TODO
+
+                        // This state returns an error above
+                        Source::Error => unreachable!("SymEncryptedProtectedDataReader errored"),
                     },
                 )
             }
