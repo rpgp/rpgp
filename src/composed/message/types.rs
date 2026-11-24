@@ -258,7 +258,8 @@ impl<'a> Message<'a> {
     pub(crate) fn into_parts(self) -> io::Result<(MessageReader<'a>, MessageParts)> {
         match self {
             Message::Literal { reader, is_nested } => {
-                debug_assert!(reader.is_done()?);
+                debug_assert!(reader.is_done().unwrap_or(false));
+
                 let packet_header = reader.packet_header()?;
                 let header = reader.data_header()?.clone();
                 Ok((
