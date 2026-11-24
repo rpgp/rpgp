@@ -28,24 +28,24 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
         })
     }
 
-    pub fn into_inner(self) -> PacketBodyReader<R> {
+    pub fn into_inner(self) -> io::Result<PacketBodyReader<R>> {
         match self {
             Self::Body { decryptor, .. } => decryptor.into_inner(),
-            Self::Error => panic!("SymEncryptedDataReader errored"),
+            Self::Error => Err(io::Error::other("SymEncryptedDataReader errored")),
         }
     }
 
-    pub fn get_mut(&mut self) -> &mut PacketBodyReader<R> {
+    pub fn get_mut(&mut self) -> io::Result<&mut PacketBodyReader<R>> {
         match self {
             Self::Body { decryptor, .. } => decryptor.get_mut(),
-            Self::Error => panic!("SymEncryptedDataReader errored"),
+            Self::Error => Err(io::Error::other("SymEncryptedDataReader errored")),
         }
     }
 
-    pub fn packet_header(&self) -> PacketHeader {
+    pub fn packet_header(&self) -> io::Result<PacketHeader> {
         match self {
-            Self::Body { decryptor, .. } => decryptor.get_ref().packet_header(),
-            Self::Error => panic!("SymEncryptedDataReader errored"),
+            Self::Body { decryptor, .. } => Ok(decryptor.get_ref()?.packet_header()),
+            Self::Error => Err(io::Error::other("SymEncryptedDataReader errored")),
         }
     }
 
@@ -71,7 +71,7 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
             } => {
                 bail!("already decrypting")
             }
-            Self::Error => panic!("SymEncryptedDataReader errored"),
+            Self::Error => bail!("SymEncryptedDataReader errored"),
         }
     }
 }
@@ -80,16 +80,14 @@ impl<R: BufRead> BufRead for SymEncryptedDataReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         match self {
             Self::Body { ref mut decryptor } => decryptor.fill_buf(),
-            Self::Error => {
-                panic!("SymEncryptedDataReader errored")
-            }
+            Self::Error => Err(io::Error::other("SymEncryptedDataReader errored")),
         }
     }
 
     fn consume(&mut self, amt: usize) {
         match self {
             Self::Body { decryptor } => decryptor.consume(amt),
-            Self::Error => panic!("SymEncryptedDataReader errored"),
+            Self::Error => log::error!("SymEncryptedDataReader errored"),
         }
     }
 }
@@ -111,23 +109,23 @@ pub enum MaybeDecryptor<R: BufRead> {
 }
 
 impl<R: BufRead> MaybeDecryptor<R> {
-    pub fn into_inner(self) -> R {
+    pub fn into_inner(self) -> io::Result<R> {
         match self {
-            Self::Raw(r) => r,
+            Self::Raw(r) => Ok(r),
             Self::Decryptor(r) => r.into_inner(),
         }
     }
 
-    pub fn get_ref(&self) -> &R {
+    pub fn get_ref(&self) -> io::Result<&R> {
         match self {
-            Self::Raw(r) => r,
+            Self::Raw(r) => Ok(r),
             Self::Decryptor(r) => r.get_ref(),
         }
     }
 
-    pub fn get_mut(&mut self) -> &mut R {
+    pub fn get_mut(&mut self) -> io::Result<&mut R> {
         match self {
-            Self::Raw(r) => r,
+            Self::Raw(r) => Ok(r),
             Self::Decryptor(r) => r.get_mut(),
         }
     }

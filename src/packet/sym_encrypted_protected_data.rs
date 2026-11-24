@@ -392,7 +392,7 @@ impl<R: BufRead> StreamDecryptor<R> {
         Ok(Self::V2(decryptor))
     }
 
-    pub fn into_inner(self) -> R {
+    pub fn into_inner(self) -> io::Result<R> {
         match self {
             Self::V1(r) => r.into_inner(),
             Self::GnupgAead(r) => r.into_inner(),
@@ -400,7 +400,7 @@ impl<R: BufRead> StreamDecryptor<R> {
         }
     }
 
-    pub fn get_ref(&self) -> &R {
+    pub fn get_ref(&self) -> io::Result<&R> {
         match self {
             Self::V1(r) => r.get_ref(),
             Self::GnupgAead(r) => r.get_ref(),
@@ -408,7 +408,7 @@ impl<R: BufRead> StreamDecryptor<R> {
         }
     }
 
-    pub fn get_mut(&mut self) -> &mut R {
+    pub fn get_mut(&mut self) -> io::Result<&mut R> {
         match self {
             Self::V1(r) => r.get_mut(),
             Self::GnupgAead(r) => r.get_mut(),

@@ -57,7 +57,7 @@ mod tests {
                 msg.read_to_string(&mut out)?;
                 check_strings(out, buf);
 
-                let header = msg.literal_data_header().unwrap();
+                let header = msg.literal_data_header().unwrap().unwrap();
                 assert_eq!(header.file_name(), &b""[..]);
                 assert_eq!(header.mode(), DataMode::Binary);
             }
@@ -101,7 +101,7 @@ mod tests {
 
                         check_strings(out, buf);
 
-                        let header = decompressed_message.literal_data_header().unwrap();
+                        let header = decompressed_message.literal_data_header().unwrap().unwrap();
                         assert_eq!(header.file_name(), &b""[..]);
                         assert_eq!(header.mode(), DataMode::Binary);
                     } else {
@@ -122,7 +122,7 @@ mod tests {
 
                         check_strings(out, buf);
 
-                        let header = decompressed_message.literal_data_header().unwrap();
+                        let header = decompressed_message.literal_data_header().unwrap().unwrap();
                         assert_eq!(header.file_name(), &b""[..]);
                         assert_eq!(header.mode(), DataMode::Binary);
                     }
