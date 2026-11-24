@@ -110,7 +110,7 @@ impl<R: DebugBufRead> BufRead for CompressedDataReader<R> {
             }
             Self::Done { .. } => {}
             Self::Error => {
-                panic!("CompressedDataReader errored"); // TODO
+                log::error!("CompressedDataReader errored");
             }
         }
     }

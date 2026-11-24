@@ -313,7 +313,7 @@ impl<R: DebugBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
                     panic!("consume after done: {amt}")
                 }
             }
-            Source::Error => panic!("SymEncryptedProtectedDataReader errored"), // TODO
+            Source::Error => log::error!("SymEncryptedProtectedDataReader errored"),
         }
     }
 }

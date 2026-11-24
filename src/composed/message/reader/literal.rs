@@ -160,7 +160,7 @@ impl<R: BufRead> BufRead for LiteralDataReader<R> {
             Self::Body { buffer, .. } | Self::Done { buffer, .. } => {
                 buffer.advance(amt);
             }
-            Self::Error => panic!("LiteralReader errored"), // TODO
+            Self::Error => log::error!("LiteralReader errored"),
         }
     }
 }

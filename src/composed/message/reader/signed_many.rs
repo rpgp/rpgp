@@ -535,7 +535,7 @@ impl BufRead for SignatureManyReader<'_> {
                 buffer.advance(amt);
             }
             Self::Done { .. } => {}
-            Self::Error => panic!("SignatureOnePassManyReader errored"), // TODO
+            Self::Error => log::error!("SignatureOnePassManyReader errored"),
         }
     }
 }

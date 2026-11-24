@@ -87,7 +87,7 @@ impl<R: BufRead> BufRead for SymEncryptedDataReader<R> {
     fn consume(&mut self, amt: usize) {
         match self {
             Self::Body { decryptor } => decryptor.consume(amt),
-            Self::Error => panic!("SymEncryptedDataReader errored"), // TODO
+            Self::Error => log::error!("SymEncryptedDataReader errored"),
         }
     }
 }

@@ -48,7 +48,7 @@ impl<R: BufRead> BufRead for PacketBodyReader<R> {
                 buffer.advance(amt);
             }
             State::Done { .. } => {}
-            State::Error => panic!("PacketBodyReader errored"), // TODO
+            State::Error => log::error!("PacketBodyReader errored"),
         }
     }
 }
