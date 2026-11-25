@@ -45,6 +45,18 @@ jobs:
       with:
         tool: nextest@0.9.80
 
+    - name: Cache
+      uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      with:
+        # Only save the cache when running CI on the main branch.
+        # PRs can then use this cache, but not overwrite it.
+        save-if: ${{ github.ref == 'refs/heads/main' }}
+
+        # Caching ~/.cargo/bin is not useful, but has caused problems in the past,
+        # e.g. <https://github.com/actions/runner-images/issues/14099>
+        # and <https://github.com/Swatinem/rust-cache/blob/d1527c8f67ef9af357290475d4af4b0fab8f12e0/README.md?plain=1#L210-L214>
+        cache-bin: false
+
     - name: tests
       run: cargo nextest run --lib --bins --tests --all
 
