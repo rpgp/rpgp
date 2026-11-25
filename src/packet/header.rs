@@ -240,7 +240,7 @@ impl Serialize for PacketHeader {
 
 /// Old format packet header ("Legacy format")
 #[bitfield(u8, order = msb, debug = false)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct OldPacketHeader {
     /// First bit is always 1
     #[bits(1, default = true)]
@@ -271,7 +271,7 @@ impl std::fmt::Debug for OldPacketHeader {
 ///
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-headers>
 #[bitfield(u8, order = msb, debug = false)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct NewPacketHeader {
     /// First bit is always 1
     #[bits(1, default = true)]

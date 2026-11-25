@@ -343,7 +343,11 @@ fn binary_msg_password() {
 
     assert!(decompressed.is_literal());
     assert_eq!(
-        decompressed.literal_data_header().unwrap().file_name(),
+        decompressed
+            .literal_data_header()
+            .unwrap()
+            .unwrap()
+            .file_name(),
         "README.md"
     );
 }
@@ -1059,9 +1063,9 @@ fn message_many_one_pass_signatures() {
     let Message::Signed { reader, .. } = &message else {
         panic!("invalid message type");
     };
-    assert_eq!(reader.num_signatures(), keys.len());
-    assert_eq!(reader.num_one_pass_signatures(), keys.len());
-    assert_eq!(reader.num_regular_signatures(), 0);
+    assert_eq!(reader.num_signatures().unwrap(), keys.len());
+    assert_eq!(reader.num_one_pass_signatures().unwrap(), keys.len());
+    assert_eq!(reader.num_regular_signatures().unwrap(), 0);
 
     for (i, key) in keys.iter().enumerate() {
         message
@@ -1120,9 +1124,9 @@ fn message_many_prefix_signatures() {
     let Message::Signed { reader, .. } = &message else {
         panic!("invalid message type");
     };
-    assert_eq!(reader.num_signatures(), keys.len());
-    assert_eq!(reader.num_one_pass_signatures(), 0);
-    assert_eq!(reader.num_regular_signatures(), keys.len());
+    assert_eq!(reader.num_signatures().unwrap(), keys.len());
+    assert_eq!(reader.num_one_pass_signatures().unwrap(), 0);
+    assert_eq!(reader.num_regular_signatures().unwrap(), keys.len());
 
     for (i, key) in keys.iter().enumerate() {
         message
@@ -1252,9 +1256,9 @@ fn message_many_mixed_signatures() {
         let Message::Signed { reader, .. } = &message else {
             panic!("invalid message type");
         };
-        assert_eq!(reader.num_signatures(), keys.len());
-        assert_eq!(reader.num_one_pass_signatures(), ops_sigs);
-        assert_eq!(reader.num_regular_signatures(), prefix_sigs);
+        assert_eq!(reader.num_signatures().unwrap(), keys.len());
+        assert_eq!(reader.num_one_pass_signatures().unwrap(), ops_sigs);
+        assert_eq!(reader.num_regular_signatures().unwrap(), prefix_sigs);
 
         for (i, key) in keys.iter().enumerate() {
             println!("-- verifying key {i}");
