@@ -743,8 +743,36 @@ fn intended_recipient_fingerprint<B: BufRead>(mut i: B) -> Result<SubpacketData>
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use proptest::prelude::*;
+
     use super::*;
     use crate::composed::{Deserializable, DetachedSignature};
+
+    proptest! {
+        #[test]
+        fn subpacket_roundtrip(subpacket: Subpacket) {
+            let mut buf = Vec::new();
+            subpacket.to_writer(&mut buf).unwrap();
+
+            let mut slice = buf.as_slice();
+            let subpacket_len = SubpacketLength::try_from_reader(&mut slice).unwrap();
+            assert_eq!(subpacket_len.len(), slice.len());
+            let (typ, is_critical) = SubpacketType::from_u8(slice[0]);
+            prop_assert_eq!(subpacket.is_critical, is_critical);
+            let body = &slice[1..];
+            let is_embedded = false;
+            let new_subpacket = super::subpacket(
+                typ,
+                is_critical,
+                subpacket_len,
+                crate::types::PacketHeaderVersion::New,
+                body,
+                is_embedded,
+            )
+            .unwrap();
+            prop_assert_eq!(new_subpacket, subpacket);
+        }
+    }
 
     #[test]
     fn test_subpacket_pref_sym_alg() {

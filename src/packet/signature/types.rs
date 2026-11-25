@@ -1925,6 +1925,28 @@ mod tests {
 
     use crate::composed::DetachedSignature;
 
+    impl Arbitrary for Signature {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            // TODO: add more arbitrary signatures (v6, different signature types, MPI signatures bytes etc.)
+            Just(
+                Signature::from_config(
+                    SignatureConfig::v4(
+                        SignatureType::KeyBinding,
+                        PublicKeyAlgorithm::Ed25519,
+                        HashAlgorithm::Sha256,
+                    ),
+                    [0; 2],
+                    SignatureBytes::Native(Bytes::from(vec![0u8; 64])),
+                )
+                .unwrap(),
+            )
+            .boxed()
+        }
+    }
+
     impl Arbitrary for KeyFlags {
         type Parameters = ();
         type Strategy = BoxedStrategy<Self>;
@@ -1933,6 +1955,45 @@ mod tests {
             proptest::collection::vec(0u8..255, 1..500)
                 .prop_map(|v| KeyFlags::try_from_reader(&mut &v[..]).unwrap())
                 .boxed()
+        }
+    }
+
+    impl Arbitrary for Features {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            proptest::collection::vec(any::<u8>(), 0..=8)
+                .prop_map(|v| Self::from(&v[..]))
+                .boxed()
+        }
+    }
+
+    impl Arbitrary for Notation {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            (
+                any::<bool>(),
+                proptest::collection::vec(any::<u8>(), 0..=8),
+                proptest::collection::vec(any::<u8>(), 0..=8),
+            )
+                .prop_map(|(readable, name, value)| Notation {
+                    readable,
+                    name: Bytes::from(name),
+                    value: Bytes::from(value),
+                })
+                .boxed()
+        }
+    }
+
+    impl Arbitrary for RevocationCode {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<u8>().prop_map(RevocationCode::from).boxed()
         }
     }
 

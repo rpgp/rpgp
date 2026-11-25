@@ -2,6 +2,8 @@ use std::io::BufRead;
 
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::Bytes;
+#[cfg(test)]
+use proptest::prelude::*;
 use smallvec::SmallVec;
 
 use crate::{
@@ -280,6 +282,7 @@ impl Subpacket {
 /// that occurs in a [`SignatureConfig`](crate::packet::SignatureConfig)
 /// as part of the metadata in a  [`Signature`] packet.
 #[derive(derive_more::Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum SubpacketData {
     /// The time the signature was made.
     SignatureCreationTime(Timestamp),
@@ -291,45 +294,163 @@ pub enum SubpacketData {
     IssuerKeyId(KeyId),
     /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
     /// Renamed to "Preferred Symmetric Ciphers for v1 SEIPD" in RFC 9580
-    PreferredSymmetricAlgorithms(SmallVec<[SymmetricKeyAlgorithm; 8]>),
+    PreferredSymmetricAlgorithms(
+        #[cfg_attr(
+            test,
+            proptest(
+                strategy = "prop::collection::vec(any::<SymmetricKeyAlgorithm>(), 0..=8).prop_map(SmallVec::from_vec)"
+            )
+        )]
+        SmallVec<[SymmetricKeyAlgorithm; 8]>,
+    ),
     /// List of hash algorithms that indicate which algorithms the key holder prefers to use.
-    PreferredHashAlgorithms(SmallVec<[HashAlgorithm; 8]>),
+    PreferredHashAlgorithms(
+        #[cfg_attr(
+            test,
+            proptest(
+                strategy = "prop::collection::vec(any::<HashAlgorithm>(), 0..=8).prop_map(SmallVec::from_vec)"
+            )
+        )]
+        SmallVec<[HashAlgorithm; 8]>,
+    ),
     /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
-    PreferredCompressionAlgorithms(SmallVec<[CompressionAlgorithm; 8]>),
-    KeyServerPreferences(#[debug("{}", hex::encode(_0))] SmallVec<[u8; 4]>),
+    PreferredCompressionAlgorithms(
+        #[cfg_attr(
+            test,
+            proptest(
+                strategy = "prop::collection::vec(any::<CompressionAlgorithm>(), 0..=8).prop_map(SmallVec::from_vec)"
+            )
+        )]
+        SmallVec<[CompressionAlgorithm; 8]>,
+    ),
+    KeyServerPreferences(
+        #[debug("{}", hex::encode(_0))]
+        #[cfg_attr(
+            test,
+            proptest(
+                strategy = "prop::collection::vec(any::<u8>(), 0..=4).prop_map(SmallVec::from_vec)"
+            )
+        )]
+        SmallVec<[u8; 4]>,
+    ),
     KeyFlags(KeyFlags),
     Features(Features),
-    RevocationReason(RevocationCode, Bytes),
+    RevocationReason(
+        RevocationCode,
+        #[cfg_attr(
+            test,
+            proptest(
+                strategy = "prop::collection::vec(any::<u8>(), 0..=128).prop_map(Bytes::from)"
+            )
+        )]
+        Bytes,
+    ),
     IsPrimary(bool),
     Revocable(bool),
     EmbeddedSignature(Box<Signature>),
     PreferredKeyServer(String),
     Notation(Notation),
     RevocationKey(RevocationKey),
-    SignersUserID(Bytes),
+    SignersUserID(
+        #[cfg_attr(
+            test,
+            proptest(
+                strategy = "prop::collection::vec(any::<u8>(), 0..=128).prop_map(Bytes::from)"
+            )
+        )]
+        Bytes,
+    ),
     /// The URI of the policy under which the signature was issued
     PolicyURI(String),
     TrustSignature(u8, u8),
-    RegularExpression(Bytes),
+    RegularExpression(
+        #[cfg_attr(
+            test,
+            proptest(
+                strategy = "prop::collection::vec(any::<u8>(), 0..=128).prop_map(Bytes::from)"
+            )
+        )]
+        Bytes,
+    ),
     ExportableCertification(bool),
-    IssuerFingerprint(Fingerprint),
-    PreferredEncryptionModes(SmallVec<[AeadAlgorithm; 2]>),
-    IntendedRecipientFingerprint(Fingerprint),
-    PreferredAeadAlgorithms(SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>),
+    IssuerFingerprint(
+        #[cfg_attr(
+            test,
+            proptest(strategy = "prop_oneof![
+any::<[u8; 20]>().prop_map(Fingerprint::V4),
+any::<[u8; 32]>().prop_map(Fingerprint::V5),
+any::<[u8; 32]>().prop_map(Fingerprint::V6),
+]")
+        )]
+        Fingerprint,
+    ),
+    PreferredEncryptionModes(
+        #[cfg_attr(
+            test,
+            proptest(
+                strategy = "prop::collection::vec(any::<AeadAlgorithm>(), 0..=2).prop_map(SmallVec::from_vec)"
+            )
+        )]
+        SmallVec<[AeadAlgorithm; 2]>,
+    ),
+    IntendedRecipientFingerprint(
+        #[cfg_attr(
+            test,
+            proptest(strategy = "prop_oneof![
+any::<[u8; 20]>().prop_map(Fingerprint::V4),
+any::<[u8; 32]>().prop_map(Fingerprint::V5),
+any::<[u8; 32]>().prop_map(Fingerprint::V6),
+]")
+        )]
+        Fingerprint,
+    ),
+    PreferredAeadAlgorithms(
+        #[cfg_attr(
+            test,
+            proptest(
+                strategy = "prop::collection::vec(any::<(SymmetricKeyAlgorithm, AeadAlgorithm)>(), 0..=4).prop_map(SmallVec::from_vec)"
+            )
+        )]
+        SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
+    ),
+    #[cfg_attr(test, proptest(skip))]
     Experimental(u8, #[debug("{}", hex::encode(_1))] Bytes),
+    #[cfg_attr(test, proptest(skip))]
     Other(u8, #[debug("{}", hex::encode(_1))] Bytes),
     SignatureTarget(
         PublicKeyAlgorithm,
         HashAlgorithm,
-        #[debug("{}", hex::encode(_2))] Bytes,
+        #[debug("{}", hex::encode(_2))]
+        #[cfg_attr(
+            test,
+            proptest(
+                strategy = "prop::collection::vec(any::<u8>(), 0..=128).prop_map(Bytes::from)"
+            )
+        )]
+        Bytes,
     ),
 }
 
 #[cfg(test)]
 mod tests {
-    use proptest::prelude::*;
-
     use super::*;
+
+    impl Arbitrary for Subpacket {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<(bool, SubpacketData)>()
+                .prop_map(|(is_critical, data)| {
+                    if is_critical {
+                        Subpacket::critical(data).unwrap()
+                    } else {
+                        Subpacket::regular(data).unwrap()
+                    }
+                })
+                .boxed()
+        }
+    }
 
     #[test]
     fn subpacket_len() {
@@ -361,15 +482,21 @@ mod tests {
 
     proptest! {
         #[test]
+        fn subpacket_data_write_len(data: SubpacketData) {
+            let mut buf = Vec::new();
+            data.to_writer(&mut buf).unwrap();
+            assert_eq!(buf.len(), data.write_len());
+        }
+
+        #[test]
         fn subpacket_length_write_len(len: SubpacketLength) {
             let mut buf = Vec::new();
             len.to_writer(&mut buf).unwrap();
             assert_eq!(buf.len(), len.write_len());
         }
 
-
         #[test]
-        fn subpacket_length_packet_roundtrip(len: SubpacketLength) {
+        fn subpacket_length_roundtrip(len: SubpacketLength) {
             let mut buf = Vec::new();
             len.to_writer(&mut buf).unwrap();
             let new_len = SubpacketLength::try_from_reader(&mut &buf[..]).unwrap();
