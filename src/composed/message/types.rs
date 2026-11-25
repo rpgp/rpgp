@@ -1512,28 +1512,22 @@ pub enum InnerRingResult {
 }
 
 /// Options for generating armored content.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ArmorOptions<'a> {
     /// Armor headers
     pub headers: Option<&'a armor::Headers>,
-    /// Should a checksum be included? Default to `true`.
+    /// Should a checksum be included? Default to `false`.
+    ///
+    /// Generating CRC checksum is discouraged:
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-optional-checksum>
     pub include_checksum: bool,
-}
-
-impl Default for ArmorOptions<'_> {
-    fn default() -> Self {
-        Self {
-            headers: None,
-            include_checksum: true,
-        }
-    }
 }
 
 impl<'a> From<Option<&'a armor::Headers>> for ArmorOptions<'a> {
     fn from(headers: Option<&'a armor::Headers>) -> Self {
         Self {
             headers,
-            include_checksum: true,
+            include_checksum: false,
         }
     }
 }
