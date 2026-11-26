@@ -652,12 +652,12 @@ impl SignatureConfig {
     }
 
     /// Returns an iterator over the hashed subpackets of this signature.
-    pub fn hashed_subpackets(&self) -> impl Iterator<Item = &Subpacket> {
+    pub fn hashed_subpackets(&self) -> impl DoubleEndedIterator<Item = &Subpacket> {
         self.hashed_subpackets.iter()
     }
 
     /// Returns an iterator over the unhashed subpackets of this signature.
-    pub fn unhashed_subpackets(&self) -> impl Iterator<Item = &Subpacket> {
+    pub fn unhashed_subpackets(&self) -> impl DoubleEndedIterator<Item = &Subpacket> {
         self.unhashed_subpackets.iter()
     }
 
