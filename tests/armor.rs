@@ -3,8 +3,19 @@ use std::io::{Cursor, Read};
 use buffer_redux::BufReader;
 use pgp::{
     armor::Dearmor,
-    composed::{Deserializable, SignedPublicKey},
+    composed::{Deserializable, Message, SignedPublicKey},
 };
+
+#[test]
+fn whitespace_in_armored_message_body() {
+    // A GnuPG --store message, with a tab inside a base64 group and a space at the line end.
+    let armored = "-----BEGIN PGP MESSAGE-----\r\n\r\n\
+                   ywx\tiAF4L4QBoZWxs \r\n\
+                   bwo=\r\n=srtA\r\n\
+                   -----END PGP MESSAGE-----\r\n";
+    let (mut msg, _) = Message::from_string(armored).unwrap();
+    assert_eq!(msg.as_data_vec().unwrap(), b"hello\n");
+}
 
 #[test]
 fn dearmor_fuzz_1() {

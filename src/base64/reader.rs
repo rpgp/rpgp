@@ -2,7 +2,7 @@
 
 use std::{io, io::prelude::*};
 
-/// Reads base64 values from a given byte input, stops once it detects the first non base64 char.
+/// Reads base64 tokens, skipping ASCII whitespace and stopping at the first other byte.
 #[derive(Debug)]
 pub struct Base64Reader<R: BufRead> {
     inner: R,
@@ -30,8 +30,8 @@ impl<R: BufRead> Read for Base64Reader<R> {
         let mut buf_i = 0;
         let mut n = 0;
         loop {
-            // skip new lines
-            while buf.get(buf_i) == Some(&b'\r') || buf.get(buf_i) == Some(&b'\n') {
+            // RFC 9580, Section 6: ignore whitespace when decoding base64.
+            while matches!(buf.get(buf_i), Some(b' ' | b'\t'..=b'\r')) {
                 buf_i += 1;
                 if buf_i == buf.len() {
                     break;
@@ -78,8 +78,6 @@ fn is_base64_token(c: u8) -> bool {
         || c == b'/'
         || c == b'+'
         || c == b'='
-        || c == b'\n'
-        || c == b'\r'
 }
 
 #[cfg(test)]
