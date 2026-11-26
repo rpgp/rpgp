@@ -163,10 +163,12 @@ where
     debug!("  subkeys");
 
     while let Some(res) = packets.next_if(|p| {
-        p.as_ref().is_ok_and(|p| {
-            debug!("  peek {:?}", p.tag());
-            p.tag() == Tag::PublicSubkey || (parse_secrect_subkeys && p.tag() == Tag::SecretSubkey)
-        })
+        p.as_ref().is_err_and(is_invalid_public_subkey)
+            || p.as_ref().is_ok_and(|p| {
+                debug!("  peek {:?}", p.tag());
+                p.tag() == Tag::PublicSubkey
+                    || (parse_secrect_subkeys && p.tag() == Tag::SecretSubkey)
+            })
     }) {
         // -- V2/3 keys can not have sub keys
         if primary_key.version() < KeyVersion::V4 {
@@ -175,6 +177,17 @@ where
 
         let packet = match res {
             Ok(packet) => packet,
+            Err(e) if is_invalid_public_subkey(&e) => {
+                // A public subkey packet that we can't parse: skip it, and its signatures
+                warn!("skipping public subkey that failed to parse: {e:?}");
+                while packets
+                    .next_if(|p| p.as_ref().is_ok_and(|p| p.tag() == Tag::Signature))
+                    .is_some()
+                {
+                    debug!("skipping signature of the skipped subkey");
+                }
+                continue;
+            }
             Err(e) => return Some(Err(e)),
         };
 
@@ -269,4 +282,13 @@ where
         public_subkey_container,
         secret_subkey_container,
     )))
+}
+
+/// Is this the error for a public subkey packet that failed to parse?
+fn is_invalid_public_subkey(e: &Error) -> bool {
+    matches!(
+        e,
+        Error::InvalidPacketContent { source }
+            if matches!(**source, Error::InvalidPublicSubkey { .. })
+    )
 }
