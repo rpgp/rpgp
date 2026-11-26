@@ -5,11 +5,11 @@ use buffer_redux::BufReader;
 use byteorder::{BigEndian, ByteOrder};
 use nom::{
     branch::alt,
-    bytes::streaming::{tag, take, take_until, take_until1},
+    bytes::streaming::{tag, take, take_until},
     character::streaming::{digit1, line_ending, not_line_ending, space0},
-    combinator::{complete, map, map_res, opt, success, value},
+    combinator::{all_consuming, complete, map, map_res, opt, rest, success, value, verify},
     multi::many0,
-    sequence::{delimited, pair, preceded, terminated},
+    sequence::{delimited, pair, preceded, separated_pair, terminated},
     AsChar, IResult, Input, Parser,
 };
 
@@ -191,30 +191,31 @@ fn armor_header_line(i: &[u8]) -> IResult<&[u8], BlockType> {
 
 /// Parses a single key value pair, for the header.
 fn key_value_pair(i: &[u8]) -> IResult<&[u8], (&str, &str)> {
-    let (i, key) = map_res(
-        alt((
-            complete(take_until1(":\r\n")),
-            complete(take_until1(":\n")),
-            complete(take_until1(": ")),
-        )),
-        str::from_utf8,
-    )
-    .parse(i)?;
+    let (rem, line) = terminated(not_line_ending, line_ending).parse(i)?;
 
-    // consume the ":"
-    let (i, _) = tag(":")(i)?;
-    let (i, t) = alt((tag(" "), line_ending)).parse(i)?;
+    let (_, (key, value)) = all_consuming(key_value_pair_line).parse(line)?;
 
-    let (i, value) = if t == b" " {
-        let (i, value) = map_res(not_line_ending, str::from_utf8).parse(i)?;
-        let (i, _) = line_ending(i)?;
-        (i, value)
-    } else {
-        // empty value
-        (i, "")
-    };
+    Ok((rem, (key, value)))
+}
 
-    Ok((i, (key, value)))
+fn key_value_pair_line(input: &[u8]) -> IResult<&[u8], (&str, &str)> {
+    // We first look for ": " as a separator. If not found, we check the case
+    // where we only have a key with a trailing ":".
+    let raw_parser = alt((
+        separated_pair(
+            nom::bytes::complete::take_until(&b": "[..]),
+            nom::bytes::complete::tag(&b": "[..]),
+            rest,
+        ),
+        map(verify(rest, |b: &[u8]| b.ends_with(b":")), |b: &[u8]| {
+            (&b[..b.len() - 1], &b""[..])
+        }),
+    ));
+
+    map_res(raw_parser, |(k, v)| {
+        Ok::<(&str, &str), std::str::Utf8Error>((std::str::from_utf8(k)?, std::str::from_utf8(v)?))
+    })
+    .parse(input)
 }
 
 /// Parses a list of key value pairs.
