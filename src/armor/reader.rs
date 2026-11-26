@@ -389,7 +389,7 @@ pub struct Dearmor<R: BufRead> {
     current_part: Part<R>,
     /// (Optional) crc24 hasher
     #[debug("Crc24Hasher")]
-    crc: Option<crc24::Crc24Hasher>,
+    crc: Option<super::Crc24Hasher>,
     /// Maximum buffer limit
     max_buffer_limit: usize,
 }
@@ -582,7 +582,7 @@ impl<R: BufRead> Dearmor<R> {
 
     /// Returns the status of the armor's CRC24 checksum
     pub fn crc24_status(&self) -> ArmorCrc24Status {
-        match (self.checksum, self.crc) {
+        match (self.checksum, self.crc.as_ref()) {
             (None, _) => ArmorCrc24Status::NoCrc24,
             (Some(footer), None) => ArmorCrc24Status::Unchecked {
                 footer_crc: footer as u32,

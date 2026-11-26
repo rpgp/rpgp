@@ -5,14 +5,13 @@ use std::{
 };
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use crc24::Crc24Hasher;
 use generic_array::typenum::U64;
 use log::debug;
 use rand::{CryptoRng, Rng};
 
 use super::{ArmorOptions, RawSessionKey};
 use crate::{
-    armor,
+    armor::{self, Crc24Hasher},
     composed::Esk,
     crypto::{
         aead::{AeadAlgorithm, ChunkSize},
