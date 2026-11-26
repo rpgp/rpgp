@@ -1,7 +1,7 @@
 //! rPGP types
 
 mod compression;
-mod duration;
+mod expiration_duration;
 mod fingerprint;
 mod key_id;
 mod key_traits;
@@ -18,7 +18,7 @@ mod user;
 
 pub use self::{
     compression::CompressionAlgorithm,
-    duration::{Duration, DurationError},
+    expiration_duration::ExpirationDuration,
     fingerprint::Fingerprint,
     key_id::KeyId,
     key_traits::{DecryptionKey, EncryptionKey, Imprint, KeyDetails, SigningKey, VerifyingKey},

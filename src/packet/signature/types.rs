@@ -28,7 +28,7 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{
-        self, CompressionAlgorithm, Duration, Fingerprint, KeyDetails, KeyId, KeyVersion,
+        self, CompressionAlgorithm, ExpirationDuration, Fingerprint, KeyDetails, KeyId, KeyVersion,
         PacketLength, SignatureBytes, Tag, Timestamp, VerifyingKey,
     },
 };
@@ -838,14 +838,10 @@ impl Signature {
     }
 
     /// If the hashed area contains any KeyExpirationTime subpacket, then this
-    /// returns `Some(Duration)` of the first KeyExpirationTime subpacket encountered.
+    /// returns `Some(ExpirationDuration)` of the first KeyExpirationTime subpacket encountered.
     ///
     /// If the hashed area contains no KeyExpirationTime subpacket, this returns `None`.
-    ///
-    /// (Note that a return value of `Some(Duration(0))` also means that no key expiration time
-    /// applies to the target component. This corresponds to a different wire-format
-    /// representation, but is semantically equivalent to `None`.)
-    pub fn key_expiration_time(&self) -> Option<Duration> {
+    pub fn key_expiration_time(&self) -> Option<ExpirationDuration> {
         self.config().and_then(|h| {
             h.hashed_subpackets().rev().find_map(|p| match &p.data {
                 SubpacketData::KeyExpirationTime(d) => Some(*d),
@@ -854,7 +850,7 @@ impl Signature {
         })
     }
 
-    pub fn signature_expiration_time(&self) -> Option<Duration> {
+    pub fn signature_expiration_time(&self) -> Option<ExpirationDuration> {
         self.config().and_then(|h| {
             h.hashed_subpackets().rev().find_map(|p| match &p.data {
                 SubpacketData::SignatureExpirationTime(d) => Some(*d),
