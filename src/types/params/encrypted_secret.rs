@@ -48,6 +48,8 @@ impl EncryptedSecretParams {
     pub fn checksum(&self) -> Vec<u8> {
         match self.s2k_params {
             S2kParams::Unprotected => unreachable!(),
+            S2kParams::External(_) => unreachable!(),
+            S2kParams::Unknown { .. } => unreachable!(),
             S2kParams::LegacyCfb { .. }
             | S2kParams::Aead { .. }
             | S2kParams::MalleableCfb { .. } => {
@@ -124,6 +126,8 @@ impl EncryptedSecretParams {
 
         match &self.s2k_params {
             S2kParams::Unprotected => unreachable!(),
+            S2kParams::External(_) => unreachable!(),
+            S2kParams::Unknown { .. } => unreachable!(),
             S2kParams::LegacyCfb { sym_alg, iv } => {
                 let key = md5::Md5::digest(pw.read());
 
@@ -262,6 +266,10 @@ impl EncryptedSecretParams {
             S2kParams::Unprotected => {
                 panic!("encrypted secret params should not have an unencrypted identifier")
             }
+            S2kParams::External(locator) => locator.to_writer(&mut s2k_writer)?,
+            S2kParams::Unknown { data, .. } => {
+                s2k_writer.write_all(data)?;
+            }
             S2kParams::LegacyCfb { ref iv, .. } => {
                 s2k_writer.write_all(iv)?;
             }
@@ -323,6 +331,12 @@ impl EncryptedSecretParams {
         match &self.s2k_params {
             S2kParams::Unprotected => {
                 panic!("encrypted secret params should not have an unencrypted identifier")
+            }
+            S2kParams::External(locator) => {
+                sum += locator.write_len();
+            }
+            S2kParams::Unknown { data, .. } => {
+                sum += data.len();
             }
             S2kParams::LegacyCfb { ref iv, .. } => {
                 sum += iv.len();

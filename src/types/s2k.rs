@@ -11,7 +11,7 @@ use crate::{
     errors::{bail, ensure, unimplemented_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
-    types::KeyVersion,
+    types::{KeyVersion, LocatorHint, EXTERNAL_SECRET},
 };
 
 const EXPBIAS: u32 = 6;
@@ -27,8 +27,14 @@ const ARGON2_MEMORY_LIMIT_KIB: u32 = 2 * 1024 * 1024; // 2 ~mio KiB (== 2 GiB)
 pub enum S2kUsage {
     /// 0
     Unprotected,
-    /// 1..253
+    /// 1..13
     LegacyCfb(SymmetricKeyAlgorithm),
+    /// 14 (TBC)
+    External,
+
+    /// 15-252
+    Unknown(u8),
+
     /// 253
     Aead,
     /// 254
@@ -47,6 +53,11 @@ pub enum S2kUsage {
 #[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 pub enum S2kParams {
     Unprotected,
+    External(LocatorHint),
+    Unknown {
+        id: u8,
+        data: Bytes,
+    },
     LegacyCfb {
         sym_alg: SymmetricKeyAlgorithm,
         #[debug("{}", hex::encode(iv))]
@@ -78,6 +89,8 @@ impl From<&S2kParams> for u8 {
         match value {
             S2kParams::Unprotected => 0,
             S2kParams::LegacyCfb { sym_alg, .. } => (*sym_alg).into(),
+            S2kParams::Unknown { id, .. } => *id,
+            S2kParams::External { .. } => EXTERNAL_SECRET,
             S2kParams::Aead { .. } => 253,
             S2kParams::Cfb { .. } => 254,
             S2kParams::MalleableCfb { .. } => 255,
@@ -143,10 +156,12 @@ impl From<u8> for S2kUsage {
     fn from(value: u8) -> Self {
         match value {
             0 => Self::Unprotected,
-            v @ 1..=252 => Self::LegacyCfb(SymmetricKeyAlgorithm::from(v)),
+            v @ 1..=13 => Self::LegacyCfb(SymmetricKeyAlgorithm::from(v)),
+            EXTERNAL_SECRET => Self::External,
             253 => Self::Aead,
             254 => Self::Cfb,
             255 => Self::MalleableCfb,
+            v => Self::Unknown(v),
         }
     }
 }
