@@ -280,7 +280,7 @@ impl Serialize for SubpacketData {
             SubpacketData::IsPrimary(_) => 1,
             SubpacketData::Revocable(_) => 1,
             SubpacketData::EmbeddedSignature(sig) => (*sig).write_len(),
-            SubpacketData::PreferredKeyServer(server) => server.chars().count(),
+            SubpacketData::PreferredKeyServer(server) => server.len(),
             SubpacketData::Notation(n) => {
                 // 4 for the flags, 2 for the name length, 2 for the value length, m for the name, n for the value
                 4 + 2 + 2 + n.name.len() + n.value.len()
