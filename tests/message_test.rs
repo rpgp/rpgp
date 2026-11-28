@@ -405,7 +405,7 @@ fn pgp6_decrypt() {
 }
 
 /// Tests that decompressing compression quine does not result in stack overflow.
-/// quine.out comes from <https://mumble.net/~campbell/misc/pgp-quine/>
+/// `quine.out` comes from <https://mumble.net/~campbell/misc/pgp-quine/>
 /// See <https://mumble.net/~campbell/2013/10/08/compression> for details.
 #[test]
 fn test_compression_quine() {
@@ -414,15 +414,25 @@ fn test_compression_quine() {
         std::fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
     )
     .unwrap();
-    let pkey = skey.public_key();
+    let _pkey = skey.public_key();
 
     let msg = Message::from_file("./tests/quine.out").unwrap();
-    let mut msg = msg.decompress().unwrap();
-    let res = msg.as_data_vec().unwrap();
-    assert_eq!(res.len(), 176);
 
-    let msg = Message::from_file("./tests/quine.out").unwrap();
-    assert!(msg.verify(pkey).is_err());
+    // -- Behavior up to flate v1.1.9 --
+
+    // let mut msg = msg.decompress().unwrap();
+    // let res = msg.as_data_vec().unwrap();
+    // assert_eq!(res.len(), 176);
+    //
+    // let msg = Message::from_file("./tests/quine.out").unwrap();
+    // assert!(msg.verify(pkey).is_err());
+
+    // -- Behavior starting at flate v1.1.10 --
+
+    let Err(pgp::errors::Error::IO { source, .. }) = msg.decompress() else {
+        panic!("Expect IO Error")
+    };
+    assert_eq!(source.kind(), std::io::ErrorKind::UnexpectedEof);
 }
 
 #[test]
